@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  role               String   @default("buyer") // producer, buyer, transporter, admin
+  companyName        String?
+  gstNumber          String?
+  phone              String?
+  email              String   @unique
+  name               String?
+  password           String?
+  avatar             String?
+  state              String?
+  city               String?
+  address            String?
+  verificationStatus String   @default("pending") // pending, verified, rejected
+  isOnline           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  products           Product[]
+  buyerRequirements  BuyerRequirement[]
+  ordersAsBuyer      Order[]              @relation("BuyerOrders")
+  ordersAsSeller     Order[]              @relation("SellerOrders")
+  shipmentsAsTransporter Shipment[]
+  transportBids      TransportBid[]
+  sentMessages       Message[]            @relation("SentMessages")
+  receivedMessages   Message[]            @relation("ReceivedMessages")
+  givenReviews       Review[]             @relation("GivenReviews")
+  receivedReviews    Review[]             @relation("ReceivedReviews")
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  sellerId     String
+  category     String   // grains, vegetables, fruits, spices, dairy, poultry, pulses, oilseeds
+  name         String
+  description  String?
+  quantity     Float
+  unit         String   // kg, quintal, tonne, litre
+  pricePerUnit Float
+  minOrderQty  Float?
+  location     String
+  state        String?
+  qualityGrade String?  // A, B, C
+  images       String?  // comma-separated URLs
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  seller       User     @relation(fields: [sellerId], references: [id])
+  orders       Order[]
+}
+
+model BuyerRequirement {
+  id             String   @id @default(cuid())
+  buyerId        String
+  productType    String
+  category       String
+  quantityNeeded Float
+  unit           String
+  deliveryLocation String
+  deliveryState  String?
+  deadline       DateTime?
+  maxBudget      Float?
+  description    String?
+  status         String   @default("open") // open, in_progress, fulfilled, closed
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  buyer          User     @relation(fields: [buyerId], references: [id])
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  buyerId     String
+  sellerId    String
+  productId   String
+  quantity    Float
+  unitPrice   Float
+  totalPrice  Float
+  status      String   @default("negotiating") // negotiating, confirmed, shipped, delivered, cancelled, disputed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  buyer       User     @relation("BuyerOrders", fields: [buyerId], references: [id])
+  seller      User     @relation("SellerOrders", fields: [sellerId], references: [id])
+  product     Product  @relation(fields: [productId], references: [id])
+  shipment    Shipment?
+}
+
+model Shipment {
+  id             String   @id @default(cuid())
+  orderId        String   @unique
+  transporterId  String?
+  origin         String
+  destination    String
+  distance       Float?
+  status         String   @default("pending") // pending, bidding, assigned, picked_up, in_transit, delivered
+  pickupDate     DateTime?
+  deliveryDate   DateTime?
+  actualDelivery DateTime?
+  vehicleType    String?  // truck, tempo, container
+  vehicleNumber  String?
+  driverName     String?
+  driverPhone    String?
+  deliveryProof  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  order          Order    @relation(fields: [orderId], references: [id])
+  transporter    User?    @relation(fields: [transporterId], references: [id])
+  transportBids  TransportBid[]
+}
+
+model TransportBid {
+  id            String   @id @default(cuid())
+  shipmentId    String
+  transporterId String
+  bidAmount     Float
+  estimatedDays Int?
+  vehicleType   String?
+  comments      String?
+  status        String   @default("pending") // pending, accepted, rejected
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shipment      Shipment @relation(fields: [shipmentId], references: [id])
+  transporter   User     @relation(fields: [transporterId], references: [id])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  reviewerId String
+  targetId  String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  reviewer  User     @relation("GivenReviews", fields: [reviewerId], references: [id])
+  target    User     @relation("ReceivedReviews", fields: [targetId], references: [id])
+}
+
+model PlatformStats {
+  id              String   @id @default(cuid())
+  totalUsers      Int      @default(0)
+  totalProducts   Int      @default(0)
+  totalOrders     Int      @default(0)
+  totalShipments  Int      @default(0)
+  totalRevenue    Float    @default(0)
+  activeListings  Int      @default(0)
+  verifiedUsers   Int      @default(0)
+  updatedAt       DateTime @updatedAt
+}
