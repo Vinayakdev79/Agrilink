@@ -166,15 +166,14 @@ function ProductCardSkeleton() {
 // ─── Product Card ─────────────────────────────────────────────────────────────
 function ProductCard({
   product,
-  onSelect,
   onContact,
   onOrder,
 }: {
   product: Product
-  onSelect: (p: Product) => void
   onContact: (p: Product) => void
   onOrder: (p: Product) => void
 }) {
+  const { setSelectedProductId, setView } = useAppStore()
   const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
   const gradeColor = GRADE_COLORS[product.qualityGrade || ''] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
 
@@ -183,7 +182,10 @@ function ProductCard({
       variants={fadeUp}
       whileHover={{ y: -4, transition: { duration: 0.25 } }}
       className="glass-card p-5 hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer"
-      onClick={() => onSelect(product)}
+      onClick={() => {
+        setSelectedProductId(product.id)
+        setView('product')
+      }}
     >
       {/* Top badges */}
       <div className="flex items-start justify-between mb-3">
@@ -408,7 +410,7 @@ function ProductDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="glass-card-strong border-white/15 max-w-lg p-0 overflow-hidden">
+      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-w-lg p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-0">
           <div className="flex items-start justify-between">
             <div className="space-y-2 flex-1">
@@ -856,10 +858,6 @@ export function MarketplacePage() {
                   <ProductCard
                     key={product.id}
                     product={product}
-                    onSelect={(p) => {
-                      setSelectedProduct(p)
-                      setDetailOpen(true)
-                    }}
                     onContact={handleContact}
                     onOrder={(p) => {
                       setSelectedProduct(p)

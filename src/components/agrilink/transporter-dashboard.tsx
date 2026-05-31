@@ -5,7 +5,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Truck, Package, IndianRupee, Star, MapPin, Clock, Gavel,
-  TrendingUp, TrendingDown, CheckCircle, Navigation, MessageSquare
+  TrendingUp, TrendingDown, CheckCircle, Navigation, MessageSquare,
+  Crosshair, CalendarDays, Route as RouteIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +26,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { toast } from 'sonner'
+import { ShipmentTracker, MiniMapPreview } from '@/components/agrilink/shipment-tracker'
 
 interface TransporterDashboardProps {
   tab: string
@@ -78,6 +80,29 @@ function StatCard({ icon, value, label, trend, trendUp }: {
   )
 }
 
+// SVG Mini-Map for available loads
+function LoadMiniMap({ shipment }: { shipment: any }) {
+  const pLat = shipment.pickupLatitude ? parseFloat(shipment.pickupLatitude) : null
+  const pLng = shipment.pickupLongitude ? parseFloat(shipment.pickupLongitude) : null
+  const dLat = shipment.dropLatitude ? parseFloat(shipment.dropLatitude) : null
+  const dLng = shipment.dropLongitude ? parseFloat(shipment.dropLongitude) : null
+
+  if (!pLat || !pLng || !dLat || !dLng) {
+    // Fallback: simple route visualization
+    return (
+      <svg viewBox="0 0 100 30" className="w-full h-8 mt-2" style={{ background: 'rgba(10,15,25,0.5)' }}>
+        <line x1="10" y1="15" x2="90" y2="15" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="3 2" />
+        <circle cx="10" cy="15" r="4" fill="#10b981" opacity="0.8" />
+        <circle cx="10" cy="15" r="1.5" fill="#10b981" />
+        <circle cx="90" cy="15" r="4" fill="#ef4444" opacity="0.8" />
+        <circle cx="90" cy="15" r="1.5" fill="#ef4444" />
+      </svg>
+    )
+  }
+
+  return <MiniMapPreview pickupLat={String(pLat)} pickupLng={String(pLng)} dropLat={String(dLat)} dropLng={String(dLng)} />
+}
+
 export function TransporterDashboard({ tab }: TransporterDashboardProps) {
   const { user, setChatOpen, setActiveChatUser } = useAppStore()
   const [shipments, setShipments] = useState<any[]>([])
@@ -88,6 +113,10 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
   const [bidForm, setBidForm] = useState({
     shipmentId: '', bidAmount: '', estimatedDays: '', vehicleType: 'truck', comments: ''
   })
+
+  // Tracking state
+  const [trackingShipment, setTrackingShipment] = useState<any>(null)
+  const [trackerOpen, setTrackerOpen] = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!user) return
@@ -177,6 +206,11 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
     }
   }
 
+  const handleTrackShipment = (shipment: any) => {
+    setTrackingShipment(shipment)
+    setTrackerOpen(true)
+  }
+
   const myShipments = shipments.filter(s => s.transporterId === user?.id)
   const activeShipments = myShipments.filter(s => ['assigned', 'picked_up', 'in_transit'].includes(s.status)).length
   const completedShipments = myShipments.filter(s => s.status === 'delivered').length
@@ -259,7 +293,7 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
         </div>
 
         {loading ? (
-          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div>
+          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}</div>
         ) : pendingShipments.length === 0 ? (
           <div className="glass-card p-12 text-center">
             <Truck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -286,31 +320,72 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
                     Bidding Open
                   </Badge>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-400" />
-                    <span className="text-foreground">{shipment.origin}</span>
+
+                {/* Exact pickup and drop addresses */}
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <MapPin className="w-3 h-3 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{shipment.exactPickupAddress || shipment.origin}</p>
+                      {shipment.pickupLatitude && shipment.pickupLongitude && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {parseFloat(shipment.pickupLatitude).toFixed(4)}, {parseFloat(shipment.pickupLongitude).toFixed(4)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 border-t border-dashed border-glass-border" />
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-red-400" />
-                    <span className="text-foreground">{shipment.destination}</span>
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <Navigation className="w-3 h-3 text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{shipment.exactDropAddress || shipment.destination}</p>
+                      {shipment.dropLatitude && shipment.dropLongitude && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {parseFloat(shipment.dropLatitude).toFixed(4)}, {parseFloat(shipment.dropLongitude).toFixed(4)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Distance</p>
-                    <p className="text-foreground">{shipment.distance || '—'} km</p>
+
+                {/* Mini Map Preview */}
+                <LoadMiniMap shipment={shipment} />
+
+                {/* Product & order details */}
+                <div className="glass-card p-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Distance</p>
+                      <p className="text-foreground">{shipment.distance || '—'} km</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Product</p>
+                      <p className="text-foreground text-xs">{shipment.order?.product?.name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Quantity</p>
+                      <p className="text-foreground text-xs">
+                        {shipment.order?.product?.quantity ? `${shipment.order.product.quantity} ${shipment.order.product.unit || ''}` : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Bids</p>
+                      <p className="text-amber-400 font-medium">{shipment.transportBids?.length || 0} bids</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Bids</p>
-                    <p className="text-amber-400 font-medium">{shipment.transportBids?.length || 0} bids</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Order</p>
-                    <p className="text-foreground text-xs">{shipment.order?.product?.name || 'N/A'}</p>
-                  </div>
+                  {shipment.expectedPickupDate && (
+                    <div className="mt-2 pt-2 border-t border-glass-border">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3 text-amber-400" />
+                        Expected pickup: {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                  )}
                 </div>
+
                 <div className="pt-2 border-t border-glass-border">
                   <Button
                     className="bg-teal-600 hover:bg-teal-500 gap-2 w-full"
@@ -329,7 +404,7 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
 
         {/* Bid Dialog */}
         <Dialog open={bidDialogOpen} onOpenChange={setBidDialogOpen}>
-          <DialogContent className="bg-[#0d0d1a] border-glass-border">
+          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl">
             <DialogHeader>
               <DialogTitle className="text-foreground">Place Bid</DialogTitle>
               <DialogDescription className="text-muted-foreground">Submit your bid for this shipment</DialogDescription>
@@ -352,6 +427,8 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
                       <SelectItem value="truck">Truck</SelectItem>
                       <SelectItem value="tempo">Tempo</SelectItem>
                       <SelectItem value="container">Container</SelectItem>
+                      <SelectItem value="tractor_trailer">Tractor Trailer</SelectItem>
+                      <SelectItem value="mini_truck">Mini Truck</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -376,7 +453,7 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
       <div className="space-y-6">
         <h3 className="text-xl font-semibold text-foreground">My Shipments</h3>
         {loading ? (
-          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div>
+          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}</div>
         ) : myShipments.length === 0 ? (
           <div className="glass-card p-12 text-center">
             <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -399,23 +476,55 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
                     </h4>
                     <p className="text-xs text-muted-foreground">ID: {shipment.id.slice(-8)}</p>
                   </div>
-                  <Badge className={`${statusColors[shipment.status] || ''} border text-xs`}>
-                    {shipment.status.replace('_', ' ')}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={`${statusColors[shipment.status] || ''} border text-xs`}>
+                      {shipment.status.replace('_', ' ')}
+                    </Badge>
+                    {['picked_up', 'in_transit'].includes(shipment.status) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1 text-xs h-7"
+                        onClick={() => handleTrackShipment(shipment)}
+                      >
+                        <Crosshair className="h-3 w-3" /> Track
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Route display */}
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Navigation className="h-4 w-4 text-emerald-400" />
-                    <span className="text-foreground">{shipment.origin}</span>
+                {/* Exact addresses */}
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <MapPin className="w-3 h-3 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{shipment.exactPickupAddress || shipment.origin}</p>
+                      {shipment.pickupLatitude && shipment.pickupLongitude && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {parseFloat(shipment.pickupLatitude).toFixed(4)}, {parseFloat(shipment.pickupLongitude).toFixed(4)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 border-t border-dashed border-glass-border" />
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-red-400" />
-                    <span className="text-foreground">{shipment.destination}</span>
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <Navigation className="w-3 h-3 text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{shipment.exactDropAddress || shipment.destination}</p>
+                      {shipment.dropLatitude && shipment.dropLongitude && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {parseFloat(shipment.dropLatitude).toFixed(4)}, {parseFloat(shipment.dropLongitude).toFixed(4)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
+
+                {/* Mini Map */}
+                <LoadMiniMap shipment={shipment} />
 
                 {/* Details */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -461,6 +570,13 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
             ))}
           </div>
         )}
+
+        {/* Shipment Tracker Dialog */}
+        <ShipmentTracker
+          shipment={trackingShipment}
+          open={trackerOpen}
+          onClose={() => setTrackerOpen(false)}
+        />
       </div>
     )
   }

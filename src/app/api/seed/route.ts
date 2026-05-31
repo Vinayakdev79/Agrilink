@@ -2,47 +2,56 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 const PRODUCTS_DATA = [
-  { category: 'grains', name: 'Basmati Rice - 1121', qualityGrade: 'A', pricePerUnit: 4500, unit: 'quintal' },
-  { category: 'grains', name: 'Wheat - Sharbati', qualityGrade: 'A', pricePerUnit: 2800, unit: 'quintal' },
-  { category: 'grains', name: 'Sona Masoori Rice', qualityGrade: 'B', pricePerUnit: 3200, unit: 'quintal' },
-  { category: 'vegetables', name: 'Onion - Nashik Red', qualityGrade: 'A', pricePerUnit: 1200, unit: 'quintal' },
-  { category: 'vegetables', name: 'Potato - Aloo', qualityGrade: 'B', pricePerUnit: 800, unit: 'quintal' },
-  { category: 'vegetables', name: 'Tomato - Hybrid', qualityGrade: 'A', pricePerUnit: 2500, unit: 'quintal' },
-  { category: 'fruits', name: 'Alphonso Mango', qualityGrade: 'A', pricePerUnit: 8000, unit: 'quintal' },
-  { category: 'fruits', name: 'Nagpur Orange', qualityGrade: 'A', pricePerUnit: 4500, unit: 'quintal' },
-  { category: 'fruits', name: 'Grapes - Thompson', qualityGrade: 'A', pricePerUnit: 5500, unit: 'quintal' },
-  { category: 'spices', name: 'Turmeric - Salem', qualityGrade: 'A', pricePerUnit: 9000, unit: 'quintal' },
-  { category: 'spices', name: 'Red Chilli - Guntur', qualityGrade: 'A', pricePerUnit: 12000, unit: 'quintal' },
-  { category: 'spices', name: 'Cardamom - Green', qualityGrade: 'A', pricePerUnit: 85000, unit: 'quintal' },
-  { category: 'dairy', name: 'Fresh Milk', qualityGrade: 'A', pricePerUnit: 60, unit: 'litre' },
-  { category: 'dairy', name: 'Ghee - Cow', qualityGrade: 'A', pricePerUnit: 650, unit: 'litre' },
-  { category: 'poultry', name: 'Country Eggs', qualityGrade: 'A', pricePerUnit: 8, unit: 'kg' },
-  { category: 'pulses', name: 'Toor Dal', qualityGrade: 'A', pricePerUnit: 7500, unit: 'quintal' },
-  { category: 'pulses', name: 'Chana Dal', qualityGrade: 'A', pricePerUnit: 6500, unit: 'quintal' },
-  { category: 'oilseeds', name: 'Mustard Seeds', qualityGrade: 'A', pricePerUnit: 5500, unit: 'quintal' },
-  { category: 'oilseeds', name: 'Groundnut', qualityGrade: 'B', pricePerUnit: 6000, unit: 'quintal' },
-  { category: 'grains', name: 'Maize - Hybrid', qualityGrade: 'B', pricePerUnit: 2200, unit: 'quintal' },
+  { category: 'grains', name: 'Basmati Rice - 1121', qualityGrade: 'A', pricePerUnit: 4500, unit: 'quintal', cropVariety: '1121 Basmati', freshness: 'Freshly harvested', isOrganic: false, pesticidesUsed: 'Neem-based only', moistureContent: '12%', shelfLife: '12 months', storageCondition: 'Cool dry place', certifications: 'FSSAI,APEDA', imageUrl: '/images/basmati-rice.jpg' },
+  { category: 'grains', name: 'Wheat - Sharbati', qualityGrade: 'A', pricePerUnit: 2800, unit: 'quintal', cropVariety: 'Sharbati', freshness: '1 month old', isOrganic: false, pesticidesUsed: 'Standard', moistureContent: '10%', shelfLife: '18 months', storageCondition: 'Cool dry warehouse', certifications: 'FSSAI', imageUrl: '/images/wheat.jpg' },
+  { category: 'grains', name: 'Sona Masoori Rice', qualityGrade: 'B', pricePerUnit: 3200, unit: 'quintal', cropVariety: 'Sona Masoori', freshness: '3 weeks old', isOrganic: true, pesticidesUsed: 'None', moistureContent: '11%', shelfLife: '12 months', storageCondition: 'Cool dry place', certifications: 'Organic India,FSSAI', imageUrl: '/images/sona-masoori.jpg' },
+  { category: 'vegetables', name: 'Onion - Nashik Red', qualityGrade: 'A', pricePerUnit: 1200, unit: 'quintal', cropVariety: 'Nashik Red', freshness: 'Fresh', isOrganic: false, pesticidesUsed: 'Minimal', moistureContent: '85%', shelfLife: '3 months', storageCondition: 'Ventilated storage', certifications: 'FSSAI', imageUrl: '/images/onion.jpg' },
+  { category: 'vegetables', name: 'Potato - Chipsona', qualityGrade: 'B', pricePerUnit: 800, unit: 'quintal', cropVariety: 'Chipsona', freshness: '1 week old', isOrganic: false, pesticidesUsed: 'Standard', moistureContent: '78%', shelfLife: '4 months', storageCondition: 'Cold storage', certifications: 'FSSAI', imageUrl: '/images/potato.jpg' },
+  { category: 'vegetables', name: 'Tomato - Hybrid', qualityGrade: 'A', pricePerUnit: 2500, unit: 'quintal', cropVariety: 'Hybrid Rupali', freshness: 'Fresh', isOrganic: true, pesticidesUsed: 'None', moistureContent: '94%', shelfLife: '1 week', storageCondition: 'Refrigerated', certifications: 'Organic India', imageUrl: '/images/tomato.jpg' },
+  { category: 'fruits', name: 'Alphonso Mango', qualityGrade: 'A', pricePerUnit: 8000, unit: 'quintal', cropVariety: 'Alphonso (Hapus)', freshness: 'Fresh', isOrganic: false, pesticidesUsed: 'Neem-based only', moistureContent: '82%', shelfLife: '2 weeks', storageCondition: 'Cold chain', certifications: 'FSSAI,APEDA,GI Tag', imageUrl: '/images/mango.jpg' },
+  { category: 'fruits', name: 'Nagpur Orange', qualityGrade: 'A', pricePerUnit: 4500, unit: 'quintal', cropVariety: 'Nagpur Santra', freshness: 'Fresh', isOrganic: false, pesticidesUsed: 'Minimal', moistureContent: '86%', shelfLife: '3 weeks', storageCondition: 'Cool dry place', certifications: 'FSSAI,GI Tag', imageUrl: '/images/orange.jpg' },
+  { category: 'fruits', name: 'Grapes - Thompson', qualityGrade: 'A', pricePerUnit: 5500, unit: 'quintal', cropVariety: 'Thompson Seedless', freshness: 'Fresh', isOrganic: false, pesticidesUsed: 'Standard', moistureContent: '80%', shelfLife: '2 weeks', storageCondition: 'Cold chain', certifications: 'FSSAI,APEDA', imageUrl: '/images/grapes.jpg' },
+  { category: 'spices', name: 'Turmeric - Salem', qualityGrade: 'A', pricePerUnit: 9000, unit: 'quintal', cropVariety: 'Salem Finger', freshness: 'Dried', isOrganic: true, pesticidesUsed: 'None', moistureContent: '8%', shelfLife: '24 months', storageCondition: 'Cool dry place', certifications: 'Organic India,FSSAI,Spice Board', imageUrl: '/images/turmeric.jpg' },
+  { category: 'spices', name: 'Red Chilli - Guntur', qualityGrade: 'A', pricePerUnit: 12000, unit: 'quintal', cropVariety: 'Guntur Sannam', freshness: 'Dried', isOrganic: false, pesticidesUsed: 'Minimal', moistureContent: '10%', shelfLife: '18 months', storageCondition: 'Cool dry warehouse', certifications: 'FSSAI,Spice Board', imageUrl: '/images/chilli.jpg' },
+  { category: 'spices', name: 'Cardamom - Green', qualityGrade: 'A', pricePerUnit: 85000, unit: 'quintal', cropVariety: 'Elettaria Cardamomum', freshness: 'Freshly dried', isOrganic: false, pesticidesUsed: 'Neem-based only', moistureContent: '10%', shelfLife: '12 months', storageCondition: 'Airtight cool storage', certifications: 'FSSAI,Spice Board,APEDA', imageUrl: '/images/cardamom.jpg' },
+  { category: 'dairy', name: 'Fresh Milk', qualityGrade: 'A', pricePerUnit: 60, unit: 'litre', cropVariety: 'Cow Milk', freshness: 'Fresh', isOrganic: true, pesticidesUsed: 'N/A', moistureContent: 'N/A', shelfLife: '3 days', storageCondition: 'Refrigerated 4°C', certifications: 'FSSAI,Organic India', imageUrl: '/images/milk.jpg' },
+  { category: 'dairy', name: 'Ghee - Cow', qualityGrade: 'A', pricePerUnit: 650, unit: 'litre', cropVariety: 'A2 Cow Ghee', freshness: 'Fresh', isOrganic: true, pesticidesUsed: 'N/A', moistureContent: 'N/A', shelfLife: '12 months', storageCondition: 'Cool dry place', certifications: 'FSSAI,Organic India', imageUrl: '/images/ghee.jpg' },
+  { category: 'poultry', name: 'Country Eggs', qualityGrade: 'A', pricePerUnit: 8, unit: 'kg', cropVariety: 'Desi Murga', freshness: 'Fresh', isOrganic: true, pesticidesUsed: 'N/A', moistureContent: 'N/A', shelfLife: '2 weeks', storageCondition: 'Cool dry place', certifications: 'FSSAI', imageUrl: '/images/eggs.jpg' },
+  { category: 'pulses', name: 'Toor Dal', qualityGrade: 'A', pricePerUnit: 7500, unit: 'quintal', cropVariety: 'ICPL 87119', freshness: '3 months old', isOrganic: false, pesticidesUsed: 'Standard', moistureContent: '9%', shelfLife: '18 months', storageCondition: 'Cool dry warehouse', certifications: 'FSSAI', imageUrl: '/images/toor-dal.jpg' },
+  { category: 'pulses', name: 'Chana Dal', qualityGrade: 'A', pricePerUnit: 6500, unit: 'quintal', cropVariety: 'Kanchan', freshness: '2 months old', isOrganic: false, pesticidesUsed: 'Standard', moistureContent: '10%', shelfLife: '18 months', storageCondition: 'Cool dry warehouse', certifications: 'FSSAI', imageUrl: '/images/chana-dal.jpg' },
+  { category: 'oilseeds', name: 'Mustard Seeds', qualityGrade: 'A', pricePerUnit: 5500, unit: 'quintal', cropVariety: 'Pusa Bold', freshness: '1 month old', isOrganic: false, pesticidesUsed: 'Minimal', moistureContent: '7%', shelfLife: '12 months', storageCondition: 'Cool dry place', certifications: 'FSSAI', imageUrl: '/images/mustard.jpg' },
+  { category: 'oilseeds', name: 'Groundnut', qualityGrade: 'B', pricePerUnit: 6000, unit: 'quintal', cropVariety: 'GG 20', freshness: '2 months old', isOrganic: true, pesticidesUsed: 'None', moistureContent: '8%', shelfLife: '12 months', storageCondition: 'Cool dry place', certifications: 'Organic India,FSSAI', imageUrl: '/images/groundnut.jpg' },
+  { category: 'grains', name: 'Maize - Hybrid', qualityGrade: 'B', pricePerUnit: 2200, unit: 'quintal', cropVariety: 'Pioneer 30V92', freshness: '1 month old', isOrganic: false, pesticidesUsed: 'Standard', moistureContent: '13%', shelfLife: '12 months', storageCondition: 'Cool dry warehouse', certifications: 'FSSAI', imageUrl: '/images/maize.jpg' },
 ]
 
 const LOCATIONS = [
-  { state: 'Maharashtra', city: 'Nashik' },
-  { state: 'Punjab', city: 'Ludhiana' },
-  { state: 'Madhya Pradesh', city: 'Indore' },
-  { state: 'Karnataka', city: 'Bengaluru' },
-  { state: 'Tamil Nadu', city: 'Salem' },
-  { state: 'Andhra Pradesh', city: 'Guntur' },
-  { state: 'Rajasthan', city: 'Jaipur' },
-  { state: 'Uttar Pradesh', city: 'Lucknow' },
-  { state: 'Gujarat', city: 'Ahmedabad' },
-  { state: 'West Bengal', city: 'Kolkata' },
-  { state: 'Haryana', city: 'Karnal' },
-  { state: 'Telangana', city: 'Hyderabad' },
+  { state: 'Maharashtra', city: 'Nashik', lat: '19.9975', lng: '73.7898' },
+  { state: 'Punjab', city: 'Ludhiana', lat: '30.9010', lng: '75.8573' },
+  { state: 'Madhya Pradesh', city: 'Indore', lat: '22.7196', lng: '75.8577' },
+  { state: 'Karnataka', city: 'Bengaluru', lat: '12.9716', lng: '77.5946' },
+  { state: 'Tamil Nadu', city: 'Salem', lat: '11.6643', lng: '78.1460' },
+  { state: 'Andhra Pradesh', city: 'Guntur', lat: '16.3067', lng: '80.4365' },
+  { state: 'Rajasthan', city: 'Jaipur', lat: '26.9124', lng: '75.7873' },
+  { state: 'Uttar Pradesh', city: 'Lucknow', lat: '26.8467', lng: '80.9462' },
+  { state: 'Gujarat', city: 'Ahmedabad', lat: '23.0225', lng: '72.5714' },
+  { state: 'West Bengal', city: 'Kolkata', lat: '22.5726', lng: '88.3639' },
+  { state: 'Haryana', city: 'Karnal', lat: '29.6857', lng: '76.9905' },
+  { state: 'Telangana', city: 'Hyderabad', lat: '17.3850', lng: '78.4867' },
 ]
 
-const PRODUCER_NAMES = [
-  'Rajesh Farm Produce', 'Green Harvest FPO', 'Krishna Agro', 'Satyam Organic',
-  'Punjab Grain Traders', 'Deccan Spice Co', 'Ganga Dairy Farm', 'Malwa Pulses',
-  'Konkan Fruit Growers', 'Marathwada Onion Co', 'Narmada Agro', 'Cauvery Farmers Co'
+const PRODUCER_DATA = [
+  { name: 'Rajesh Farm Produce', farmName: 'Rajesh Organic Farm', farmSize: '35 acres', yearsExperience: 18, certifications: 'Organic India,FSSAI,APEDA', avgRating: 4.7 },
+  { name: 'Green Harvest FPO', farmName: 'Green Harvest Collective', farmSize: '120 acres', yearsExperience: 12, certifications: 'FSSAI,Spice Board', avgRating: 4.5 },
+  { name: 'Krishna Agro', farmName: 'Krishna Agro Farms', farmSize: '50 acres', yearsExperience: 22, certifications: 'FSSAI,APEDA,Organic India', avgRating: 4.8 },
+  { name: 'Satyam Organic', farmName: 'Satyam Organic Estates', farmSize: '80 acres', yearsExperience: 15, certifications: 'Organic India,FSSAI', avgRating: 4.6 },
+  { name: 'Punjab Grain Traders', farmName: 'Punjab Grain Farms', farmSize: '200 acres', yearsExperience: 30, certifications: 'FSSAI,APEDA,AGMARK', avgRating: 4.4 },
+  { name: 'Deccan Spice Co', farmName: 'Deccan Spice Gardens', farmSize: '45 acres', yearsExperience: 14, certifications: 'Spice Board,FSSAI,APEDA', avgRating: 4.9 },
+  { name: 'Ganga Dairy Farm', farmName: 'Ganga Dairy & Farm', farmSize: '30 acres', yearsExperience: 10, certifications: 'FSSAI,Organic India', avgRating: 4.3 },
+  { name: 'Malwa Pulses', farmName: 'Malwa Pulses Estate', farmSize: '90 acres', yearsExperience: 20, certifications: 'FSSAI,AGMARK', avgRating: 4.5 },
+  { name: 'Konkan Fruit Growers', farmName: 'Konkan Fruit Orchard', farmSize: '60 acres', yearsExperience: 16, certifications: 'FSSAI,APEDA,GI Tag', avgRating: 4.7 },
+  { name: 'Marathwada Onion Co', farmName: 'Marathwada Onion Farm', farmSize: '75 acres', yearsExperience: 11, certifications: 'FSSAI,AGMARK', avgRating: 4.2 },
+  { name: 'Narmada Agro', farmName: 'Narmada Agro Fields', farmSize: '55 acres', yearsExperience: 19, certifications: 'FSSAI,Organic India', avgRating: 4.6 },
+  { name: 'Cauvery Farmers Co', farmName: 'Cauvery Farmers Collective', farmSize: '100 acres', yearsExperience: 25, certifications: 'FSSAI,Spice Board,APEDA', avgRating: 4.8 },
 ]
 
 const BUYER_NAMES = [
@@ -58,21 +67,27 @@ const TRANSPORTER_NAMES = [
 
 export async function GET() {
   try {
-    // Check if already seeded
-    const existingUsers = await db.user.count()
-    if (existingUsers > 0) {
-      return NextResponse.json({ message: 'Database already seeded', count: existingUsers })
-    }
+    // Clear existing data for fresh seed
+    await db.review.deleteMany()
+    await db.transportBid.deleteMany()
+    await db.message.deleteMany()
+    await db.shipment.deleteMany()
+    await db.buyerRequirement.deleteMany()
+    await db.order.deleteMany()
+    await db.product.deleteMany()
+    await db.platformStats.deleteMany()
+    await db.user.deleteMany()
 
-    // Create producers
+    // Create producers with farm details
     const producers = []
-    for (let i = 0; i < PRODUCER_NAMES.length; i++) {
+    for (let i = 0; i < PRODUCER_DATA.length; i++) {
       const loc = LOCATIONS[i % LOCATIONS.length]
+      const pd = PRODUCER_DATA[i]
       const producer = await db.user.create({
         data: {
           email: `producer${i + 1}@agrilink.in`,
-          name: PRODUCER_NAMES[i].split(' ').slice(0, 2).join(' '),
-          companyName: PRODUCER_NAMES[i],
+          name: pd.name.split(' ').slice(0, 2).join(' '),
+          companyName: pd.name,
           role: 'producer',
           phone: `+91${9000000000 + i}`,
           state: loc.state,
@@ -80,22 +95,35 @@ export async function GET() {
           address: `${loc.city}, ${loc.state}`,
           verificationStatus: i < 8 ? 'verified' : 'pending',
           isOnline: Math.random() > 0.3,
+          farmName: pd.farmName,
+          farmSize: pd.farmSize,
+          farmLocation: `${pd.farmName}, ${loc.city}, ${loc.state}`,
+          yearsExperience: pd.yearsExperience,
+          certifications: pd.certifications,
+          totalTransactions: Math.floor(Math.random() * 200 + 50),
+          avgRating: pd.avgRating,
+          totalReviews: Math.floor(Math.random() * 80 + 20),
+          latitude: loc.lat,
+          longitude: loc.lng,
         }
       })
       producers.push(producer)
     }
 
-    // Create products
+    // Create products with detailed crop information
     for (let i = 0; i < PRODUCTS_DATA.length; i++) {
       const p = PRODUCTS_DATA[i]
       const producer = producers[i % producers.length]
       const loc = LOCATIONS[i % LOCATIONS.length]
+      const harvestDate = new Date()
+      harvestDate.setDate(harvestDate.getDate() - Math.floor(Math.random() * 60 + 5))
+
       await db.product.create({
         data: {
           sellerId: producer.id,
           category: p.category,
           name: p.name,
-          description: `Premium quality ${p.name} from ${loc.state}. Freshly harvested and graded.`,
+          description: `Premium quality ${p.name} from ${loc.state}. Freshly harvested and graded. ${p.cropVariety} variety, ${p.isOrganic ? 'organically grown' : 'conventionally grown'}. ${p.certifications} certified.`,
           quantity: Math.floor(Math.random() * 100 + 10) * 10,
           unit: p.unit,
           pricePerUnit: p.pricePerUnit + Math.floor(Math.random() * 500 - 250),
@@ -103,6 +131,16 @@ export async function GET() {
           location: `${loc.city}, ${loc.state}`,
           state: loc.state,
           qualityGrade: p.qualityGrade,
+          imageUrl: p.imageUrl,
+          harvestDate,
+          freshness: p.freshness,
+          cropVariety: p.cropVariety,
+          isOrganic: p.isOrganic,
+          pesticidesUsed: p.pesticidesUsed,
+          moistureContent: p.moistureContent,
+          shelfLife: p.shelfLife,
+          storageCondition: p.storageCondition,
+          certifications: p.certifications,
           isActive: true,
         }
       })
@@ -124,6 +162,8 @@ export async function GET() {
           address: `${loc.city}, ${loc.state}`,
           verificationStatus: i < 5 ? 'verified' : 'pending',
           isOnline: Math.random() > 0.4,
+          latitude: loc.lat,
+          longitude: loc.lng,
         }
       })
       buyers.push(buyer)
@@ -179,12 +219,14 @@ export async function GET() {
           address: `${loc.city}, ${loc.state}`,
           verificationStatus: i < 4 ? 'verified' : 'pending',
           isOnline: Math.random() > 0.3,
+          latitude: loc.lat,
+          longitude: loc.lng,
         }
       })
       transporters.push(transporter)
     }
 
-    // Create some orders and shipments
+    // Create some orders and shipments with detailed logistics info
     for (let i = 0; i < 6; i++) {
       const buyer = buyers[i % buyers.length]
       const producer = producers[i % producers.length]
@@ -214,6 +256,11 @@ export async function GET() {
         const originLoc = LOCATIONS[i % LOCATIONS.length]
         const destLoc = LOCATIONS[(i + 4) % LOCATIONS.length]
         const shipmentStatuses = ['pending', 'assigned', 'in_transit', 'delivered']
+        const shipmentStatus = shipmentStatuses[i % shipmentStatuses.length]
+        
+        const expectedPickup = new Date()
+        expectedPickup.setDate(expectedPickup.getDate() + Math.floor(Math.random() * 3 + 1))
+        
         const shipment = await db.shipment.create({
           data: {
             orderId: order.id,
@@ -221,11 +268,21 @@ export async function GET() {
             origin: `${originLoc.city}, ${originLoc.state}`,
             destination: `${destLoc.city}, ${destLoc.state}`,
             distance: Math.floor(Math.random() * 1500 + 200),
-            status: shipmentStatuses[i % shipmentStatuses.length],
+            status: shipmentStatus,
             vehicleType: ['truck', 'tempo', 'container'][i % 3],
             vehicleNumber: `MH${Math.floor(Math.random() * 99) + 1}AB${Math.floor(Math.random() * 9999)}`,
             driverName: `Driver ${i + 1}`,
             driverPhone: `+91${6000000000 + i}`,
+            exactPickupAddress: `${producers[i % producers.length].farmName || 'Farm'}, ${originLoc.city} Industrial Area, ${originLoc.state} - ${400000 + i * 10000}`,
+            exactDropAddress: `${BUYER_NAMES[i % BUYER_NAMES.length]} Warehouse, ${destLoc.city} Logistics Park, ${destLoc.state} - ${500000 + i * 10000}`,
+            pickupLatitude: originLoc.lat,
+            pickupLongitude: originLoc.lng,
+            dropLatitude: destLoc.lat,
+            dropLongitude: destLoc.lng,
+            expectedPickupDate: expectedPickup,
+            currentLatitude: shipmentStatus === 'in_transit' ? ((parseFloat(originLoc.lat) + parseFloat(destLoc.lat)) / 2).toString() : null,
+            currentLongitude: shipmentStatus === 'in_transit' ? ((parseFloat(originLoc.lng) + parseFloat(destLoc.lng)) / 2).toString() : null,
+            lastTrackingUpdate: shipmentStatus === 'in_transit' ? new Date() : null,
           }
         })
 
@@ -238,7 +295,7 @@ export async function GET() {
               bidAmount: Math.floor(Math.random() * 30000 + 15000),
               estimatedDays: Math.floor(Math.random() * 5 + 1),
               vehicleType: ['truck', 'tempo', 'container'][j],
-              comments: `Can deliver within ${Math.floor(Math.random() * 5 + 1)} days`,
+              comments: `Can deliver within ${Math.floor(Math.random() * 5 + 1)} days. Well-maintained fleet with GPS tracking.`,
               status: j === 0 ? 'accepted' : (j === 1 ? 'pending' : 'rejected'),
             }
           })
@@ -305,6 +362,29 @@ export async function GET() {
           }
         })
       }
+    }
+
+    // Create reviews for producers
+    for (let i = 0; i < 8; i++) {
+      const producer = producers[i]
+      const buyer = buyers[i % buyers.length]
+      await db.review.create({
+        data: {
+          reviewerId: buyer.id,
+          targetId: producer.id,
+          rating: [4, 5, 5, 4, 5, 4, 5, 4][i],
+          comment: [
+            'Excellent quality basmati rice. Very satisfied with the produce.',
+            'Prompt delivery and great communication. Highly recommended.',
+            'Best turmeric quality I have found on this platform.',
+            'Good quality onions, though delivery was slightly delayed.',
+            'Outstanding organic produce. Will definitely order again.',
+            'Reliable supplier with consistent quality.',
+            'Premium mangoes, exactly as described. Trustworthy producer.',
+            'Good wheat quality, fair pricing. Professional team.'
+          ][i],
+        }
+      })
     }
 
     return NextResponse.json({ 

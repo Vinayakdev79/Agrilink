@@ -26,6 +26,8 @@ import {
   TrendingUp,
   Users,
   Map,
+  Crosshair,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,6 +52,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ShipmentTracker, MiniMapPreview } from '@/components/agrilink/shipment-tracker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TransportBid {
@@ -69,7 +72,7 @@ interface ShipmentOrder {
   id: string
   buyer: { id: string; name: string; companyName: string; phone?: string }
   seller: { id: string; name: string; companyName: string; phone?: string }
-  product: { name: string; category: string }
+  product: { name: string; category: string; quantity?: number; unit?: string }
 }
 
 interface Shipment {
@@ -87,6 +90,16 @@ interface Shipment {
   vehicleNumber?: string
   driverName?: string
   driverPhone?: string
+  exactPickupAddress?: string | null
+  exactDropAddress?: string | null
+  pickupLatitude?: string | null
+  pickupLongitude?: string | null
+  dropLatitude?: string | null
+  dropLongitude?: string | null
+  currentLatitude?: string | null
+  currentLongitude?: string | null
+  lastTrackingUpdate?: string | null
+  expectedPickupDate?: string | null
   createdAt: string
   order: ShipmentOrder
   transporter?: { id: string; name: string; companyName: string; phone?: string }
@@ -121,6 +134,12 @@ const STATUS_COLORS: Record<string, string> = {
   in_transit: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25',
   delivered: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
   cancelled: 'bg-red-500/15 text-red-400 border-red-500/25',
+}
+
+const BID_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
+  accepted: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+  rejected: 'bg-red-500/15 text-red-400 border-red-500/25',
 }
 
 const VEHICLE_TYPES = [
@@ -280,14 +299,14 @@ function BidFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="glass-card-strong border-white/15 max-w-md">
+      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
             <Gavel className="w-5 h-5 text-amber-400" />
             Place Bid
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            {shipment.origin} → {shipment.destination}
+            {shipment.exactPickupAddress || shipment.origin} → {shipment.exactDropAddress || shipment.destination}
             {shipment.distance ? ` • ${shipment.distance} km` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -296,6 +315,11 @@ function BidFormDialog({
           <div className="glass-card p-3">
             <p className="text-xs text-muted-foreground">Product</p>
             <p className="text-sm font-semibold text-foreground">{shipment.order.product.name}</p>
+            {shipment.order.product.quantity && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Qty: {shipment.order.product.quantity} {shipment.order.product.unit || ''}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground mt-1">
               Buyer: {shipment.order.buyer.companyName || shipment.order.buyer.name}
             </p>
@@ -404,7 +428,7 @@ function CreateShipmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="glass-card-strong border-white/15 max-w-md">
+      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
             <Truck className="w-5 h-5 text-emerald-400" />
@@ -512,25 +536,60 @@ function AvailableLoadCard({
     ? Math.min(...shipment.transportBids.map((b) => b.bidAmount))
     : null
 
+  const hasExactPickup = shipment.exactPickupAddress || (shipment.pickupLatitude && shipment.pickupLongitude)
+  const hasExactDrop = shipment.exactDropAddress || (shipment.dropLatitude && shipment.dropLongitude)
+
   return (
     <motion.div variants={fadeUp} className="glass-card p-5 hover:bg-white/[0.07] transition-all duration-300">
-      {/* Route header */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="text-sm font-medium text-foreground truncate">{shipment.origin}</span>
+      {/* Route header with exact addresses */}
+      <div className="mb-3">
+        <div className="flex items-start gap-2 mb-2">
+          <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+            <MapPin className="w-3 h-3 text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">
+              {shipment.exactPickupAddress || shipment.origin}
+            </p>
+            {shipment.pickupLatitude && shipment.pickupLongitude && (
+              <p className="text-[10px] text-muted-foreground">
+                {parseFloat(shipment.pickupLatitude).toFixed(4)}, {parseFloat(shipment.pickupLongitude).toFixed(4)}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="shrink-0">
-          <ArrowRight className="w-4 h-4 text-muted-foreground" />
+        <div className="flex items-center gap-2 ml-2.5">
+          <div className="w-px h-3 bg-glass-border" />
         </div>
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span className="text-sm font-medium text-foreground truncate">{shipment.destination}</span>
-          <Navigation className="w-4 h-4 text-amber-400 shrink-0" />
+        <div className="flex items-start gap-2">
+          <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+            <Navigation className="w-3 h-3 text-red-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">
+              {shipment.exactDropAddress || shipment.destination}
+            </p>
+            {shipment.dropLatitude && shipment.dropLongitude && (
+              <p className="text-[10px] text-muted-foreground">
+                {parseFloat(shipment.dropLatitude).toFixed(4)}, {parseFloat(shipment.dropLongitude).toFixed(4)}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Mini Map Preview */}
+      {(hasExactPickup || hasExactDrop) && (
+        <MiniMapPreview
+          pickupLat={shipment.pickupLatitude}
+          pickupLng={shipment.pickupLongitude}
+          dropLat={shipment.dropLatitude}
+          dropLng={shipment.dropLongitude}
+        />
+      )}
+
       {/* Details */}
-      <div className="flex flex-wrap gap-3 mb-3">
+      <div className="flex flex-wrap gap-3 my-3">
         {shipment.distance && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Route className="w-3.5 h-3.5" />
@@ -555,6 +614,11 @@ function AvailableLoadCard({
           <div>
             <p className="text-xs text-muted-foreground">Product</p>
             <p className="text-sm font-semibold text-foreground">{shipment.order.product.name}</p>
+            {shipment.order.product.quantity && (
+              <p className="text-[10px] text-muted-foreground">
+                {shipment.order.product.quantity} {shipment.order.product.unit || ''}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <p className="text-xs text-muted-foreground">Buyer</p>
@@ -563,6 +627,14 @@ function AvailableLoadCard({
             </p>
           </div>
         </div>
+        {shipment.expectedPickupDate && (
+          <div className="mt-2 pt-2 border-t border-glass-border">
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <CalendarDays className="h-3 w-3 text-amber-400" />
+              Expected pickup: {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN')}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Bid info */}
@@ -600,9 +672,17 @@ function AvailableLoadCard({
 function MyShipmentCard({
   shipment,
   onUpdateStatus,
+  onTrack,
+  showBids,
+  onAcceptBid,
+  acceptingBidId,
 }: {
   shipment: Shipment
   onUpdateStatus: (shipmentId: string, status: string) => void
+  onTrack: (shipment: Shipment) => void
+  showBids?: boolean
+  onAcceptBid?: (bidId: string) => void
+  acceptingBidId?: string | null
 }) {
   const statusColor = STATUS_COLORS[shipment.status] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
 
@@ -621,19 +701,47 @@ function MyShipmentCard({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <MapPin className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-medium text-foreground">{shipment.origin}</span>
+            <span className="text-sm font-medium text-foreground">
+              {shipment.exactPickupAddress || shipment.origin}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mb-1 ml-5">
             <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">{shipment.destination}</span>
-            <Navigation className="w-3.5 h-3.5 text-amber-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Navigation className="w-4 h-4 text-amber-400" />
+            <span className="text-sm font-medium text-foreground">
+              {shipment.exactDropAddress || shipment.destination}
+            </span>
           </div>
           {shipment.distance && (
             <p className="text-xs text-muted-foreground ml-6">{shipment.distance} km</p>
           )}
         </div>
-        <Badge className={`${statusColor} border text-xs`}>
-          {STATUS_LABELS[shipment.status] || shipment.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge className={`${statusColor} border text-xs`}>
+            {STATUS_LABELS[shipment.status] || shipment.status}
+          </Badge>
+          {['picked_up', 'in_transit'].includes(shipment.status) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1 text-xs h-7"
+              onClick={() => onTrack(shipment)}
+            >
+              <Crosshair className="w-3 h-3" /> Track
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Mini Map */}
+      <MiniMapPreview
+        pickupLat={shipment.pickupLatitude}
+        pickupLng={shipment.pickupLongitude}
+        dropLat={shipment.dropLatitude}
+        dropLng={shipment.dropLongitude}
+      />
 
       {/* Status Timeline */}
       {shipment.status !== 'cancelled' && (
@@ -703,19 +811,24 @@ function MyShipmentCard({
         </div>
       )}
 
-      {/* Bids preview */}
+      {/* Bids preview with accept capability */}
       {shipment.transportBids.length > 0 && (
         <div className="mb-3">
           <p className="text-[10px] text-muted-foreground mb-1.5">
             Bids ({shipment.transportBids.length})
           </p>
-          <div className="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
-            {shipment.transportBids.slice(0, 3).map((bid) => (
-              <div key={bid.id} className="flex items-center justify-between py-1 px-2 rounded-lg bg-white/3">
-                <span className="text-[10px] text-muted-foreground">
-                  {bid.transporter.companyName || bid.transporter.name}
-                </span>
-                <div className="flex items-center gap-2">
+          <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+            {shipment.transportBids.map((bid) => (
+              <div key={bid.id} className="flex items-center justify-between py-1.5 px-2.5 rounded-lg bg-white/[0.03] border border-glass-border">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {bid.transporter.companyName || bid.transporter.name}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">
+                    {bid.estimatedDays ? `${bid.estimatedDays} days` : ''} {bid.vehicleType ? `• ${bid.vehicleType}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
                   <span className="text-[10px] font-semibold text-foreground">
                     ₹{bid.bidAmount.toLocaleString('en-IN')}
                   </span>
@@ -730,6 +843,16 @@ function MyShipmentCard({
                   >
                     {bid.status}
                   </Badge>
+                  {showBids && bid.status === 'pending' && onAcceptBid && (
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-[9px] h-5 px-1.5 py-0"
+                      disabled={acceptingBidId !== null && acceptingBidId !== undefined}
+                      onClick={() => onAcceptBid(bid.id)}
+                    >
+                      Accept
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -757,6 +880,7 @@ export function LogisticsPage() {
 
   const [pendingShipments, setPendingShipments] = useState<Shipment[]>([])
   const [myShipments, setMyShipments] = useState<Shipment[]>([])
+  const [buyerShipments, setBuyerShipments] = useState<Shipment[]>([])
   const [userOrders, setUserOrders] = useState<UserOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('available')
@@ -765,6 +889,13 @@ export function LogisticsPage() {
   const [bidOpen, setBidOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [createDialogKey, setCreateDialogKey] = useState(0)
+
+  // Tracking state
+  const [trackingShipment, setTrackingShipment] = useState<Shipment | null>(null)
+  const [trackerOpen, setTrackerOpen] = useState(false)
+
+  // Bid acceptance state
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null)
 
   const isTransporter = user?.role === 'transporter'
   const isBuyer = user?.role === 'buyer'
@@ -778,20 +909,36 @@ export function LogisticsPage() {
       const shipData = await shipRes.json()
 
       setPendingShipments(shipData.pendingShipments || [])
-      setMyShipments(shipData.shipments || [])
 
-      // Fetch user's orders for create shipment dialog
-      if (user && isBuyer) {
+      // For transporter: my shipments = those assigned to me
+      if (isTransporter && user) {
+        const myShips = (shipData.shipments || []).filter(
+          (s: Shipment) => s.transporterId === user.id
+        )
+        setMyShipments(myShips)
+      } else {
+        setMyShipments(shipData.shipments || [])
+      }
+
+      // For buyer: get their shipments
+      if (isBuyer && user) {
         const orderRes = await fetch(`/api/orders?userId=${user.id}&role=buyer`)
         const orderData = await orderRes.json()
         setUserOrders(orderData.orders || [])
+
+        // Filter shipments for buyer's orders
+        const buyerOrderIds = new Set((orderData.orders || []).map((o: any) => o.id))
+        const bShips = (shipData.shipments || []).filter(
+          (s: Shipment) => buyerOrderIds.has(s.orderId)
+        )
+        setBuyerShipments(bShips)
       }
     } catch {
       toast.error('Failed to load logistics data')
     } finally {
       setLoading(false)
     }
-  }, [user, isBuyer])
+  }, [user, isBuyer, isTransporter])
 
   useEffect(() => {
     fetchData()
@@ -880,6 +1027,35 @@ export function LogisticsPage() {
     }
   }
 
+  // Accept a bid (buyer)
+  const handleAcceptBid = async (bidId: string) => {
+    setAcceptingBidId(bidId)
+    try {
+      const res = await fetch('/api/transport-bids', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bidId, status: 'accepted' })
+      })
+      if (res.ok) {
+        toast.success('Bid accepted! Transporter has been assigned.')
+        fetchData()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to accept bid')
+      }
+    } catch {
+      toast.error('Failed to accept bid')
+    } finally {
+      setAcceptingBidId(null)
+    }
+  }
+
+  // Track shipment
+  const handleTrackShipment = (shipment: Shipment) => {
+    setTrackingShipment(shipment)
+    setTrackerOpen(true)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Background decorations */}
@@ -960,20 +1136,19 @@ export function LogisticsPage() {
                   </span>
                 )}
               </TabsTrigger>
-              {(isTransporter || myShipments.length > 0) && (
-                <TabsTrigger
-                  value="my-shipments"
-                  className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white text-xs px-4"
-                >
-                  <Truck className="w-3.5 h-3.5 mr-1.5" />
-                  My Shipments
-                  {myShipments.length > 0 && (
-                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-                      {myShipments.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-              )}
+              {/* My Shipments tab - visible to both transporters and buyers */}
+              <TabsTrigger
+                value="my-shipments"
+                className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white text-xs px-4"
+              >
+                <Truck className="w-3.5 h-3.5 mr-1.5" />
+                My Shipments
+                {(isTransporter ? myShipments.length : buyerShipments.length) > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                    {isTransporter ? myShipments.length : buyerShipments.length}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             {/* Available Loads Tab */}
@@ -1025,7 +1200,7 @@ export function LogisticsPage() {
                     <ShipmentCardSkeleton key={i} />
                   ))}
                 </div>
-              ) : myShipments.length === 0 ? (
+              ) : (isTransporter ? myShipments : buyerShipments).length === 0 ? (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1046,11 +1221,15 @@ export function LogisticsPage() {
                   animate="visible"
                   className="grid grid-cols-1 md:grid-cols-2 gap-4"
                 >
-                  {myShipments.map((shipment) => (
+                  {(isTransporter ? myShipments : buyerShipments).map((shipment) => (
                     <MyShipmentCard
                       key={shipment.id}
                       shipment={shipment}
                       onUpdateStatus={handleUpdateStatus}
+                      onTrack={handleTrackShipment}
+                      showBids={isBuyer}
+                      onAcceptBid={isBuyer ? handleAcceptBid : undefined}
+                      acceptingBidId={acceptingBidId}
                     />
                   ))}
                 </motion.div>
@@ -1079,6 +1258,13 @@ export function LogisticsPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreateShipment}
+      />
+
+      {/* Shipment Tracker Dialog */}
+      <ShipmentTracker
+        shipment={trackingShipment}
+        open={trackerOpen}
+        onClose={() => setTrackerOpen(false)}
       />
     </div>
   )

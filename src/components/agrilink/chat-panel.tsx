@@ -676,7 +676,7 @@ export function ChatPanel() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed top-0 right-0 z-50 h-full w-full sm:w-[380px] glass-card-strong rounded-l-2xl flex flex-col overflow-hidden"
+            className="fixed top-0 right-0 z-50 h-full w-full sm:w-[380px] glass-card-solid rounded-l-2xl flex flex-col overflow-hidden"
             style={{
               boxShadow:
                 '-10px 0 40px rgba(0, 0, 0, 0.3), 0 0 80px rgba(0, 0, 0, 0.1)',

@@ -9,6 +9,8 @@ export type View =
   | 'logistics'
   | 'chat'
   | 'profile'
+  | 'product'
+  | 'producer-profile'
 
 export type UserRole = 'producer' | 'buyer' | 'transporter' | 'admin'
 
@@ -23,6 +25,14 @@ export interface AppUser {
   city?: string
   verificationStatus: string
   avatar?: string
+  farmName?: string
+  farmSize?: string
+  farmLocation?: string
+  yearsExperience?: number
+  certifications?: string
+  totalTransactions?: number
+  avgRating?: number
+  totalReviews?: number
 }
 
 interface AppState {
@@ -44,6 +54,12 @@ interface AppState {
   setMarketplaceCategory: (cat: string) => void
   marketplaceSearch: string
   setMarketplaceSearch: (search: string) => void
+  
+  // Product & Producer detail views
+  selectedProductId: string | null
+  setSelectedProductId: (id: string | null) => void
+  selectedProducerId: string | null
+  setSelectedProducerId: (id: string | null) => void
   
   // UI State
   sidebarOpen: boolean
@@ -73,6 +89,11 @@ export const useAppStore = create<AppState>((set) => ({
   setMarketplaceCategory: (cat) => set({ marketplaceCategory: cat }),
   marketplaceSearch: '',
   setMarketplaceSearch: (search) => set({ marketplaceSearch: search }),
+  
+  selectedProductId: null,
+  setSelectedProductId: (id) => set({ selectedProductId: id }),
+  selectedProducerId: null,
+  setSelectedProducerId: (id) => set({ selectedProducerId: id }),
   
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),

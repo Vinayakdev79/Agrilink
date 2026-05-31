@@ -7,7 +7,9 @@ import { MarketplacePage } from '@/components/agrilink/marketplace-page'
 import { LogisticsPage } from '@/components/agrilink/logistics-page'
 import { DashboardPage } from '@/components/agrilink/dashboard-page'
 import { ProfilePage } from '@/components/agrilink/profile-page'
+import { ProducerProfilePage } from '@/components/agrilink/producer-profile-page'
 import { ChatPanel } from '@/components/agrilink/chat-panel'
+import { ProductPage } from '@/components/agrilink/product-page'
 import { useAppStore } from '@/lib/store'
 
 export default function Home() {
@@ -23,6 +25,8 @@ export default function Home() {
       {currentView === 'dashboard' && <DashboardPage />}
       {currentView === 'profile' && <ProfilePage />}
       {currentView === 'chat' && <DashboardPage />}
+      {currentView === 'product' && <ProductPage />}
+      {currentView === 'producer-profile' && <ProducerProfilePage />}
       <ChatPanel />
     </div>
   )

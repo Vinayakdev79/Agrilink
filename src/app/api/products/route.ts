@@ -4,11 +4,35 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
     const category = searchParams.get('category')
     const search = searchParams.get('search')
     const state = searchParams.get('state')
     const grade = searchParams.get('grade')
     const sellerId = searchParams.get('sellerId')
+
+    // Single product lookup by ID
+    if (id) {
+      const product = await db.product.findUnique({
+        where: { id },
+        include: {
+          seller: {
+            select: {
+              id: true,
+              name: true,
+              companyName: true,
+              verificationStatus: true,
+              state: true,
+              city: true,
+            }
+          }
+        }
+      })
+      if (!product) {
+        return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      }
+      return NextResponse.json({ product })
+    }
 
     const where: Record<string, unknown> = { isActive: true }
 

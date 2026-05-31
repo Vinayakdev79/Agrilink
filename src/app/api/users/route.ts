@@ -24,7 +24,27 @@ export async function GET(request: Request) {
           verificationStatus: true,
           isOnline: true,
           gstNumber: true,
+          avatar: true,
+          farmName: true,
+          farmSize: true,
+          farmLocation: true,
+          farmImages: true,
+          yearsExperience: true,
+          certifications: true,
+          totalTransactions: true,
+          latitude: true,
+          longitude: true,
+          avgRating: true,
+          totalReviews: true,
           createdAt: true,
+          _count: {
+            select: {
+              products: true,
+              ordersAsBuyer: true,
+              ordersAsSeller: true,
+              shipmentsAsTransporter: true,
+            }
+          }
         }
       })
       if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -48,6 +68,18 @@ export async function GET(request: Request) {
         city: true,
         verificationStatus: true,
         isOnline: true,
+        avatar: true,
+        farmName: true,
+        farmSize: true,
+        farmLocation: true,
+        farmImages: true,
+        yearsExperience: true,
+        certifications: true,
+        totalTransactions: true,
+        latitude: true,
+        longitude: true,
+        avgRating: true,
+        totalReviews: true,
         createdAt: true,
         _count: {
           select: {

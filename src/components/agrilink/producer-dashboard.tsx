@@ -5,7 +5,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Package, ShoppingCart, IndianRupee, Star, Plus, MessageSquare,
-  TrendingUp, TrendingDown, MapPin, Eye, Check, X, User
+  TrendingUp, TrendingDown, MapPin, Eye, Check, X, User,
+  Truck, Phone, Clock, Crosshair, CalendarDays
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +27,7 @@ import {
   ResponsiveContainer, Area, AreaChart
 } from 'recharts'
 import { toast } from 'sonner'
+import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
 
 interface ProducerDashboardProps {
   tab: string
@@ -48,6 +50,15 @@ const statusColors: Record<string, string> = {
   delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
   cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
   disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+}
+
+const shipmentStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
 }
 
 const categories = ['grains', 'vegetables', 'fruits', 'spices', 'dairy', 'poultry', 'pulses', 'oilseeds']
@@ -91,6 +102,11 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     pricePerUnit: '', minOrderQty: '', location: '', state: '', qualityGrade: 'A'
   })
 
+  // Shipment data for transport details
+  const [shipments, setShipments] = useState<any[]>([])
+  const [trackingShipment, setTrackingShipment] = useState<any>(null)
+  const [trackerOpen, setTrackerOpen] = useState(false)
+
   const fetchData = useCallback(async () => {
     if (!user) return
     setLoading(true)
@@ -103,6 +119,15 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
       const productsData = await productsRes.json()
       if (ordersData.orders) setOrders(ordersData.orders)
       if (productsData.products) setProducts(productsData.products)
+
+      // Fetch shipments related to this producer's orders
+      const shipRes = await fetch('/api/shipments')
+      const shipData = await shipRes.json()
+      const allShipments = shipData.shipments || []
+      // Filter shipments that belong to this producer's orders
+      const myOrderIds = new Set((ordersData.orders || []).map((o: any) => o.id))
+      const myShips = allShipments.filter((s: any) => myOrderIds.has(s.orderId))
+      setShipments(myShips)
     } catch {
       toast.error('Failed to load data')
     } finally {
@@ -151,6 +176,16 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     } catch {
       toast.error('Failed to update order')
     }
+  }
+
+  const handleTrackShipment = (shipment: any) => {
+    setTrackingShipment(shipment)
+    setTrackerOpen(true)
+  }
+
+  // Get shipment for a specific order
+  const getShipmentForOrder = (orderId: string) => {
+    return shipments.find((s: any) => s.orderId === orderId)
   }
 
   const activeListings = products.filter(p => p.isActive).length
@@ -250,7 +285,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
 
         {/* Add Listing Dialog */}
         <Dialog open={addListingOpen} onOpenChange={setAddListingOpen}>
-          <DialogContent className="bg-[#0d0d1a] border-glass-border max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-foreground">Add New Listing</DialogTitle>
               <DialogDescription className="text-muted-foreground">Create a new product listing for the marketplace</DialogDescription>
@@ -346,7 +381,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                 <Plus className="h-4 w-4" /> Add Listing
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-[#0d0d1a] border-glass-border max-h-[90vh] overflow-y-auto">
+            <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="text-foreground">Add New Listing</DialogTitle>
                 <DialogDescription className="text-muted-foreground">Create a new product listing</DialogDescription>
@@ -506,50 +541,145 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
             <p className="text-muted-foreground">No orders yet</p>
           </div>
         ) : (
-          <div className="glass-card overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-glass-border hover:bg-transparent">
-                  <TableHead className="text-muted-foreground">Product</TableHead>
-                  <TableHead className="text-muted-foreground">Buyer</TableHead>
-                  <TableHead className="text-muted-foreground">Quantity</TableHead>
-                  <TableHead className="text-muted-foreground">Total</TableHead>
-                  <TableHead className="text-muted-foreground">Date</TableHead>
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-muted-foreground">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((order) => (
-                  <TableRow key={order.id} className="border-glass-border">
-                    <TableCell className="font-medium text-foreground">{order.product?.name || 'N/A'}</TableCell>
-                    <TableCell className="text-muted-foreground">{order.buyer?.name || order.buyer?.companyName || 'N/A'}</TableCell>
-                    <TableCell className="text-muted-foreground">{order.quantity} {order.product?.unit || ''}</TableCell>
-                    <TableCell className="text-emerald-400 font-medium">₹{order.totalPrice?.toLocaleString()}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
+          <div className="space-y-4">
+            {orders.map((order) => {
+              const shipment = getShipmentForOrder(order.id)
+              const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
+              const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
+
+              return (
+                <motion.div
+                  key={order.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-5 space-y-4"
+                >
+                  {/* Order header */}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold text-foreground">{order.product?.name || 'N/A'}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Buyer: {order.buyer?.name || order.buyer?.companyName || 'N/A'} • {order.quantity} {order.product?.unit || ''} • ₹{order.totalPrice?.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
                       <Badge className={`${statusColors[order.status] || ''} border text-xs`}>
                         {order.status}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
                       {order.status === 'negotiating' && (
                         <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleOrderAction(order.id, 'confirmed')}>
-                            <Check className="h-4 w-4" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleOrderAction(order.id, 'confirmed')}>
+                            <Check className="h-3.5 w-3.5" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => handleOrderAction(order.id, 'cancelled')}>
-                            <X className="h-4 w-4" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => handleOrderAction(order.id, 'cancelled')}>
+                            <X className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </div>
+
+                  {/* Transport Details Card */}
+                  {hasTransport && (
+                    <div className="glass-card p-4 border border-teal-500/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Truck className="h-4 w-4 text-teal-400" />
+                        <h5 className="text-sm font-semibold text-foreground">Transport Details</h5>
+                        <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px] ml-auto`}>
+                          {shipment.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        {/* Transport Company */}
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Company</p>
+                          <p className="text-foreground font-medium text-xs">
+                            {shipment.transporter?.companyName || shipment.transporter?.name || 'N/A'}
+                          </p>
+                        </div>
+                        {/* Driver */}
+                        {shipment.driverName && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Driver</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <User className="h-3 w-3 text-emerald-400" />
+                              {shipment.driverName}
+                            </p>
+                            {shipment.driverPhone && (
+                              <p className="text-muted-foreground text-[10px] flex items-center gap-1 mt-0.5">
+                                <Phone className="h-2.5 w-2.5" />
+                                {shipment.driverPhone}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {/* Vehicle */}
+                        {(shipment.vehicleType || shipment.vehicleNumber) && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Vehicle</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <Truck className="h-3 w-3 text-emerald-400" />
+                              {shipment.vehicleType || 'N/A'}
+                              {shipment.vehicleNumber && ` (${shipment.vehicleNumber})`}
+                            </p>
+                          </div>
+                        )}
+                        {/* Expected Pickup Date */}
+                        {shipment.expectedPickupDate && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Expected Pickup</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <CalendarDays className="h-3 w-3 text-amber-400" />
+                              {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN')}
+                            </p>
+                          </div>
+                        )}
+                        {/* Pickup Location */}
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Pickup</p>
+                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-emerald-400" />
+                            {shipment.exactPickupAddress || shipment.origin}
+                          </p>
+                        </div>
+                        {/* Drop-off Location */}
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Drop-off</p>
+                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-red-400" />
+                            {shipment.exactDropAddress || shipment.destination}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Track Shipment Button */}
+                      {isShippedOrInTransit && (
+                        <div className="mt-3 pt-3 border-t border-glass-border">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1.5 text-xs"
+                            onClick={() => handleTrackShipment(shipment)}
+                          >
+                            <Crosshair className="h-3.5 w-3.5" /> Track Shipment
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )
+            })}
           </div>
         )}
+
+        {/* Shipment Tracker Dialog */}
+        <ShipmentTracker
+          shipment={trackingShipment}
+          open={trackerOpen}
+          onClose={() => setTrackerOpen(false)}
+        />
       </div>
     )
   }

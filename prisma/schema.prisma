@@ -22,6 +22,19 @@ model User {
   address            String?
   verificationStatus String   @default("pending") // pending, verified, rejected
   isOnline           Boolean  @default(false)
+  // Producer-specific fields
+  farmName           String?
+  farmSize           String?   // e.g. "25 acres"
+  farmLocation       String?   // exact farm address
+  farmImages         String?   // comma-separated URLs
+  yearsExperience    Int?
+  certifications     String?   // comma-separated: "Organic,FSSAI,APEDA"
+  totalTransactions  Int       @default(0)
+  latitude           String?
+  longitude          String?
+  // Rating aggregate
+  avgRating          Float     @default(0)
+  totalReviews       Int       @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -38,25 +51,36 @@ model User {
 }
 
 model Product {
-  id           String   @id @default(cuid())
-  sellerId     String
-  category     String   // grains, vegetables, fruits, spices, dairy, poultry, pulses, oilseeds
-  name         String
-  description  String?
-  quantity     Float
-  unit         String   // kg, quintal, tonne, litre
-  pricePerUnit Float
-  minOrderQty  Float?
-  location     String
-  state        String?
-  qualityGrade String?  // A, B, C
-  images       String?  // comma-separated URLs
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(cuid())
+  sellerId        String
+  category        String    // grains, vegetables, fruits, spices, dairy, poultry, pulses, oilseeds
+  name            String
+  description     String?
+  quantity        Float
+  unit            String    // kg, quintal, tonne, litre
+  pricePerUnit    Float
+  minOrderQty     Float?
+  location        String
+  state           String?
+  qualityGrade    String?   // A, B, C
+  images          String?   // comma-separated URLs
+  imageUrl        String?   // primary product image URL
+  // Detailed crop information
+  harvestDate     DateTime?
+  freshness       String?   // e.g. "Fresh", "2 weeks old", "Dried"
+  cropVariety     String?   // e.g. "Chipsona", "Kanchan", "1121 Basmati"
+  isOrganic       Boolean   @default(false)
+  pesticidesUsed  String?   // e.g. "None", "Neem-based only", "Standard"
+  moistureContent String?   // e.g. "12%", "8-10%"
+  shelfLife       String?   // e.g. "6 months", "2 weeks"
+  storageCondition String?  // e.g. "Cool dry place", "Refrigerated"
+  certifications  String?   // e.g. "FSSAI,Organic India"
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  seller       User     @relation(fields: [sellerId], references: [id])
-  orders       Order[]
+  seller          User      @relation(fields: [sellerId], references: [id])
+  orders          Order[]
 }
 
 model BuyerRequirement {
@@ -97,27 +121,39 @@ model Order {
 }
 
 model Shipment {
-  id             String   @id @default(cuid())
-  orderId        String   @unique
-  transporterId  String?
-  origin         String
-  destination    String
-  distance       Float?
-  status         String   @default("pending") // pending, bidding, assigned, picked_up, in_transit, delivered
-  pickupDate     DateTime?
-  deliveryDate   DateTime?
-  actualDelivery DateTime?
-  vehicleType    String?  // truck, tempo, container
-  vehicleNumber  String?
-  driverName     String?
-  driverPhone    String?
-  deliveryProof  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  orderId             String    @unique
+  transporterId       String?
+  origin              String
+  destination         String
+  distance            Float?
+  status              String    @default("pending") // pending, bidding, assigned, picked_up, in_transit, delivered
+  pickupDate          DateTime?
+  deliveryDate        DateTime?
+  actualDelivery      DateTime?
+  vehicleType         String?   // truck, tempo, container
+  vehicleNumber       String?
+  driverName          String?
+  driverPhone         String?
+  deliveryProof       String?
+  // Exact location details
+  exactPickupAddress  String?
+  exactDropAddress    String?
+  pickupLatitude      String?
+  pickupLongitude     String?
+  dropLatitude        String?
+  dropLongitude       String?
+  expectedPickupDate  DateTime?
+  // Live tracking
+  currentLatitude     String?
+  currentLongitude    String?
+  lastTrackingUpdate  DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  order          Order    @relation(fields: [orderId], references: [id])
-  transporter    User?    @relation(fields: [transporterId], references: [id])
-  transportBids  TransportBid[]
+  order               Order     @relation(fields: [orderId], references: [id])
+  transporter         User?     @relation(fields: [transporterId], references: [id])
+  transportBids       TransportBid[]
 }
 
 model TransportBid {

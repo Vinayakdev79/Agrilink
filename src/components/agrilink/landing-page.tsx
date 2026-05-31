@@ -131,14 +131,22 @@ const marketplaceProducts = [
 ]
 
 const logisticsCities = [
-  { name: 'Delhi', x: 52, y: 22 },
-  { name: 'Jaipur', x: 40, y: 36 },
-  { name: 'Lucknow', x: 58, y: 30 },
-  { name: 'Mumbai', x: 22, y: 58 },
-  { name: 'Hyderabad', x: 48, y: 62 },
-  { name: 'Bengaluru', x: 42, y: 78 },
-  { name: 'Chennai', x: 62, y: 74 },
-  { name: 'Kolkata', x: 78, y: 34 },
+  { name: 'Delhi', x: 48, y: 20 },
+  { name: 'Jaipur', x: 40, y: 30 },
+  { name: 'Lucknow', x: 55, y: 24 },
+  { name: 'Mumbai', x: 25, y: 52 },
+  { name: 'Hyderabad', x: 45, y: 55 },
+  { name: 'Bengaluru', x: 40, y: 70 },
+  { name: 'Chennai', x: 55, y: 68 },
+  { name: 'Kolkata', x: 72, y: 30 },
+  { name: 'Chandigarh', x: 48, y: 17 },
+  { name: 'Ahmedabad', x: 30, y: 38 },
+  { name: 'Indore', x: 35, y: 42 },
+  { name: 'Nagpur', x: 45, y: 45 },
+  { name: 'Pune', x: 32, y: 56 },
+  { name: 'Coimbatore', x: 42, y: 72 },
+  { name: 'Visakhapatnam', x: 60, y: 52 },
+  { name: 'Guwahati', x: 78, y: 20 },
 ]
 
 const logisticsRoutes = [
@@ -152,6 +160,14 @@ const logisticsRoutes = [
   [4, 6], // Hyderabad - Chennai
   [0, 3], // Delhi - Mumbai
   [2, 4], // Lucknow - Hyderabad
+  [0, 8], // Delhi - Chandigarh
+  [9, 3], // Ahmedabad - Mumbai
+  [10, 11], // Indore - Nagpur
+  [11, 4], // Nagpur - Hyderabad
+  [12, 5], // Pune - Bengaluru
+  [13, 6], // Coimbatore - Chennai
+  [14, 7], // Visakhapatnam - Kolkata
+  [15, 7], // Guwahati - Kolkata
 ]
 
 // ─── Animation Variants ──────────────────────────────────────────────────────
@@ -226,7 +242,7 @@ function Navbar() {
       className="sticky top-0 z-50 w-full"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="glass-card-strong mt-3 px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className="glass-nav mt-3 px-4 sm:px-6 py-3 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-2.5">
             <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
@@ -333,7 +349,7 @@ function HeroSection() {
   const setView = useAppStore((s) => s.setView)
 
   return (
-    <section className="relative min-h-[90vh] flex items-center overflow-hidden">
+    <section id="hero" className="relative min-h-[90vh] flex items-center overflow-hidden scroll-mt-20">
       <GlowingOrbs />
       <div className="absolute inset-0 bg-grid-pattern opacity-40" />
 
@@ -540,7 +556,7 @@ function MarketplacePreview() {
   const setView = useAppStore((s) => s.setView)
 
   return (
-    <section className="relative py-24">
+    <section id="marketplace" className="relative min-h-screen py-16 lg:py-20 scroll-mt-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           badge="Live Marketplace"
@@ -582,9 +598,13 @@ function ProductCard({
   product: (typeof marketplaceProducts)[number]
 }) {
   const isPositive = product.trend.startsWith('+')
+  const setView = useAppStore((s) => s.setView)
 
   return (
-    <div className="glass-card p-5 hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer">
+    <div
+      className="glass-card p-5 hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer"
+      onClick={() => setView('marketplace')}
+    >
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="font-semibold text-foreground text-sm leading-tight group-hover:text-emerald-400 transition-colors">
@@ -637,7 +657,7 @@ function LogisticsSection() {
   const setView = useAppStore((s) => s.setView)
 
   return (
-    <section className="relative py-24">
+    <section id="logistics" className="relative min-h-screen py-16 lg:py-20 scroll-mt-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           badge="Logistics Network"
@@ -657,17 +677,42 @@ function LogisticsSection() {
               {/* Map Visualization */}
               <div className="lg:col-span-3 relative">
                 <svg viewBox="0 0 100 100" className="w-full h-auto max-h-[400px]" xmlns="http://www.w3.org/2000/svg">
-                  {/* India outline (simplified) */}
+                  {/* Definitions */}
+                  <defs>
+                    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
+                      <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.4" />
+                    </linearGradient>
+                    <radialGradient id="cityGlow">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.8" />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                    </radialGradient>
+                    <filter id="indiaGlow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="1.2" result="blur" />
+                      <feFlood floodColor="#10b981" floodOpacity="0.35" result="color" />
+                      <feComposite in="color" in2="blur" operator="in" result="glow" />
+                      <feMerge>
+                        <feMergeNode in="glow" />
+                        <feMergeNode in="glow" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  </defs>
+
+                  {/* India outline (detailed) */}
                   <path
-                    d="M 30 12 Q 35 8 45 10 Q 55 8 62 14 Q 70 18 75 22 Q 82 28 82 34 Q 84 42 80 46 Q 78 52 72 56 Q 68 60 64 62 Q 58 68 54 72 Q 50 78 46 82 Q 42 86 40 84 Q 36 80 34 74 Q 30 68 26 64 Q 22 58 18 54 Q 14 48 14 42 Q 12 36 16 30 Q 18 24 22 20 Q 26 16 30 12 Z"
-                    fill="none"
-                    stroke="rgba(255,255,255,0.08)"
-                    strokeWidth="0.5"
+                    d="M 32 10 L 35 8 L 40 7 L 45 6 L 50 5 L 52 4 L 54 3 L 55 5 L 54 7 L 56 8 L 58 6 L 60 8 L 62 10 L 64 12 L 66 14 L 68 15 L 70 17 L 72 20 L 73 22 L 75 24 L 76 27 L 77 30 L 78 33 L 78 36 L 77 38 L 76 40 L 75 43 L 74 45 L 72 48 L 70 50 L 68 52 L 66 54 L 64 56 L 62 58 L 60 60 L 58 62 L 56 64 L 54 66 L 52 68 L 50 70 L 48 72 L 47 74 L 46 76 L 44 78 L 42 80 L 40 82 L 39 84 L 38 86 L 37 84 L 36 82 L 35 80 L 33 76 L 31 72 L 29 68 L 27 64 L 25 60 L 23 56 L 21 52 L 19 48 L 18 44 L 16 40 L 15 36 L 16 32 L 17 28 L 19 24 L 22 20 L 25 16 L 28 13 L 30 11 Z"
+                    fill="rgba(16,185,129,0.05)"
+                    stroke="rgba(16,185,129,0.3)"
+                    strokeWidth="0.4"
+                    filter="url(#indiaGlow)"
                   />
+
+                  {/* Sri Lanka outline */}
                   <path
-                    d="M 52 5 Q 54 2 56 4 Q 58 8 56 10 Q 54 12 52 10 Q 50 8 52 5 Z"
-                    fill="none"
-                    stroke="rgba(255,255,255,0.06)"
+                    d="M 50 82 L 52 80 L 53 82 L 53 85 L 52 87 L 50 88 L 49 86 L 49 84 Z"
+                    fill="rgba(16,185,129,0.03)"
+                    stroke="rgba(16,185,129,0.2)"
                     strokeWidth="0.3"
                   />
 
@@ -686,22 +731,10 @@ function LogisticsSection() {
                         strokeWidth="0.3"
                         strokeDasharray="2 2"
                         className="animate-route"
-                        style={{ animationDelay: `${i * 0.2}s` }}
+                        style={{ animationDelay: `${i * 0.15}s` }}
                       />
                     )
                   })}
-
-                  {/* Gradient definition */}
-                  <defs>
-                    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.4" />
-                    </linearGradient>
-                    <radialGradient id="cityGlow">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.8" />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                    </radialGradient>
-                  </defs>
 
                   {/* City dots */}
                   {logisticsCities.map((city, i) => (
@@ -709,19 +742,24 @@ function LogisticsSection() {
                       <circle
                         cx={city.x}
                         cy={city.y}
-                        r="3"
+                        r={i < 8 ? '3' : '2.5'}
                         fill="url(#cityGlow)"
                         className="animate-pulse-green"
-                        style={{ animationDelay: `${i * 0.3}s` }}
+                        style={{ animationDelay: `${i * 0.25}s` }}
                       />
-                      <circle cx={city.x} cy={city.y} r="1" fill="#10b981" />
+                      <circle
+                        cx={city.x}
+                        cy={city.y}
+                        r={i < 8 ? '1' : '0.8'}
+                        fill="#10b981"
+                      />
                       <text
                         x={city.x}
-                        y={city.y - 3.5}
+                        y={city.y - (i < 8 ? 3.5 : 3)}
                         textAnchor="middle"
-                        fill="rgba(255,255,255,0.6)"
-                        fontSize="2.5"
-                        fontWeight="500"
+                        fill={i < 8 ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.5)'}
+                        fontSize={i < 8 ? '2.5' : '2.2'}
+                        fontWeight={i < 8 ? '500' : '400'}
                       >
                         {city.name}
                       </text>
@@ -808,7 +846,7 @@ function TrustSection() {
   ]
 
   return (
-    <section className="relative py-24">
+    <section id="trust" className="relative min-h-screen py-16 lg:py-20 scroll-mt-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           badge="Built on Trust"
