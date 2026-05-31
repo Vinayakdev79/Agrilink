@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -10,15 +10,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Shipment ID required' }, { status: 400 })
     }
 
-    const bids = await db.transportBid.findMany({
-      where: { shipmentId },
-      include: {
-        transporter: { select: { id: true, name: true, companyName: true, verificationStatus: true } },
-      },
-      orderBy: { bidAmount: 'asc' },
-    })
+    const { data: bids, error: bidsError } = await supabase
+      .from('TransportBid')
+      .select('*, transporter:User!transporterId(id, name, companyName, verificationStatus)')
+      .eq('shipmentId', shipmentId)
+      .order('bidAmount', { ascending: true })
 
-    return NextResponse.json({ bids })
+    if (bidsError) {
+      console.error('Transport bids fetch error:', bidsError)
+      return NextResponse.json({ error: 'Failed to fetch bids' }, { status: 500 })
+    }
+
+    return NextResponse.json({ bids: bids || [] })
   } catch (error) {
     console.error('Transport bids error:', error)
     return NextResponse.json({ error: 'Failed to fetch bids' }, { status: 500 })
@@ -34,8 +37,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const bid = await db.transportBid.create({
-      data: {
+    const { data: bid, error: bidError } = await supabase
+      .from('TransportBid')
+      .insert({
         shipmentId,
         transporterId,
         bidAmount: parseFloat(bidAmount),
@@ -43,11 +47,14 @@ export async function POST(request: Request) {
         vehicleType,
         comments,
         status: 'pending',
-      },
-      include: {
-        transporter: { select: { id: true, name: true, companyName: true } },
-      }
-    })
+      })
+      .select('*, transporter:User!transporterId(id, name, companyName)')
+      .single()
+
+    if (bidError) {
+      console.error('Bid create error:', bidError)
+      return NextResponse.json({ error: 'Failed to create bid' }, { status: 500 })
+    }
 
     return NextResponse.json({ bid })
   } catch (error) {
@@ -67,25 +74,39 @@ export async function PATCH(request: Request) {
 
     // If accepting a bid, reject all others for this shipment
     if (status === 'accepted') {
-      const bid = await db.transportBid.findUnique({ where: { id: bidId } })
+      const { data: bid } = await supabase
+        .from('TransportBid')
+        .select('shipmentId, transporterId')
+        .eq('id', bidId)
+        .single()
+
       if (bid) {
-        await db.transportBid.updateMany({
-          where: { shipmentId: bid.shipmentId, id: { not: bidId } },
-          data: { status: 'rejected' },
-        })
-        
+        // Reject all other bids for this shipment
+        await supabase
+          .from('TransportBid')
+          .update({ status: 'rejected' })
+          .eq('shipmentId', bid.shipmentId)
+          .neq('id', bidId)
+
         // Update shipment with transporter
-        await db.shipment.update({
-          where: { id: bid.shipmentId },
-          data: { transporterId: bid.transporterId, status: 'assigned' },
-        })
+        await supabase
+          .from('Shipment')
+          .update({ transporterId: bid.transporterId, status: 'assigned' })
+          .eq('id', bid.shipmentId)
       }
     }
 
-    const updatedBid = await db.transportBid.update({
-      where: { id: bidId },
-      data: { status },
-    })
+    const { data: updatedBid, error: updateError } = await supabase
+      .from('TransportBid')
+      .update({ status })
+      .eq('id', bidId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('Bid update error:', updateError)
+      return NextResponse.json({ error: 'Failed to update bid' }, { status: 500 })
+    }
 
     return NextResponse.json({ bid: updatedBid })
   } catch (error) {

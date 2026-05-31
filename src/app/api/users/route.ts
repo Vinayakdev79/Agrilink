@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -10,90 +10,108 @@ export async function GET(request: Request) {
 
     // Single user lookup by ID
     if (id) {
-      const user = await db.user.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          companyName: true,
-          phone: true,
-          state: true,
-          city: true,
-          verificationStatus: true,
-          isOnline: true,
-          gstNumber: true,
-          avatar: true,
-          farmName: true,
-          farmSize: true,
-          farmLocation: true,
-          farmImages: true,
-          yearsExperience: true,
-          certifications: true,
-          totalTransactions: true,
-          latitude: true,
-          longitude: true,
-          avgRating: true,
-          totalReviews: true,
-          createdAt: true,
-          _count: {
-            select: {
-              products: true,
-              ordersAsBuyer: true,
-              ordersAsSeller: true,
-              shipmentsAsTransporter: true,
-            }
-          }
-        }
-      })
-      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
-      return NextResponse.json({ user })
+      const { data: user, error: userError } = await supabase
+        .from('User')
+        .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (userError) {
+        console.error('User fetch error:', userError)
+        return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 })
+      }
+      if (!user) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+
+      // Fetch counts separately (replacing Prisma _count)
+      const [productsRes, ordersAsBuyerRes, ordersAsSellerRes, shipmentsAsTransporterRes] = await Promise.all([
+        supabase.from('Product').select('*', { count: 'exact', head: true }).eq('sellerId', id),
+        supabase.from('Order').select('*', { count: 'exact', head: true }).eq('buyerId', id),
+        supabase.from('Order').select('*', { count: 'exact', head: true }).eq('sellerId', id),
+        supabase.from('Shipment').select('*', { count: 'exact', head: true }).eq('transporterId', id),
+      ])
+
+      const userWithCount = {
+        ...user,
+        _count: {
+          products: productsRes.count ?? 0,
+          ordersAsBuyer: ordersAsBuyerRes.count ?? 0,
+          ordersAsSeller: ordersAsSellerRes.count ?? 0,
+          shipmentsAsTransporter: shipmentsAsTransporterRes.count ?? 0,
+        },
+      }
+
+      return NextResponse.json({ user: userWithCount })
     }
 
-    const where: Record<string, unknown> = {}
-    if (role) where.role = role
-    if (verificationStatus) where.verificationStatus = verificationStatus
+    // List users with filters
+    let query = supabase
+      .from('User')
+      .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, avatar, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
+      .order('createdAt', { ascending: false })
 
-    const users = await db.user.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        companyName: true,
-        phone: true,
-        state: true,
-        city: true,
-        verificationStatus: true,
-        isOnline: true,
-        avatar: true,
-        farmName: true,
-        farmSize: true,
-        farmLocation: true,
-        farmImages: true,
-        yearsExperience: true,
-        certifications: true,
-        totalTransactions: true,
-        latitude: true,
-        longitude: true,
-        avgRating: true,
-        totalReviews: true,
-        createdAt: true,
-        _count: {
-          select: {
-            products: true,
-            ordersAsBuyer: true,
-            ordersAsSeller: true,
-            shipmentsAsTransporter: true,
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' },
+    if (role) {
+      query = query.eq('role', role)
+    }
+    if (verificationStatus) {
+      query = query.eq('verificationStatus', verificationStatus)
+    }
+
+    const { data: users, error: usersError } = await query
+
+    if (usersError) {
+      console.error('Users fetch error:', usersError)
+      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
+    }
+
+    if (!users || users.length === 0) {
+      return NextResponse.json({ users: [] })
+    }
+
+    // Fetch all related FK values and compute counts in JS (replacing Prisma _count for list)
+    const userIds = users.map(u => u.id)
+
+    const [productRows, orderBuyerRows, orderSellerRows, shipmentRows] = await Promise.all([
+      supabase.from('Product').select('sellerId').in('sellerId', userIds),
+      supabase.from('Order').select('buyerId').in('buyerId', userIds),
+      supabase.from('Order').select('sellerId').in('sellerId', userIds),
+      supabase.from('Shipment').select('transporterId').in('transporterId', userIds),
+    ])
+
+    // Build count maps
+    const productCounts: Record<string, number> = {}
+    productRows.data?.forEach(r => {
+      productCounts[r.sellerId] = (productCounts[r.sellerId] || 0) + 1
     })
 
-    return NextResponse.json({ users })
+    const orderBuyerCounts: Record<string, number> = {}
+    orderBuyerRows.data?.forEach(r => {
+      orderBuyerCounts[r.buyerId] = (orderBuyerCounts[r.buyerId] || 0) + 1
+    })
+
+    const orderSellerCounts: Record<string, number> = {}
+    orderSellerRows.data?.forEach(r => {
+      orderSellerCounts[r.sellerId] = (orderSellerCounts[r.sellerId] || 0) + 1
+    })
+
+    const shipmentCounts: Record<string, number> = {}
+    shipmentRows.data?.forEach(r => {
+      shipmentCounts[r.transporterId] = (shipmentCounts[r.transporterId] || 0) + 1
+    })
+
+    // Attach _count to each user
+    const usersWithCount = users.map(user => ({
+      ...user,
+      _count: {
+        products: productCounts[user.id] || 0,
+        ordersAsBuyer: orderBuyerCounts[user.id] || 0,
+        ordersAsSeller: orderSellerCounts[user.id] || 0,
+        shipmentsAsTransporter: shipmentCounts[user.id] || 0,
+      },
+    }))
+
+    return NextResponse.json({ users: usersWithCount })
   } catch (error) {
     console.error('Users error:', error)
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
@@ -118,10 +136,17 @@ export async function PATCH(request: Request) {
     if (city !== undefined) updateData.city = city || null
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber || null
 
-    const user = await db.user.update({
-      where: { id: userId },
-      data: updateData,
-    })
+    const { data: user, error } = await supabase
+      .from('User')
+      .update(updateData)
+      .eq('id', userId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('User update error:', error)
+      return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
+    }
 
     return NextResponse.json({ user })
   } catch (error) {

@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 const PRODUCTS_DATA = [
@@ -65,26 +65,37 @@ const TRANSPORTER_NAMES = [
   'Express Freight India', 'Krishna Carriers', 'National Fleet Services'
 ]
 
+function generateId(prefix: string = 'seed') {
+  return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10)
+}
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export async function GET() {
   try {
-    // Clear existing data for fresh seed
-    await db.review.deleteMany()
-    await db.transportBid.deleteMany()
-    await db.message.deleteMany()
-    await db.shipment.deleteMany()
-    await db.buyerRequirement.deleteMany()
-    await db.order.deleteMany()
-    await db.product.deleteMany()
-    await db.platformStats.deleteMany()
-    await db.user.deleteMany()
+    // Clear existing data for fresh seed - reverse dependency order
+    const tablesToDelete = ['Review', 'TransportBid', 'Message', 'Shipment', 'BuyerRequirement', 'Order', 'Product', 'PlatformStats', 'User'] as const
+    
+    for (const table of tablesToDelete) {
+      const { error } = await supabase.from(table).delete().neq('id', '__never__')
+      if (error) {
+        console.error(`Error clearing ${table}:`, error)
+      }
+    }
 
     // Create producers with farm details
-    const producers = []
+    const producers: { id: string }[] = []
     for (let i = 0; i < PRODUCER_DATA.length; i++) {
       const loc = LOCATIONS[i % LOCATIONS.length]
       const pd = PRODUCER_DATA[i]
-      const producer = await db.user.create({
-        data: {
+      const producerId = generateId('producer')
+      
+      const { data: producer, error: producerError } = await supabase
+        .from('User')
+        .insert({
+          id: producerId,
           email: `producer${i + 1}@agrilink.in`,
           name: pd.name.split(' ').slice(0, 2).join(' '),
           companyName: pd.name,
@@ -105,12 +116,20 @@ export async function GET() {
           totalReviews: Math.floor(Math.random() * 80 + 20),
           latitude: loc.lat,
           longitude: loc.lng,
-        }
-      })
-      producers.push(producer)
+        })
+        .select('id')
+        .single()
+
+      if (producerError) {
+        console.error(`Error creating producer ${i}:`, producerError)
+      } else {
+        producers.push({ id: producer.id })
+      }
+      await delay(1)
     }
 
     // Create products with detailed crop information
+    const createdProducts: { id: string; pricePerUnit: number; sellerId: string }[] = []
     for (let i = 0; i < PRODUCTS_DATA.length; i++) {
       const p = PRODUCTS_DATA[i]
       const producer = producers[i % producers.length]
@@ -118,21 +137,26 @@ export async function GET() {
       const harvestDate = new Date()
       harvestDate.setDate(harvestDate.getDate() - Math.floor(Math.random() * 60 + 5))
 
-      await db.product.create({
-        data: {
+      const productId = generateId('product')
+      const pricePerUnit = p.pricePerUnit + Math.floor(Math.random() * 500 - 250)
+
+      const { data: product, error: productError } = await supabase
+        .from('Product')
+        .insert({
+          id: productId,
           sellerId: producer.id,
           category: p.category,
           name: p.name,
           description: `Premium quality ${p.name} from ${loc.state}. Freshly harvested and graded. ${p.cropVariety} variety, ${p.isOrganic ? 'organically grown' : 'conventionally grown'}. ${p.certifications} certified.`,
           quantity: Math.floor(Math.random() * 100 + 10) * 10,
           unit: p.unit,
-          pricePerUnit: p.pricePerUnit + Math.floor(Math.random() * 500 - 250),
+          pricePerUnit,
           minOrderQty: 5,
           location: `${loc.city}, ${loc.state}`,
           state: loc.state,
           qualityGrade: p.qualityGrade,
           imageUrl: p.imageUrl,
-          harvestDate,
+          harvestDate: harvestDate.toISOString(),
           freshness: p.freshness,
           cropVariety: p.cropVariety,
           isOrganic: p.isOrganic,
@@ -142,16 +166,28 @@ export async function GET() {
           storageCondition: p.storageCondition,
           certifications: p.certifications,
           isActive: true,
-        }
-      })
+        })
+        .select('id, pricePerUnit, sellerId')
+        .single()
+
+      if (productError) {
+        console.error(`Error creating product ${i}:`, productError)
+      } else {
+        createdProducts.push({ id: product.id, pricePerUnit: product.pricePerUnit, sellerId: product.sellerId })
+      }
+      await delay(1)
     }
 
     // Create buyers
-    const buyers = []
+    const buyers: { id: string }[] = []
     for (let i = 0; i < BUYER_NAMES.length; i++) {
       const loc = LOCATIONS[(i + 3) % LOCATIONS.length]
-      const buyer = await db.user.create({
-        data: {
+      const buyerId = generateId('buyer')
+
+      const { data: buyer, error: buyerError } = await supabase
+        .from('User')
+        .insert({
+          id: buyerId,
           email: `buyer${i + 1}@agrilink.in`,
           name: BUYER_NAMES[i].split(' ').slice(0, 2).join(' '),
           companyName: BUYER_NAMES[i],
@@ -164,9 +200,16 @@ export async function GET() {
           isOnline: Math.random() > 0.4,
           latitude: loc.lat,
           longitude: loc.lng,
-        }
-      })
-      buyers.push(buyer)
+        })
+        .select('id')
+        .single()
+
+      if (buyerError) {
+        console.error(`Error creating buyer ${i}:`, buyerError)
+      } else {
+        buyers.push({ id: buyer.id })
+      }
+      await delay(1)
     }
 
     // Create buyer requirements
@@ -185,9 +228,11 @@ export async function GET() {
       const loc = LOCATIONS[(i + 5) % LOCATIONS.length]
       const deadline = new Date()
       deadline.setDate(deadline.getDate() + Math.floor(Math.random() * 30 + 7))
-      
-      await db.buyerRequirement.create({
-        data: {
+
+      const { error: reqError } = await supabase
+        .from('BuyerRequirement')
+        .insert({
+          id: generateId('req'),
           buyerId: buyer.id,
           productType: r.productType,
           category: r.category,
@@ -195,20 +240,28 @@ export async function GET() {
           unit: r.unit,
           deliveryLocation: `${loc.city}, ${loc.state}`,
           deliveryState: loc.state,
-          deadline,
+          deadline: deadline.toISOString(),
           maxBudget: r.quantityNeeded * (3000 + Math.floor(Math.random() * 5000)),
           description: `Looking for ${r.productType} - ${r.quantityNeeded} ${r.unit}. Quality grade A preferred.`,
           status: 'open',
-        }
-      })
+        })
+
+      if (reqError) {
+        console.error(`Error creating requirement ${i}:`, reqError)
+      }
+      await delay(1)
     }
 
     // Create transporters
-    const transporters = []
+    const transporters: { id: string }[] = []
     for (let i = 0; i < TRANSPORTER_NAMES.length; i++) {
       const loc = LOCATIONS[(i + 6) % LOCATIONS.length]
-      const transporter = await db.user.create({
-        data: {
+      const transporterId = generateId('transporter')
+
+      const { data: transporter, error: transporterError } = await supabase
+        .from('User')
+        .insert({
+          id: transporterId,
           email: `transport${i + 1}@agrilink.in`,
           name: TRANSPORTER_NAMES[i].split(' ').slice(0, 2).join(' '),
           companyName: TRANSPORTER_NAMES[i],
@@ -221,26 +274,38 @@ export async function GET() {
           isOnline: Math.random() > 0.3,
           latitude: loc.lat,
           longitude: loc.lng,
-        }
-      })
-      transporters.push(transporter)
+        })
+        .select('id')
+        .single()
+
+      if (transporterError) {
+        console.error(`Error creating transporter ${i}:`, transporterError)
+      } else {
+        transporters.push({ id: transporter.id })
+      }
+      await delay(1)
     }
 
     // Create some orders and shipments with detailed logistics info
     for (let i = 0; i < 6; i++) {
       const buyer = buyers[i % buyers.length]
       const producer = producers[i % producers.length]
-      const allProducts = await db.product.findMany({ where: { sellerId: producer.id } })
-      if (allProducts.length === 0) continue
       
-      const product = allProducts[0]
+      // Find products by this producer
+      const producerProducts = createdProducts.filter(p => p.sellerId === producer.id)
+      if (producerProducts.length === 0) continue
+      
+      const product = producerProducts[0]
       const quantity = Math.floor(Math.random() * 50 + 10)
       const totalPrice = quantity * product.pricePerUnit
       
       const statuses = ['negotiating', 'confirmed', 'shipped', 'delivered', 'confirmed', 'shipped']
       
-      const order = await db.order.create({
-        data: {
+      const orderId = generateId('order')
+      const { data: order, error: orderError } = await supabase
+        .from('Order')
+        .insert({
+          id: orderId,
           buyerId: buyer.id,
           sellerId: producer.id,
           productId: product.id,
@@ -248,8 +313,15 @@ export async function GET() {
           unitPrice: product.pricePerUnit,
           totalPrice,
           status: statuses[i],
-        }
-      })
+        })
+        .select('id')
+        .single()
+
+      if (orderError) {
+        console.error(`Error creating order ${i}:`, orderError)
+        continue
+      }
+      await delay(1)
 
       // Create shipment for confirmed/shipped/delivered orders
       if (['confirmed', 'shipped', 'delivered'].includes(statuses[i])) {
@@ -260,9 +332,12 @@ export async function GET() {
         
         const expectedPickup = new Date()
         expectedPickup.setDate(expectedPickup.getDate() + Math.floor(Math.random() * 3 + 1))
-        
-        const shipment = await db.shipment.create({
-          data: {
+
+        const shipmentId = generateId('shipment')
+        const { data: shipment, error: shipmentError } = await supabase
+          .from('Shipment')
+          .insert({
+            id: shipmentId,
             orderId: order.id,
             transporterId: transporters[i % transporters.length].id,
             origin: `${originLoc.city}, ${originLoc.state}`,
@@ -273,39 +348,54 @@ export async function GET() {
             vehicleNumber: `MH${Math.floor(Math.random() * 99) + 1}AB${Math.floor(Math.random() * 9999)}`,
             driverName: `Driver ${i + 1}`,
             driverPhone: `+91${6000000000 + i}`,
-            exactPickupAddress: `${producers[i % producers.length].farmName || 'Farm'}, ${originLoc.city} Industrial Area, ${originLoc.state} - ${400000 + i * 10000}`,
+            exactPickupAddress: `${producers[i % producers.length] ? (PRODUCER_DATA[i % PRODUCER_DATA.length]?.farmName || 'Farm') : 'Farm'}, ${originLoc.city} Industrial Area, ${originLoc.state} - ${400000 + i * 10000}`,
             exactDropAddress: `${BUYER_NAMES[i % BUYER_NAMES.length]} Warehouse, ${destLoc.city} Logistics Park, ${destLoc.state} - ${500000 + i * 10000}`,
             pickupLatitude: originLoc.lat,
             pickupLongitude: originLoc.lng,
             dropLatitude: destLoc.lat,
             dropLongitude: destLoc.lng,
-            expectedPickupDate: expectedPickup,
+            expectedPickupDate: expectedPickup.toISOString(),
             currentLatitude: shipmentStatus === 'in_transit' ? ((parseFloat(originLoc.lat) + parseFloat(destLoc.lat)) / 2).toString() : null,
             currentLongitude: shipmentStatus === 'in_transit' ? ((parseFloat(originLoc.lng) + parseFloat(destLoc.lng)) / 2).toString() : null,
-            lastTrackingUpdate: shipmentStatus === 'in_transit' ? new Date() : null,
-          }
-        })
-
-        // Create transport bids
-        for (let j = 0; j < 3; j++) {
-          await db.transportBid.create({
-            data: {
-              shipmentId: shipment.id,
-              transporterId: transporters[(i + j) % transporters.length].id,
-              bidAmount: Math.floor(Math.random() * 30000 + 15000),
-              estimatedDays: Math.floor(Math.random() * 5 + 1),
-              vehicleType: ['truck', 'tempo', 'container'][j],
-              comments: `Can deliver within ${Math.floor(Math.random() * 5 + 1)} days. Well-maintained fleet with GPS tracking.`,
-              status: j === 0 ? 'accepted' : (j === 1 ? 'pending' : 'rejected'),
-            }
+            lastTrackingUpdate: shipmentStatus === 'in_transit' ? new Date().toISOString() : null,
           })
+          .select('id')
+          .single()
+
+        if (shipmentError) {
+          console.error(`Error creating shipment ${i}:`, shipmentError)
+        } else {
+          await delay(1)
+
+          // Create transport bids
+          for (let j = 0; j < 3; j++) {
+            const { error: bidError } = await supabase
+              .from('TransportBid')
+              .insert({
+                id: generateId('bid'),
+                shipmentId: shipment.id,
+                transporterId: transporters[(i + j) % transporters.length].id,
+                bidAmount: Math.floor(Math.random() * 30000 + 15000),
+                estimatedDays: Math.floor(Math.random() * 5 + 1),
+                vehicleType: ['truck', 'tempo', 'container'][j],
+                comments: `Can deliver within ${Math.floor(Math.random() * 5 + 1)} days. Well-maintained fleet with GPS tracking.`,
+                status: j === 0 ? 'accepted' : (j === 1 ? 'pending' : 'rejected'),
+              })
+
+            if (bidError) {
+              console.error(`Error creating transport bid ${i}-${j}:`, bidError)
+            }
+            await delay(1)
+          }
         }
       }
     }
 
     // Create admin
-    await db.user.create({
-      data: {
+    const { error: adminError } = await supabase
+      .from('User')
+      .insert({
+        id: generateId('admin'),
         email: 'admin@agrilink.in',
         name: 'Admin',
         companyName: 'AgriLink Platform',
@@ -314,12 +404,19 @@ export async function GET() {
         state: 'Maharashtra',
         city: 'Mumbai',
         verificationStatus: 'verified',
-      }
-    })
+      })
+
+    if (adminError) {
+      console.error('Error creating admin:', adminError)
+    }
+    await delay(1)
 
     // Create demo user for easy login
-    await db.user.create({
-      data: {
+    const demoUserId = generateId('demo')
+    const { data: demoUser, error: demoError } = await supabase
+      .from('User')
+      .insert({
+        id: demoUserId,
         email: 'demo@agrilink.in',
         name: 'Demo User',
         companyName: 'Demo Agri Corp',
@@ -328,12 +425,20 @@ export async function GET() {
         state: 'Maharashtra',
         city: 'Mumbai',
         verificationStatus: 'verified',
-      }
-    })
+      })
+      .select('id')
+      .single()
+
+    if (demoError) {
+      console.error('Error creating demo user:', demoError)
+    }
+    await delay(1)
 
     // Create platform stats
-    await db.platformStats.create({
-      data: {
+    const { error: statsError } = await supabase
+      .from('PlatformStats')
+      .insert({
+        id: generateId('stats'),
         totalUsers: 28,
         totalProducts: 20,
         totalOrders: 6,
@@ -341,16 +446,21 @@ export async function GET() {
         totalRevenue: 2450000,
         activeListings: 18,
         verifiedUsers: 17,
-      }
-    })
+      })
+
+    if (statsError) {
+      console.error('Error creating platform stats:', statsError)
+    }
+    await delay(1)
 
     // Create some messages
-    const demoUser = await db.user.findFirst({ where: { email: 'demo@agrilink.in' } })
     if (demoUser) {
       for (let i = 0; i < 3; i++) {
         const producer = producers[i]
-        await db.message.create({
-          data: {
+        const { error: msgError } = await supabase
+          .from('Message')
+          .insert({
+            id: generateId('msg'),
             senderId: producer.id,
             receiverId: demoUser.id,
             content: [
@@ -359,8 +469,12 @@ export async function GET() {
               'I can offer a discount for bulk orders above 100 quintals. Interested?'
             ][i],
             isRead: i > 0,
-          }
-        })
+          })
+
+        if (msgError) {
+          console.error(`Error creating message ${i}:`, msgError)
+        }
+        await delay(1)
       }
     }
 
@@ -368,8 +482,10 @@ export async function GET() {
     for (let i = 0; i < 8; i++) {
       const producer = producers[i]
       const buyer = buyers[i % buyers.length]
-      await db.review.create({
-        data: {
+      const { error: reviewError } = await supabase
+        .from('Review')
+        .insert({
+          id: generateId('review'),
           reviewerId: buyer.id,
           targetId: producer.id,
           rating: [4, 5, 5, 4, 5, 4, 5, 4][i],
@@ -383,8 +499,12 @@ export async function GET() {
             'Premium mangoes, exactly as described. Trustworthy producer.',
             'Good wheat quality, fair pricing. Professional team.'
           ][i],
-        }
-      })
+        })
+
+      if (reviewError) {
+        console.error(`Error creating review ${i}:`, reviewError)
+      }
+      await delay(1)
     }
 
     return NextResponse.json({ 

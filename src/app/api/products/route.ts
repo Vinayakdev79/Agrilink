@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -13,64 +13,54 @@ export async function GET(request: Request) {
 
     // Single product lookup by ID
     if (id) {
-      const product = await db.product.findUnique({
-        where: { id },
-        include: {
-          seller: {
-            select: {
-              id: true,
-              name: true,
-              companyName: true,
-              verificationStatus: true,
-              state: true,
-              city: true,
-            }
-          }
-        }
-      })
+      const { data: product, error } = await supabase
+        .from('Product')
+        .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Product fetch error:', error)
+        return NextResponse.json({ error: 'Failed to fetch product' }, { status: 500 })
+      }
       if (!product) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
       }
       return NextResponse.json({ product })
     }
 
-    const where: Record<string, unknown> = { isActive: true }
+    // List products with filters
+    let query = supabase
+      .from('Product')
+      .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
+      .eq('isActive', true)
+      .order('createdAt', { ascending: false })
+      .limit(50)
 
     if (category && category !== 'all') {
-      where.category = category
+      query = query.eq('category', category)
     }
     if (search) {
-      where.name = { contains: search }
+      query = query.ilike('name', '%' + search + '%')
     }
     if (state) {
-      where.state = state
+      query = query.eq('state', state)
     }
     if (grade) {
-      where.qualityGrade = grade
+      query = query.eq('qualityGrade', grade)
     }
     if (sellerId) {
-      where.sellerId = sellerId
+      query = query.eq('sellerId', sellerId)
     }
 
-    const products = await db.product.findMany({
-      where,
-      include: {
-        seller: {
-          select: {
-            id: true,
-            name: true,
-            companyName: true,
-            verificationStatus: true,
-            state: true,
-            city: true,
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    })
+    const { data: products, error } = await query
 
-    return NextResponse.json({ products })
+    if (error) {
+      console.error('Products fetch error:', error)
+      return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+    }
+
+    return NextResponse.json({ products: products ?? [] })
   } catch (error) {
     console.error('Products error:', error)
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
@@ -86,8 +76,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const product = await db.product.create({
-      data: {
+    const { data: product, error } = await supabase
+      .from('Product')
+      .insert({
         sellerId,
         category,
         name,
@@ -100,8 +91,14 @@ export async function POST(request: Request) {
         state,
         qualityGrade,
         isActive: true,
-      }
-    })
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Product create error:', error)
+      return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+    }
 
     return NextResponse.json({ product })
   } catch (error) {

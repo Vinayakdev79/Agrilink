@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -7,26 +7,23 @@ export async function GET(request: Request) {
     const targetId = searchParams.get('targetId')
     const reviewerId = searchParams.get('reviewerId')
 
-    const where: Record<string, unknown> = {}
-    if (targetId) where.targetId = targetId
-    if (reviewerId) where.reviewerId = reviewerId
+    let query = supabase
+      .from('Review')
+      .select('*, reviewer:User!reviewerId(id, name, companyName)')
+      .order('createdAt', { ascending: false })
+      .limit(50)
 
-    const reviews = await db.review.findMany({
-      where,
-      include: {
-        reviewer: {
-          select: {
-            id: true,
-            name: true,
-            companyName: true,
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    })
+    if (targetId) query = query.eq('targetId', targetId)
+    if (reviewerId) query = query.eq('reviewerId', reviewerId)
 
-    return NextResponse.json({ reviews })
+    const { data: reviews, error: reviewsError } = await query
+
+    if (reviewsError) {
+      console.error('Reviews fetch error:', reviewsError)
+      return NextResponse.json({ error: 'Failed to fetch reviews' }, { status: 500 })
+    }
+
+    return NextResponse.json({ reviews: reviews || [] })
   } catch (error) {
     console.error('Reviews error:', error)
     return NextResponse.json({ error: 'Failed to fetch reviews' }, { status: 500 })
@@ -42,28 +39,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const review = await db.review.create({
-      data: {
+    // Create the review
+    const { data: review, error: reviewError } = await supabase
+      .from('Review')
+      .insert({
         reviewerId,
         targetId,
         rating: parseInt(rating),
         comment,
-      }
-    })
+      })
+      .select()
+      .single()
 
-    // Update target user's avg rating
-    const allReviews = await db.review.findMany({
-      where: { targetId },
-      select: { rating: true },
-    })
-    const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length
-    await db.user.update({
-      where: { id: targetId },
-      data: {
-        avgRating: Math.round(avgRating * 10) / 10,
-        totalReviews: allReviews.length,
-      },
-    })
+    if (reviewError) {
+      console.error('Review create error:', reviewError)
+      return NextResponse.json({ error: 'Failed to create review' }, { status: 500 })
+    }
+
+    // Fetch all reviews for the target to compute average
+    const { data: allReviews, error: allReviewsError } = await supabase
+      .from('Review')
+      .select('rating')
+      .eq('targetId', targetId)
+
+    if (!allReviewsError && allReviews && allReviews.length > 0) {
+      const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length
+
+      // Update target user's avg rating
+      await supabase
+        .from('User')
+        .update({
+          avgRating: Math.round(avgRating * 10) / 10,
+          totalReviews: allReviews.length,
+        })
+        .eq('id', targetId)
+    }
 
     return NextResponse.json({ review })
   } catch (error) {

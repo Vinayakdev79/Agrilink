@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -11,39 +11,44 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
     }
 
-    let orders = []
+    let orders: unknown[] = []
 
     if (role === 'buyer') {
-      orders = await db.order.findMany({
-        where: { buyerId: userId },
-        include: {
-          seller: { select: { id: true, name: true, companyName: true, phone: true } },
-          product: { select: { name: true, category: true, unit: true } },
-          shipment: { select: { status: true, origin: true, destination: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
+      const { data, error } = await supabase
+        .from('Order')
+        .select('*, seller:User!sellerId(id, name, companyName, phone), product:Product!productId(name, category, unit), shipment:Shipment!orderId(status, origin, destination)')
+        .eq('buyerId', userId)
+        .order('createdAt', { ascending: false })
+
+      if (error) {
+        console.error('Orders fetch error:', error)
+        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
+      }
+      orders = data ?? []
     } else if (role === 'producer' || role === 'seller') {
-      orders = await db.order.findMany({
-        where: { sellerId: userId },
-        include: {
-          buyer: { select: { id: true, name: true, companyName: true, phone: true } },
-          product: { select: { name: true, category: true, unit: true } },
-          shipment: { select: { status: true, origin: true, destination: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
+      const { data, error } = await supabase
+        .from('Order')
+        .select('*, buyer:User!buyerId(id, name, companyName, phone), product:Product!productId(name, category, unit), shipment:Shipment!orderId(status, origin, destination)')
+        .eq('sellerId', userId)
+        .order('createdAt', { ascending: false })
+
+      if (error) {
+        console.error('Orders fetch error:', error)
+        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
+      }
+      orders = data ?? []
     } else if (role === 'admin') {
-      orders = await db.order.findMany({
-        include: {
-          buyer: { select: { id: true, name: true, companyName: true } },
-          seller: { select: { id: true, name: true, companyName: true } },
-          product: { select: { name: true, category: true, unit: true } },
-          shipment: { select: { status: true, origin: true, destination: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      })
+      const { data, error } = await supabase
+        .from('Order')
+        .select('*, buyer:User!buyerId(id, name, companyName), seller:User!sellerId(id, name, companyName), product:Product!productId(name, category, unit), shipment:Shipment!orderId(status, origin, destination)')
+        .order('createdAt', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error('Orders fetch error:', error)
+        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
+      }
+      orders = data ?? []
     }
 
     return NextResponse.json({ orders })
@@ -60,8 +65,9 @@ export async function POST(request: Request) {
 
     const totalPrice = parseFloat(quantity) * parseFloat(unitPrice)
 
-    const order = await db.order.create({
-      data: {
+    const { data: order, error } = await supabase
+      .from('Order')
+      .insert({
         buyerId,
         sellerId,
         productId,
@@ -69,8 +75,14 @@ export async function POST(request: Request) {
         unitPrice: parseFloat(unitPrice),
         totalPrice,
         status: 'negotiating',
-      }
-    })
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Order create error:', error)
+      return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+    }
 
     return NextResponse.json({ order })
   } catch (error) {
@@ -88,10 +100,17 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const order = await db.order.update({
-      where: { id: orderId },
-      data: { status },
-    })
+    const { data: order, error } = await supabase
+      .from('Order')
+      .update({ status })
+      .eq('id', orderId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Order update error:', error)
+      return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+    }
 
     return NextResponse.json({ order })
   } catch (error) {

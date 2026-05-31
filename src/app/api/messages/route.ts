@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -11,39 +11,38 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
     }
 
-    const where: Record<string, unknown> = {
-      OR: [
-        { senderId: userId },
-        { receiverId: userId }
-      ]
-    }
+    let query = supabase
+      .from('Message')
+      .select('*, sender:User!senderId(id, name, companyName), receiver:User!receiverId(id, name, companyName)')
 
     if (otherUserId) {
-      where.OR = [
-        { senderId: userId, receiverId: otherUserId },
-        { senderId: otherUserId, receiverId: userId }
-      ]
+      // Filter for conversation between two users
+      query = query.or(`and(senderId.eq.${userId},receiverId.eq.${otherUserId}),and(senderId.eq.${otherUserId},receiverId.eq.${userId})`)
+    } else {
+      // Filter for all messages involving the user
+      query = query.or(`senderId.eq.${userId},receiverId.eq.${userId}`)
     }
 
-    const messages = await db.message.findMany({
-      where,
-      include: {
-        sender: { select: { id: true, name: true, companyName: true } },
-        receiver: { select: { id: true, name: true, companyName: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-      take: 100,
-    })
+    const { data: messages, error: messagesError } = await query
+      .order('createdAt', { ascending: true })
+      .limit(100)
+
+    if (messagesError) {
+      console.error('Messages fetch error:', messagesError)
+      return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
+    }
 
     // Mark unread messages as read
     if (otherUserId) {
-      await db.message.updateMany({
-        where: { senderId: otherUserId, receiverId: userId, isRead: false },
-        data: { isRead: true },
-      })
+      await supabase
+        .from('Message')
+        .update({ isRead: true })
+        .eq('senderId', otherUserId)
+        .eq('receiverId', userId)
+        .is('isRead', false)
     }
 
-    return NextResponse.json({ messages })
+    return NextResponse.json({ messages: messages || [] })
   } catch (error) {
     console.error('Messages error:', error)
     return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
@@ -59,13 +58,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const message = await db.message.create({
-      data: { senderId, receiverId, content },
-      include: {
-        sender: { select: { id: true, name: true, companyName: true } },
-        receiver: { select: { id: true, name: true, companyName: true } },
-      }
-    })
+    const { data: message, error: messageError } = await supabase
+      .from('Message')
+      .insert({ senderId, receiverId, content })
+      .select('*, sender:User!senderId(id, name, companyName), receiver:User!receiverId(id, name, companyName)')
+      .single()
+
+    if (messageError) {
+      console.error('Message create error:', messageError)
+      return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
+    }
 
     return NextResponse.json({ message })
   } catch (error) {
