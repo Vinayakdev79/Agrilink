@@ -282,3 +282,26 @@ body {
   background: oklch(0.1 0.01 260);
   color: oklch(0.95 0 0);
 }
+
+/* Navbar slide-down animation (CSS-only, no Framer Motion dependency) */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.5s ease-out;
+}
+
+/* Fallback: Ensure content is visible even if Framer Motion fails to hydrate.
+   Framer Motion sets inline opacity:0 on initial render for animations.
+   If JS fails, content stays invisible. This CSS animation overrides that
+   after a 2-second delay, making the page usable even without JS hydration. */
+@keyframes framer-fallback {
+  to { opacity: 1; transform: none; }
+}
+
+/* Apply fallback to elements that might have opacity:0 from Framer Motion */
+[style*="opacity:0"] {
+  animation: framer-fallback 0.01s ease 2s forwards !important;
+}

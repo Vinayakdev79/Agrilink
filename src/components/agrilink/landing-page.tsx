@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { motion, useInView, useAnimation } from 'framer-motion'
+import { motion, useInView } from 'framer-motion'
 import { useAppStore } from '@/lib/store'
 import {
   Leaf,
@@ -150,61 +150,38 @@ const logisticsCities = [
 ]
 
 const logisticsRoutes = [
-  [0, 1], // Delhi - Jaipur
-  [0, 2], // Delhi - Lucknow
-  [1, 3], // Jaipur - Mumbai
-  [3, 4], // Mumbai - Hyderabad
-  [4, 5], // Hyderabad - Bengaluru
-  [5, 6], // Bengaluru - Chennai
-  [2, 7], // Lucknow - Kolkata
-  [4, 6], // Hyderabad - Chennai
-  [0, 3], // Delhi - Mumbai
-  [2, 4], // Lucknow - Hyderabad
-  [0, 8], // Delhi - Chandigarh
-  [9, 3], // Ahmedabad - Mumbai
-  [10, 11], // Indore - Nagpur
-  [11, 4], // Nagpur - Hyderabad
-  [12, 5], // Pune - Bengaluru
-  [13, 6], // Coimbatore - Chennai
-  [14, 7], // Visakhapatnam - Kolkata
-  [15, 7], // Guwahati - Kolkata
+  [0, 1], [0, 2], [1, 3], [3, 4], [4, 5], [5, 6], [2, 7], [4, 6],
+  [0, 3], [2, 4], [0, 8], [9, 3], [10, 11], [11, 4], [12, 5], [13, 6], [14, 7], [15, 7],
 ]
 
-// ─── Animation Variants ──────────────────────────────────────────────────────
+// ─── Animation Variants (visible-by-default) ─────────────────────────────────
+// All "hidden" states are the same as "visible" to ensure content is always visible.
+// The stagger effect still works for a nice cascading entrance.
 const staggerContainer = {
-  hidden: { opacity: 0 },
+  hidden: {},
   visible: {
-    opacity: 1,
     transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
+      staggerChildren: 0.08,
+      delayChildren: 0.1,
     },
   },
 }
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: {},
   visible: {
-    opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
-  },
-}
-
-const fadeIn = {
-  hidden: { opacity: 0 },
-  visible: {
     opacity: 1,
-    transition: { duration: 0.5 },
+    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
   },
 }
 
 const scaleIn = {
-  hidden: { opacity: 0, scale: 0.9 },
+  hidden: {},
   visible: {
-    opacity: 1,
     scale: 1,
-    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+    opacity: 1,
+    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
   },
 }
 
@@ -235,12 +212,7 @@ function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <motion.nav
-      initial={{ y: -80, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="sticky top-0 z-50 w-full"
-    >
+    <nav className="sticky top-0 z-50 w-full animate-slide-down">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="glass-nav mt-3 px-4 sm:px-6 py-3 flex items-center justify-between">
           {/* Logo */}
@@ -340,7 +312,7 @@ function Navbar() {
           </motion.div>
         )}
       </div>
-    </motion.nav>
+    </nav>
   )
 }
 
@@ -666,10 +638,9 @@ function LogisticsSection() {
         />
 
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 1, y: 0 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-100px' }}
-          transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
           className="mt-12"
         >
           <div className="glass-card p-6 lg:p-8">
@@ -677,7 +648,6 @@ function LogisticsSection() {
               {/* Map Visualization */}
               <div className="lg:col-span-3 relative">
                 <svg viewBox="0 0 100 100" className="w-full h-auto max-h-[400px]" xmlns="http://www.w3.org/2000/svg">
-                  {/* Definitions */}
                   <defs>
                     <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                       <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
@@ -699,7 +669,6 @@ function LogisticsSection() {
                     </filter>
                   </defs>
 
-                  {/* India outline (detailed) */}
                   <path
                     d="M 32 10 L 35 8 L 40 7 L 45 6 L 50 5 L 52 4 L 54 3 L 55 5 L 54 7 L 56 8 L 58 6 L 60 8 L 62 10 L 64 12 L 66 14 L 68 15 L 70 17 L 72 20 L 73 22 L 75 24 L 76 27 L 77 30 L 78 33 L 78 36 L 77 38 L 76 40 L 75 43 L 74 45 L 72 48 L 70 50 L 68 52 L 66 54 L 64 56 L 62 58 L 60 60 L 58 62 L 56 64 L 54 66 L 52 68 L 50 70 L 48 72 L 47 74 L 46 76 L 44 78 L 42 80 L 40 82 L 39 84 L 38 86 L 37 84 L 36 82 L 35 80 L 33 76 L 31 72 L 29 68 L 27 64 L 25 60 L 23 56 L 21 52 L 19 48 L 18 44 L 16 40 L 15 36 L 16 32 L 17 28 L 19 24 L 22 20 L 25 16 L 28 13 L 30 11 Z"
                     fill="rgba(16,185,129,0.05)"
@@ -708,7 +677,6 @@ function LogisticsSection() {
                     filter="url(#indiaGlow)"
                   />
 
-                  {/* Sri Lanka outline */}
                   <path
                     d="M 50 82 L 52 80 L 53 82 L 53 85 L 52 87 L 50 88 L 49 86 L 49 84 Z"
                     fill="rgba(16,185,129,0.03)"
@@ -716,7 +684,6 @@ function LogisticsSection() {
                     strokeWidth="0.3"
                   />
 
-                  {/* Animated routes */}
                   {logisticsRoutes.map(([from, to], i) => {
                     const cityFrom = logisticsCities[from]
                     const cityTo = logisticsCities[to]
@@ -736,7 +703,6 @@ function LogisticsSection() {
                     )
                   })}
 
-                  {/* City dots */}
                   {logisticsCities.map((city, i) => (
                     <g key={`city-${i}`}>
                       <circle
@@ -900,7 +866,6 @@ function Footer() {
     <footer className="relative border-t border-white/5 mt-auto">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-          {/* Branding */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5 mb-4">
               <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
@@ -927,7 +892,6 @@ function Footer() {
             </div>
           </div>
 
-          {/* Quick Links */}
           <div>
             <h4 className="text-sm font-semibold text-foreground mb-4">Platform</h4>
             <ul className="space-y-3">
@@ -948,7 +912,6 @@ function Footer() {
             </ul>
           </div>
 
-          {/* Legal */}
           <div>
             <h4 className="text-sm font-semibold text-foreground mb-4">Legal</h4>
             <ul className="space-y-3">
