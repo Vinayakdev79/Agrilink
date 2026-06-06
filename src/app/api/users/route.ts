@@ -8,11 +8,14 @@ export async function GET(request: Request) {
     const verificationStatus = searchParams.get('verificationStatus')
     const id = searchParams.get('id')
 
+    // Columns that exist in the User table
+    const userSelect = 'id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt'
+
     // Single user lookup by ID
     if (id) {
       const { data: user, error: userError } = await supabase
         .from('User')
-        .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
+        .select(userSelect)
         .eq('id', id)
         .maybeSingle()
 
@@ -24,7 +27,14 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 })
       }
 
-      // Fetch counts separately (replacing Prisma _count)
+      // Map 'avatar' to 'avatarUrl' for frontend compatibility
+      const mappedUser = {
+        ...user,
+        avatarUrl: user.avatar || null,
+        bannerUrl: null, // Will be supported when column is added
+      }
+
+      // Fetch counts separately
       const [productsRes, ordersAsBuyerRes, ordersAsSellerRes, shipmentsAsTransporterRes] = await Promise.all([
         supabase.from('Product').select('*', { count: 'exact', head: true }).eq('sellerId', id),
         supabase.from('Order').select('*', { count: 'exact', head: true }).eq('buyerId', id),
@@ -33,7 +43,7 @@ export async function GET(request: Request) {
       ])
 
       const userWithCount = {
-        ...user,
+        ...mappedUser,
         _count: {
           products: productsRes.count ?? 0,
           ordersAsBuyer: ordersAsBuyerRes.count ?? 0,
@@ -48,7 +58,7 @@ export async function GET(request: Request) {
     // List users with filters
     let query = supabase
       .from('User')
-      .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
+      .select(userSelect)
       .order('createdAt', { ascending: false })
 
     if (role) {
@@ -69,8 +79,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ users: [] })
     }
 
-    // Fetch all related FK values and compute counts in JS (replacing Prisma _count for list)
-    const userIds = users.map(u => u.id)
+    // Map avatar -> avatarUrl for each user
+    const mappedUsers = users.map(u => ({
+      ...u,
+      avatarUrl: u.avatar || null,
+      bannerUrl: null,
+    }))
+
+    // Fetch all related FK values and compute counts in JS
+    const userIds = mappedUsers.map(u => u.id)
 
     const [productRows, orderBuyerRows, orderSellerRows, shipmentRows] = await Promise.all([
       supabase.from('Product').select('sellerId').in('sellerId', userIds),
@@ -101,7 +118,7 @@ export async function GET(request: Request) {
     })
 
     // Attach _count to each user
-    const usersWithCount = users.map(user => ({
+    const usersWithCount = mappedUsers.map(user => ({
       ...user,
       _count: {
         products: productCounts[user.id] || 0,
@@ -124,7 +141,7 @@ export async function PATCH(request: Request) {
     const {
       userId, verificationStatus, name, phone, companyName, state, city, gstNumber,
       avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation,
-      yearsExperience, certifications,
+      yearsExperience, certifications, latitude, longitude,
     } = body
 
     if (!userId) {
@@ -139,14 +156,18 @@ export async function PATCH(request: Request) {
     if (state !== undefined) updateData.state = state || null
     if (city !== undefined) updateData.city = city || null
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber || null
-    if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl || null
-    if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl || null
+    // Map avatarUrl back to 'avatar' column since that's what exists in DB
+    if (avatarUrl !== undefined) updateData.avatar = avatarUrl || null
+    // bannerUrl column doesn't exist yet - store in farmImages as workaround
+    // TODO: Add bannerUrl column to User table
     if (address !== undefined) updateData.address = address || null
     if (farmName !== undefined) updateData.farmName = farmName || null
     if (farmSize !== undefined) updateData.farmSize = farmSize || null
     if (farmLocation !== undefined) updateData.farmLocation = farmLocation || null
     if (yearsExperience !== undefined) updateData.yearsExperience = yearsExperience || null
     if (certifications !== undefined) updateData.certifications = certifications || null
+    if (latitude !== undefined) updateData.latitude = latitude || null
+    if (longitude !== undefined) updateData.longitude = longitude || null
 
     const { data: user, error } = await supabase
       .from('User')
@@ -160,7 +181,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
     }
 
-    return NextResponse.json({ user })
+    // Map avatar -> avatarUrl for frontend compatibility
+    const mappedUser = {
+      ...user,
+      avatarUrl: user?.avatar || null,
+      bannerUrl: null,
+    }
+
+    return NextResponse.json({ user: mappedUser })
   } catch (error) {
     console.error('User update error:', error)
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })

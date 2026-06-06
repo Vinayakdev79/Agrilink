@@ -71,8 +71,6 @@ export async function POST(request: Request) {
         dropLatitude: dropLatitude || null,
         dropLongitude: dropLongitude || null,
         expectedPickupDate: expectedPickupDate ? new Date(expectedPickupDate).toISOString() : null,
-        budgetMin: budgetMin ? parseFloat(budgetMin) : null,
-        budgetMax: budgetMax ? parseFloat(budgetMax) : null,
       })
       .select()
       .single()

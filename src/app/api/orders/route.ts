@@ -11,12 +11,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
     }
 
+    // Product fields to include in order queries
+    const productSelect = 'id, name, category, unit, pricePerUnit, imageUrl, images, qualityGrade, location, state, isOrganic, cropVariety'
+
     let orders: unknown[] = []
 
     if (role === 'buyer') {
       const { data, error } = await supabase
         .from('Order')
-        .select('*, seller:User!sellerId(id, name, companyName, phone), product:Product!productId(name, category, unit), shipment:Shipment!orderId(status, origin, destination)')
+        .select(`*, seller:User!sellerId(id, name, companyName, phone, city, state, avatar), product:Product!productId(${productSelect})`)
         .eq('buyerId', userId)
         .order('createdAt', { ascending: false })
 
@@ -28,7 +31,7 @@ export async function GET(request: Request) {
     } else if (role === 'producer' || role === 'seller') {
       const { data, error } = await supabase
         .from('Order')
-        .select('*, buyer:User!buyerId(id, name, companyName, phone), product:Product!productId(name, category, unit), shipment:Shipment!orderId(status, origin, destination)')
+        .select(`*, buyer:User!buyerId(id, name, companyName, phone, city, state, avatar, address), product:Product!productId(${productSelect})`)
         .eq('sellerId', userId)
         .order('createdAt', { ascending: false })
 
@@ -40,7 +43,7 @@ export async function GET(request: Request) {
     } else if (role === 'admin') {
       const { data, error } = await supabase
         .from('Order')
-        .select('*, buyer:User!buyerId(id, name, companyName), seller:User!sellerId(id, name, companyName), product:Product!productId(name, category, unit), shipment:Shipment!orderId(status, origin, destination)')
+        .select(`*, buyer:User!buyerId(id, name, companyName), seller:User!sellerId(id, name, companyName), product:Product!productId(${productSelect})`)
         .order('createdAt', { ascending: false })
         .limit(50)
 
@@ -51,17 +54,28 @@ export async function GET(request: Request) {
       orders = data ?? []
     }
 
-    return NextResponse.json({ orders })
+    return NextResponse.json({ orders: (orders as any[]).map(mapOrderAvatar) })
   } catch (error) {
     console.error('Orders error:', error)
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
   }
 }
 
+// Helper to map avatar -> avatarUrl for frontend compatibility
+function mapOrderAvatar(order: any) {
+  if (order.seller?.avatar) {
+    order.seller.avatarUrl = order.seller.avatar
+  }
+  if (order.buyer?.avatar) {
+    order.buyer.avatarUrl = order.buyer.avatar
+  }
+  return order
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { buyerId, sellerId, productId, quantity, unitPrice } = body
+    const { buyerId, sellerId, productId, quantity, unitPrice, deliveryAddress, deliveryCity, deliveryState, deliveryPincode } = body
 
     const totalPrice = parseFloat(quantity) * parseFloat(unitPrice)
 

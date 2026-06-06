@@ -1,18 +1,24 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, MapPin, Star, MessageSquare, Share2, CheckCircle, Shield,
   Sprout, TrendingUp, Package, Clock, Award, Phone, Mail, Building2,
-  ChevronRight, Image as ImageIcon, BadgeCheck, Calendar, IndianRupee
+  ChevronRight, Image as ImageIcon, BadgeCheck, Calendar, IndianRupee,
+  Upload, Pencil, Camera, Loader2, X, Plus
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { MapPicker } from '@/components/agrilink/map-picker'
 import { toast } from 'sonner'
 
 interface ProducerData {
@@ -26,6 +32,8 @@ interface ProducerData {
   city?: string
   verificationStatus: string
   avatar?: string
+  avatarUrl?: string
+  bannerUrl?: string
   farmName?: string
   farmSize?: string
   farmLocation?: string
@@ -176,12 +184,28 @@ function LoadingSkeleton() {
 }
 
 export function ProducerProfilePage() {
-  const { selectedProducerId, setSelectedProducerId, setSelectedProductId, setView, setActiveChatUser, setChatOpen } = useAppStore()
+  const { selectedProducerId, setSelectedProducerId, setSelectedProductId, setView, setActiveChatUser, setChatOpen, user } = useAppStore()
   const [producer, setProducer] = useState<ProducerData | null>(null)
   const [products, setProducts] = useState<ProductData[]>([])
   const [reviews, setReviews] = useState<ReviewData[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+
+  // Edit state
+  const isOwner = user?.id === selectedProducerId
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({
+    name: '', companyName: '', phone: '', farmName: '', farmSize: '',
+    farmLocation: '', yearsExperience: '', city: '', state: '',
+    certifications: '',
+  })
+  const [editLat, setEditLat] = useState('')
+  const [editLng, setEditLng] = useState('')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const bannerInputRef = useRef<HTMLInputElement>(null)
 
   const fetchProducerData = useCallback(async () => {
     if (!selectedProducerId) return
@@ -237,6 +261,157 @@ export function ProducerProfilePage() {
     setView('product')
   }
 
+  const openEdit = () => {
+    if (!producer) return
+    setEditForm({
+      name: producer.name || '',
+      companyName: producer.companyName || '',
+      phone: producer.phone || '',
+      farmName: producer.farmName || '',
+      farmSize: producer.farmSize || '',
+      farmLocation: producer.farmLocation || '',
+      yearsExperience: producer.yearsExperience?.toString() || '',
+      city: producer.city || '',
+      state: producer.state || '',
+      certifications: producer.certifications || '',
+    })
+    setEditLat(producer.latitude || '')
+    setEditLng(producer.longitude || '')
+    setEditOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (!user) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          name: editForm.name,
+          companyName: editForm.companyName,
+          phone: editForm.phone,
+          farmName: editForm.farmName,
+          farmSize: editForm.farmSize,
+          farmLocation: editForm.farmLocation,
+          yearsExperience: editForm.yearsExperience ? parseInt(editForm.yearsExperience) : null,
+          city: editForm.city,
+          state: editForm.state,
+          certifications: editForm.certifications,
+          latitude: editLat,
+          longitude: editLng,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.user) {
+          useAppStore.getState().setUser({ ...useAppStore.getState().user!, ...data.user })
+        }
+        toast.success('Profile updated successfully!')
+        setEditOpen(false)
+        fetchProducerData()
+      } else {
+        toast.error('Failed to update profile')
+      }
+    } catch {
+      toast.error('Failed to update profile')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('folder', 'avatars')
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (res.ok) {
+        const data = await res.json()
+        await fetch('/api/users', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, avatarUrl: data.url }),
+        })
+        toast.success('Avatar updated!')
+        fetchProducerData()
+      } else {
+        toast.error('Failed to upload avatar')
+      }
+    } catch {
+      toast.error('Failed to upload avatar')
+    } finally {
+      setUploadingAvatar(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setUploadingBanner(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('folder', 'banners')
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (res.ok) {
+        const data = await res.json()
+        await fetch('/api/users', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, bannerUrl: data.url }),
+        })
+        toast.success('Banner updated!')
+        fetchProducerData()
+      } else {
+        toast.error('Failed to upload banner')
+      }
+    } catch {
+      toast.error('Failed to upload banner')
+    } finally {
+      setUploadingBanner(false)
+      if (bannerInputRef.current) bannerInputRef.current.value = ''
+    }
+  }
+
+  const handleFarmImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0 || !user) return
+    try {
+      const existingImages = producer?.farmImages
+        ? producer.farmImages.split(',').map(u => u.trim()).filter(Boolean)
+        : []
+      const newUrls: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData()
+        formData.append('file', files[i])
+        formData.append('folder', 'farm-images')
+        const res = await fetch('/api/upload', { method: 'POST', body: formData })
+        if (res.ok) {
+          const data = await res.json()
+          newUrls.push(data.url)
+        }
+      }
+      if (newUrls.length > 0) {
+        const allImages = [...existingImages, ...newUrls].join(',')
+        await fetch('/api/users', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, farmImages: allImages }),
+        })
+        toast.success('Farm images updated!')
+        fetchProducerData()
+      }
+    } catch {
+      toast.error('Failed to upload farm images')
+    }
+  }
+
   if (loading || !producer) {
     return <LoadingSkeleton />
   }
@@ -274,6 +449,15 @@ export function ProducerProfilePage() {
             <p className="text-xs text-muted-foreground truncate">{producer.companyName || 'Producer'}</p>
           </div>
           <div className="flex items-center gap-2">
+            {isOwner && (
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-500 gap-1.5 text-sm"
+                onClick={openEdit}
+              >
+                <Pencil className="h-4 w-4" /> Edit Profile
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -304,22 +488,69 @@ export function ProducerProfilePage() {
           {/* Profile Header */}
           <motion.div variants={fadeUp} className="relative">
             {/* Cover */}
-            <div className={`h-40 sm:h-52 rounded-2xl bg-gradient-to-r ${gradientClass} relative overflow-hidden`}>
-              <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+            <div className={`h-40 sm:h-52 rounded-2xl relative overflow-hidden ${producer.bannerUrl ? '' : `bg-gradient-to-r ${gradientClass}`}`}>
+              {producer.bannerUrl ? (
+                <img src={producer.bannerUrl} alt="Profile banner" className="w-full h-full object-cover" />
+              ) : (
+                <>
+                  <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
+                  <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+                </>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-              {/* Decorative circles */}
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
-              <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+              {isOwner && (
+                <button
+                  className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/50 hover:bg-black/70 text-white text-xs font-medium transition-colors"
+                  onClick={() => bannerInputRef.current?.click()}
+                  disabled={uploadingBanner}
+                >
+                  {uploadingBanner ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                  {uploadingBanner ? 'Uploading...' : 'Change Banner'}
+                </button>
+              )}
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleBannerUpload}
+              />
             </div>
 
             {/* Avatar + Info */}
             <div className="px-4 sm:px-6 -mt-14 sm:-mt-16 relative z-10">
               <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
-                <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-lg">
-                  <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-2xl sm:text-3xl font-bold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative group">
+                  <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-lg">
+                    {producer.avatarUrl ? (
+                      <AvatarImage src={producer.avatarUrl} alt={producer.name} className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-2xl sm:text-3xl font-bold">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  {isOwner && (
+                    <button
+                      className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={uploadingAvatar}
+                    >
+                      {uploadingAvatar ? (
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      ) : (
+                        <Camera className="h-6 w-6 text-white" />
+                      )}
+                    </button>
+                  )}
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                  />
+                </div>
                 <div className="flex-1 pt-2 sm:pb-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-2xl font-bold text-foreground">{producer.name}</h2>
@@ -496,9 +727,23 @@ export function ProducerProfilePage() {
 
                 {/* Farm Gallery */}
                 <motion.div variants={fadeUp} className="glass-card p-5 space-y-4">
-                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5 text-emerald-400" /> Farm Gallery
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      <ImageIcon className="h-5 w-5 text-emerald-400" /> Farm Gallery
+                    </h3>
+                    {isOwner && (
+                      <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-medium cursor-pointer transition-colors border border-emerald-500/30">
+                        <Upload className="h-3.5 w-3.5" /> Add Images
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleFarmImageUpload}
+                        />
+                      </label>
+                    )}
+                  </div>
                   {farmImageList.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {farmImageList.map((img, i) => (
@@ -810,6 +1055,181 @@ export function ProducerProfilePage() {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background border-glass-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-emerald-400" /> Edit Profile
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Update your producer profile information
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-2">
+            {/* Basic Info Section */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Basic Information</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name" className="text-xs text-muted-foreground">Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-company" className="text-xs text-muted-foreground">Company Name</Label>
+                  <Input
+                    id="edit-company"
+                    value={editForm.companyName}
+                    onChange={(e) => setEditForm(f => ({ ...f, companyName: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Company name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone" className="text-xs text-muted-foreground">Phone</Label>
+                  <Input
+                    id="edit-phone"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Phone number"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Farm Details Section */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Farm Details</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-farmName" className="text-xs text-muted-foreground">Farm Name</Label>
+                  <Input
+                    id="edit-farmName"
+                    value={editForm.farmName}
+                    onChange={(e) => setEditForm(f => ({ ...f, farmName: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Farm name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-farmSize" className="text-xs text-muted-foreground">Farm Size</Label>
+                  <Input
+                    id="edit-farmSize"
+                    value={editForm.farmSize}
+                    onChange={(e) => setEditForm(f => ({ ...f, farmSize: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="e.g., 10 acres"
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="edit-farmLocation" className="text-xs text-muted-foreground">Farm Location</Label>
+                  <Input
+                    id="edit-farmLocation"
+                    value={editForm.farmLocation}
+                    onChange={(e) => setEditForm(f => ({ ...f, farmLocation: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Farm address or description"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-yearsExp" className="text-xs text-muted-foreground">Years of Experience</Label>
+                  <Input
+                    id="edit-yearsExp"
+                    type="number"
+                    value={editForm.yearsExperience}
+                    onChange={(e) => setEditForm(f => ({ ...f, yearsExperience: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="Years"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Location Section */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Location</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-city" className="text-xs text-muted-foreground">City</Label>
+                  <Input
+                    id="edit-city"
+                    value={editForm.city}
+                    onChange={(e) => setEditForm(f => ({ ...f, city: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="City"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-state" className="text-xs text-muted-foreground">State</Label>
+                  <Input
+                    id="edit-state"
+                    value={editForm.state}
+                    onChange={(e) => setEditForm(f => ({ ...f, state: e.target.value }))}
+                    className="bg-white/5 border-white/10"
+                    placeholder="State"
+                  />
+                </div>
+              </div>
+              <MapPicker
+                latitude={editLat}
+                longitude={editLng}
+                onLocationSelect={(data) => {
+                  setEditLat(data.latitude)
+                  setEditLng(data.longitude)
+                }}
+                label="Pick your farm location on the map"
+                height="220px"
+              />
+            </div>
+
+            {/* Certifications Section */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Certifications</h4>
+              <div className="space-y-2">
+                <Label htmlFor="edit-certs" className="text-xs text-muted-foreground">Certifications (comma-separated)</Label>
+                <Textarea
+                  id="edit-certs"
+                  value={editForm.certifications}
+                  onChange={(e) => setEditForm(f => ({ ...f, certifications: e.target.value }))}
+                  className="bg-white/5 border-white/10 min-h-[80px]"
+                  placeholder="e.g., Organic, FSSAI, APEDA"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="border-glass-border"
+              onClick={() => setEditOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-500 gap-2"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+              ) : (
+                <><Upload className="h-4 w-4" /> Save Changes</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

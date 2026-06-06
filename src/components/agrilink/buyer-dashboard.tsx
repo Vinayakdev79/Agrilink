@@ -7,7 +7,7 @@ import {
   ClipboardList, ShoppingCart, IndianRupee, Users, Store, Plus,
   MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
   ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield, ChevronRight,
-  Eye, Gavel, Phone, Crosshair, CalendarDays, Image as ImageIcon, Upload, User
+  Eye, Gavel, Phone, Crosshair, CalendarDays, Image as ImageIcon, Upload, User, Leaf
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -119,6 +119,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
   const [producerStateFilter, setProducerStateFilter] = useState('')
   const [producerCertFilter, setProducerCertFilter] = useState('')
   const [organicOnly, setOrganicOnly] = useState(false)
+  const [producerSort, setProducerSort] = useState('rating')
 
   // Bid visibility state
   const [bidsDialogOpen, setBidsDialogOpen] = useState(false)
@@ -574,24 +575,36 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                   animate={{ opacity: 1, y: 0 }}
                   className="glass-card p-5 space-y-4"
                 >
-                  {/* Order header with product image */}
+                  {/* Header with product image + basic info */}
                   <div className="flex gap-4">
                     {/* Product Image */}
-                    {order.product?.imageUrl ? (
-                      <div className="w-20 h-20 rounded-xl overflow-hidden border border-glass-border shrink-0">
-                        <img src={order.product.imageUrl} alt={order.product?.name || 'Product'} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="w-20 h-20 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                        <ShoppingBag className="h-8 w-8 text-emerald-400/50" />
-                      </div>
-                    )}
+                    <div className="w-24 h-24 rounded-xl overflow-hidden border border-glass-border shrink-0">
+                      {order.product?.imageUrl ? (
+                        <img src={order.product.imageUrl} alt={order.product?.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-emerald-500/10 flex items-center justify-center">
+                          <ShoppingBag className="h-8 w-8 text-emerald-400/50" />
+                        </div>
+                      )}
+                    </div>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h4 className="font-semibold text-foreground">{order.product?.name || 'N/A'}</h4>
-                          <p className="text-xs text-muted-foreground capitalize">{order.product?.category || ''}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-muted-foreground capitalize">{order.product?.category}</span>
+                            {order.product?.qualityGrade && (
+                              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/25 border text-[9px] px-1.5">
+                                Grade {order.product.qualityGrade}
+                              </Badge>
+                            )}
+                            {order.product?.isOrganic && (
+                              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 border text-[9px] px-1.5">
+                                Organic
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <Badge className={`${statusColors[order.status] || ''} border text-xs shrink-0`}>
                           {order.status}
@@ -606,7 +619,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         </div>
                         <div>
                           <p className="text-muted-foreground text-[10px]">Unit Price</p>
-                          <p className="text-foreground font-medium">₹{order.product?.pricePerUnit?.toLocaleString() || '—'}/{order.product?.unit || ''}</p>
+                          <p className="text-foreground font-medium">₹{order.product?.pricePerUnit?.toLocaleString() || order.unitPrice?.toLocaleString()}/{order.product?.unit || ''}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-[10px]">Total</p>
@@ -615,6 +628,24 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Product Location & Variety */}
+                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                    {order.product?.location && (
+                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-emerald-400" />{order.product.location}{order.product.state ? `, ${order.product.state}` : ''}</span>
+                    )}
+                    {order.product?.cropVariety && (
+                      <span className="flex items-center gap-1"><Sprout className="w-3 h-3 text-emerald-400" />{order.product.cropVariety}</span>
+                    )}
+                  </div>
+
+                  {/* Delivery Address */}
+                  {order.deliveryAddress && (
+                    <div className="glass-card p-3 border border-emerald-500/10">
+                      <p className="text-[10px] text-muted-foreground mb-1">Delivery Address</p>
+                      <p className="text-xs text-foreground">{order.deliveryAddress}{order.deliveryCity ? `, ${order.deliveryCity}` : ''}{order.deliveryState ? `, ${order.deliveryState}` : ''} {order.deliveryPincode || ''}</p>
+                    </div>
+                  )}
 
                   {/* Seller info */}
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-glass-border">
@@ -638,7 +669,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString()}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   </div>
 
                   {/* Shipment Transport Details */}
@@ -732,17 +763,15 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         variant="outline"
                         className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1 text-xs"
                         onClick={() => {
-                          const sellerCity = order.seller?.city || ''
-                          const sellerState = order.seller?.state || ''
-                          const buyerCity = user?.city || ''
-                          const buyerState = user?.state || ''
                           setShipmentForm({
                             open: true,
                             orderId: order.id,
-                            origin: sellerCity,
-                            originState: sellerState,
-                            destination: buyerCity,
-                            destinationState: buyerState,
+                            origin: `${order.seller?.city || ''}${order.seller?.state ? ', ' + order.seller.state : ''}`,
+                            originState: order.seller?.state || '',
+                            destination: order.deliveryAddress
+                              ? `${order.deliveryAddress}, ${order.deliveryCity || ''}, ${order.deliveryState || ''} ${order.deliveryPincode || ''}`
+                              : `${user?.city || ''}${user?.state ? ', ' + user.state : ''}`,
+                            destinationState: order.deliveryState || user?.state || '',
                             distance: '',
                             budgetMin: '',
                             budgetMax: ''
@@ -795,21 +824,21 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
               <DialogDescription className="text-muted-foreground">Set up shipment for this order</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {/* Auto-fill notice */}
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <MapPin className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-xs text-muted-foreground">Pickup and delivery addresses are auto-filled from order details</p>
+              </div>
+
               {/* Pickup info */}
               <div className="glass-card p-3 border border-emerald-500/20">
                 <div className="flex items-center gap-2 mb-2">
                   <MapPin className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-medium text-foreground">Pickup from</span>
+                  <span className="text-sm font-medium text-foreground">Pickup from (Seller)</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1">
-                    <Label className="text-foreground text-xs">City</Label>
-                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.origin} onChange={e => setShipmentForm(p => ({ ...p, origin: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label className="text-foreground text-xs">State</Label>
-                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.originState} onChange={e => setShipmentForm(p => ({ ...p, originState: e.target.value }))} />
-                  </div>
+                <div className="grid gap-1">
+                  <Label className="text-foreground text-xs">Address</Label>
+                  <Input className="glass-input text-foreground text-sm h-9 opacity-70 cursor-not-allowed" value={shipmentForm.origin} readOnly />
                 </div>
               </div>
 
@@ -817,23 +846,12 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
               <div className="glass-card p-3 border border-amber-500/20">
                 <div className="flex items-center gap-2 mb-2">
                   <MapPin className="h-4 w-4 text-amber-400" />
-                  <span className="text-sm font-medium text-foreground">Deliver to</span>
+                  <span className="text-sm font-medium text-foreground">Deliver to (Buyer)</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1">
-                    <Label className="text-foreground text-xs">City</Label>
-                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.destination} onChange={e => setShipmentForm(p => ({ ...p, destination: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label className="text-foreground text-xs">State</Label>
-                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.destinationState} onChange={e => setShipmentForm(p => ({ ...p, destinationState: e.target.value }))} />
-                  </div>
+                <div className="grid gap-1">
+                  <Label className="text-foreground text-xs">Address</Label>
+                  <Input className="glass-input text-foreground text-sm h-9 opacity-70 cursor-not-allowed" value={shipmentForm.destination} readOnly />
                 </div>
-              </div>
-
-              <div className="grid gap-2">
-                <Label className="text-foreground">Distance (km)</Label>
-                <Input type="number" className="glass-input text-foreground" placeholder="e.g. 500" value={shipmentForm.distance} onChange={e => setShipmentForm(p => ({ ...p, distance: e.target.value }))} />
               </div>
 
               {/* Budget Range */}
@@ -979,6 +997,15 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
         (p.certifications && p.certifications.toLowerCase().includes('organic'))
       return matchesSearch && matchesState && matchesCert && matchesOrganic
     })
+
+    // Sort producers
+    const sortedProducers = [...filteredProducers].sort((a: any, b: any) => {
+      if (producerSort === 'rating') return (b.avgRating || 0) - (a.avgRating || 0)
+      if (producerSort === 'experience') return (b.yearsExperience || 0) - (a.yearsExperience || 0)
+      if (producerSort === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      return 0
+    })
+
     const producerStates = [...new Set(producers.map((p: any) => p.state).filter(Boolean))].sort()
     const allCerts = [...new Set(producers.flatMap((p: any) => p.certifications ? p.certifications.split(',').map((c: string) => c.trim()) : []))].sort()
 
@@ -991,7 +1018,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
           </Badge>
         </div>
 
-        {/* Search and Filters */}
+        {/* Search, Filters & Sort */}
         <div className="glass-card p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -1003,7 +1030,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                 onChange={(e) => setProducerSearch(e.target.value)}
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Select value={producerStateFilter} onValueChange={setProducerStateFilter}>
                 <SelectTrigger className="glass-input text-foreground w-36">
                   <SelectValue placeholder="State" />
@@ -1026,6 +1053,16 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={producerSort} onValueChange={setProducerSort}>
+                <SelectTrigger className="glass-input text-foreground w-36">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rating">Top Rated</SelectItem>
+                  <SelectItem value="experience">Most Experienced</SelectItem>
+                  <SelectItem value="newest">Newest</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1042,7 +1079,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                 size="sm"
                 variant="ghost"
                 className="text-muted-foreground hover:text-foreground gap-1.5"
-                onClick={() => { setProducerSearch(''); setProducerStateFilter(''); setProducerCertFilter(''); setOrganicOnly(false) }}
+                onClick={() => { setProducerSearch(''); setProducerStateFilter(''); setProducerCertFilter(''); setOrganicOnly(false); setProducerSort('rating') }}
               >
                 Clear Filters
               </Button>
@@ -1050,129 +1087,181 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
           </div>
         </div>
 
-        {/* Producers Grid */}
+        {/* Producers Card Grid */}
         {producersLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-52 rounded-xl" />)}
+            {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-72 rounded-xl" />)}
           </div>
-        ) : filteredProducers.length === 0 ? (
+        ) : sortedProducers.length === 0 ? (
           <div className="glass-card p-12 text-center">
             <Sprout className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">No producers found matching your criteria</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProducers.map((p: any, i: number) => {
-              const initials = (p.name || 'P').slice(0, 2).toUpperCase()
-              const isVerified = p.verificationStatus === 'verified'
-              const isPending = p.verificationStatus === 'pending'
-              const pCerts = p.certifications ? p.certifications.split(',').map((c: string) => c.trim()).filter(Boolean) : []
-              const productCount = p._count?.products || 0
+            {sortedProducers.map((producer: any, i: number) => {
+              const isVerified = producer.verificationStatus === 'verified'
+              const isPending = producer.verificationStatus === 'pending'
+              const pCerts = producer.certifications ? producer.certifications.split(',').map((c: string) => c.trim()).filter(Boolean) : []
+              const productCount = producer._count?.products || 0
               return (
                 <motion.div
-                  key={p.id}
+                  key={producer.id}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
+                  transition={{ delay: i * 0.04 }}
                   whileHover={{ y: -4 }}
-                  className="glass-card p-5 cursor-pointer hover:border-emerald-500/30 transition-all"
+                  className="glass-card overflow-hidden hover:border-emerald-500/20 transition-all cursor-pointer"
+                  onClick={() => { setSelectedProducerId(producer.id); setView('producer-profile') }}
                 >
-                  <div className="flex items-start gap-3 mb-3">
-                    <Avatar className="h-14 w-14 border border-glass-border shrink-0">
-                      {p.avatarUrl ? (
-                        <AvatarImage src={p.avatarUrl} alt={p.name || ''} />
-                      ) : null}
-                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-base font-semibold">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="font-semibold text-foreground text-sm truncate">{p.name}</h4>
-                        {isVerified && <BadgeCheck className="h-4 w-4 text-emerald-400 shrink-0" />}
-                      </div>
-                      {p.companyName && (
-                        <p className="text-xs text-amber-400 truncate">{p.companyName}</p>
-                      )}
-                      {p.farmName && (
-                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                          <Sprout className="h-3 w-3" /> {p.farmName}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Location */}
-                  {(p.city || p.state) && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
-                      <MapPin className="h-3 w-3 text-emerald-400" />
-                      {[p.city, p.state].filter(Boolean).join(', ')}
-                    </div>
-                  )}
-
-                  {/* Rating & Verification */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <Badge className={`border text-[10px] ${
-                      isVerified ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                      isPending ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
-                      'bg-red-500/20 text-red-400 border-red-500/30'
-                    }`}>
-                      {isVerified ? <><CheckCircle className="h-2.5 w-2.5 mr-0.5" /> Verified</> :
-                       isPending ? <><Clock className="h-2.5 w-2.5 mr-0.5" /> Pending</> :
-                       <><Shield className="h-2.5 w-2.5 mr-0.5" /> Rejected</>}
-                    </Badge>
-                    {(p.avgRating > 0 || p.totalReviews > 0) && (
-                      <div className="flex items-center gap-1">
-                        <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                        <span className="text-xs text-amber-400 font-medium">{(p.avgRating || 0).toFixed(1)}</span>
-                        {p.totalReviews > 0 && (
-                          <span className="text-[10px] text-muted-foreground">({p.totalReviews})</span>
-                        )}
-                      </div>
+                  {/* Banner gradient */}
+                  <div className="h-16 bg-gradient-to-r from-emerald-900/40 to-amber-900/30 relative">
+                    {producer.bannerUrl && (
+                      <img src={producer.bannerUrl} alt="" className="w-full h-full object-cover opacity-60" />
+                    )}
+                    {/* Verification badge */}
+                    {isVerified && (
+                      <BadgeCheck className="absolute top-2 right-2 w-5 h-5 text-emerald-400" />
+                    )}
+                    {isPending && (
+                      <Clock className="absolute top-2 right-2 w-4 h-4 text-yellow-400" />
                     )}
                   </div>
 
-                  {/* Stats Row */}
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div className="text-center p-1.5 rounded-lg bg-white/[0.02] border border-glass-border">
-                      <p className="text-xs font-bold text-foreground">{p.yearsExperience || 0}</p>
-                      <p className="text-[9px] text-muted-foreground">Yrs Exp</p>
-                    </div>
-                    <div className="text-center p-1.5 rounded-lg bg-white/[0.02] border border-glass-border">
-                      <p className="text-xs font-bold text-foreground">{productCount}</p>
-                      <p className="text-[9px] text-muted-foreground">Products</p>
-                    </div>
-                    <div className="text-center p-1.5 rounded-lg bg-white/[0.02] border border-glass-border">
-                      <p className="text-xs font-bold text-foreground">{p.totalTransactions || 0}</p>
-                      <p className="text-[9px] text-muted-foreground">Trans.</p>
-                    </div>
+                  {/* Avatar - overlapping the banner */}
+                  <div className="px-4 -mt-8 relative z-10">
+                    <Avatar className="h-14 w-14 border-[3px] border-background shadow-lg">
+                      {producer.avatarUrl ? (
+                        <AvatarImage src={producer.avatarUrl} alt={producer.name || ''} />
+                      ) : null}
+                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 font-bold">
+                        {(producer.name || 'P').slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
                   </div>
 
-                  {/* Certifications */}
-                  {pCerts.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {pCerts.slice(0, 3).map((cert: string, ci: number) => (
-                        <Badge key={ci} className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px] px-1.5 py-0">
-                          {cert}
-                        </Badge>
-                      ))}
-                      {pCerts.length > 3 && (
-                        <Badge className="bg-white/5 text-muted-foreground border-glass-border border text-[9px] px-1.5 py-0">
-                          +{pCerts.length - 3}
-                        </Badge>
+                  {/* Info */}
+                  <div className="p-4 pt-2 space-y-3">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-semibold text-foreground text-sm truncate">{producer.name}</h4>
+                      </div>
+                      {producer.companyName && (
+                        <p className="text-xs text-amber-400 truncate">{producer.companyName}</p>
+                      )}
+                      {producer.farmName && !producer.companyName && (
+                        <p className="text-xs text-amber-400 truncate flex items-center gap-1">
+                          <Sprout className="h-3 w-3" /> {producer.farmName}
+                        </p>
                       )}
                     </div>
-                  )}
 
-                  {/* View Profile Button */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1.5 text-xs"
-                    onClick={() => { setSelectedProducerId(p.id); setView('producer-profile') }}
-                  >
-                    <Eye className="h-3.5 w-3.5" /> View Profile
-                  </Button>
+                    {/* Location */}
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="w-3 h-3 text-emerald-400" />
+                      {[producer.city, producer.state].filter(Boolean).join(', ') || 'India'}
+                    </div>
+
+                    {/* Verification & Rating row */}
+                    <div className="flex items-center gap-2">
+                      {!isVerified && (
+                        <Badge className={`border text-[9px] px-1.5 py-0 ${
+                          isPending ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                          'bg-red-500/20 text-red-400 border-red-500/30'
+                        }`}>
+                          {isPending ? <><Clock className="h-2.5 w-2.5 mr-0.5" /> Pending</> :
+                           <><Shield className="h-2.5 w-2.5 mr-0.5" /> Unverified</>}
+                        </Badge>
+                      )}
+                      {(producer.avgRating > 0 || producer.totalReviews > 0) && (
+                        <div className="flex items-center gap-1">
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${
+                                  star <= Math.round(producer.avgRating || 0)
+                                    ? 'text-amber-400 fill-amber-400'
+                                    : 'text-muted-foreground/30'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs text-amber-400 font-medium">{(producer.avgRating || 0).toFixed(1)}</span>
+                          {producer.totalReviews > 0 && (
+                            <span className="text-[9px] text-muted-foreground">({producer.totalReviews})</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="glass-card p-2">
+                        <p className="text-xs font-bold text-foreground">{producer.yearsExperience || 0}</p>
+                        <p className="text-[9px] text-muted-foreground">Yrs Exp</p>
+                      </div>
+                      <div className="glass-card p-2">
+                        <p className="text-xs font-bold text-foreground">{producer.avgRating?.toFixed(1) || '—'}</p>
+                        <p className="text-[9px] text-muted-foreground">Rating</p>
+                      </div>
+                      <div className="glass-card p-2">
+                        <p className="text-xs font-bold text-foreground">{producer.farmSize || '—'}</p>
+                        <p className="text-[9px] text-muted-foreground">Farm</p>
+                      </div>
+                    </div>
+
+                    {/* Certifications */}
+                    {pCerts.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {pCerts.slice(0, 3).map((cert: string, ci: number) => (
+                          <Badge key={ci} className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px] px-1.5 py-0">
+                            {cert}
+                          </Badge>
+                        ))}
+                        {pCerts.length > 3 && (
+                          <Badge className="bg-white/5 text-muted-foreground border-glass-border border text-[9px] px-1.5 py-0">
+                            +{pCerts.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Product count */}
+                    {productCount > 0 && (
+                      <p className="text-[10px] text-muted-foreground">
+                        <ShoppingBag className="h-3 w-3 inline mr-1 text-emerald-400" />
+                        {productCount} product{productCount !== 1 ? 's' : ''} listed
+                      </p>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 h-8 text-xs border-white/10 hover:bg-white/5"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActiveChatUser(producer.id)
+                          setChatOpen(true)
+                        }}
+                      >
+                        <MessageSquare className="w-3 h-3 mr-1" /> Message
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 text-xs bg-emerald-500 hover:bg-emerald-400 text-white"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedProducerId(producer.id)
+                          setView('producer-profile')
+                        }}
+                      >
+                        View Profile
+                      </Button>
+                    </div>
+                  </div>
                 </motion.div>
               )
             })}

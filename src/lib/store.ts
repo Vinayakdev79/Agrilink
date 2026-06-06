@@ -37,6 +37,9 @@ export interface AppUser {
   totalTransactions?: number
   avgRating?: number
   totalReviews?: number
+  latitude?: string
+  longitude?: string
+  farmImages?: string
 }
 
 export interface CartItem {

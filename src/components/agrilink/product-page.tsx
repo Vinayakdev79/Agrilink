@@ -419,33 +419,26 @@ export function ProductPage() {
     fetchSimilar()
   }, [product?.category, product?.id, product?.sellerId])
 
-  // Fetch reviews
+  // Fetch reviews (reviews are per-seller since Review table doesn't have productId)
   useEffect(() => {
     if (!product?.id) return
     const fetchReviews = async () => {
       try {
-        // Try product-specific reviews first
-        const res = await fetch(`/api/reviews?productId=${product.id}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.reviews && data.reviews.length > 0) {
-            setReviews(data.reviews)
-            return
-          }
-        }
-        // Fallback to seller reviews
+        // Fetch seller reviews
         const sellerRes = await fetch(`/api/reviews?targetId=${product.sellerId}`)
         if (sellerRes.ok) {
           const sellerData = await sellerRes.json()
-          setReviews(sellerData.reviews || [])
-        } else {
-          // Mock reviews
-          setReviews([
-            { id: '1', reviewerId: 'r1', targetId: product.sellerId, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged. Will order again!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar', companyName: 'RK Traders' } },
-            { id: '2', reviewerId: 'r2', targetId: product.sellerId, rating: 4, comment: 'Good quality and timely delivery. Slight delay in communication but overall satisfied.', createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), reviewer: { name: 'Priya Sharma', companyName: 'Sharma Enterprises' } },
-            { id: '3', reviewerId: 'r3', targetId: product.sellerId, rating: 5, comment: 'Best supplier we have worked with. Consistent quality every time.', createdAt: new Date(Date.now() - 86400000 * 7).toISOString(), reviewer: { name: 'Amit Patel' } },
-          ])
+          if (sellerData.reviews && sellerData.reviews.length > 0) {
+            setReviews(sellerData.reviews)
+            return
+          }
         }
+        // Fallback to mock reviews if no real ones exist
+        setReviews([
+          { id: '1', reviewerId: 'r1', targetId: product.sellerId, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged. Will order again!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar', companyName: 'RK Traders' } },
+          { id: '2', reviewerId: 'r2', targetId: product.sellerId, rating: 4, comment: 'Good quality and timely delivery. Slight delay in communication but overall satisfied.', createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), reviewer: { name: 'Priya Sharma', companyName: 'Sharma Enterprises' } },
+          { id: '3', reviewerId: 'r3', targetId: product.sellerId, rating: 5, comment: 'Best supplier we have worked with. Consistent quality every time.', createdAt: new Date(Date.now() - 86400000 * 7).toISOString(), reviewer: { name: 'Amit Patel' } },
+        ])
       } catch {
         setReviews([
           { id: '1', reviewerId: 'r1', targetId: product.sellerId, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar' } },
@@ -518,7 +511,6 @@ export function ProductPage() {
         body: JSON.stringify({
           reviewerId: user.id,
           targetId: product.sellerId,
-          productId: product.id,
           rating: reviewRating,
           comment: reviewComment.trim(),
         }),
@@ -739,6 +731,46 @@ export function ProductPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Delivery Estimation Card - Below Image */}
+            <div className="glass-card p-4 space-y-3 border border-emerald-500/10">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Truck className="w-4 h-4 text-emerald-400" />
+                Delivery Estimate
+              </h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3 text-emerald-400" /> From
+                  </span>
+                  <span className="font-medium text-foreground text-xs">{product.location}{product.state ? `, ${product.state}` : ''}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="w-3 h-3 text-amber-400" /> Est. Delivery
+                  </span>
+                  <span className="font-medium text-foreground">2-5 business days</span>
+                </div>
+                <Separator className="bg-white/5" />
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Est. Transport Cost</span>
+                  <div className="text-right">
+                    <span className="text-amber-400 font-semibold">₹{Math.round(totalPrice * 0.035).toLocaleString('en-IN')}</span>
+                    <p className="text-[10px] text-muted-foreground">2-5% of order value</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Est. GST (18%)</span>
+                  <span className="text-foreground font-medium">₹{Math.round(totalPrice * 0.18).toLocaleString('en-IN')}</span>
+                </div>
+                <Separator className="bg-white/5" />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Est. Total</span>
+                  <span className="text-base font-bold text-emerald-400">₹{Math.round(totalPrice + totalPrice * 0.035 + totalPrice * 0.18).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground/60">Final cost calculated at checkout based on delivery location</p>
             </div>
 
             {/* Seller's Other Products */}

@@ -13,7 +13,6 @@ import {
   IndianRupee,
   Truck,
   MapPin,
-  Map,
   CreditCard,
   ChevronRight,
   Package,
@@ -22,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { MapPicker } from '@/components/agrilink/map-picker'
 import {
   Dialog,
   DialogContent,
@@ -65,6 +65,9 @@ function CheckoutDialog({
     state: '',
     pincode: '',
   })
+  const [deliveryLat, setDeliveryLat] = useState('')
+  const [deliveryLng, setDeliveryLng] = useState('')
+  const [mapAddress, setMapAddress] = useState('')
 
   const handlePlaceOrder = async () => {
     if (!user) {
@@ -90,6 +93,13 @@ function CheckoutDialog({
               productId: item.productId,
               quantity: item.quantity,
               unitPrice: item.pricePerUnit,
+              deliveryAddress: `${address.addressLine1}${address.addressLine2 ? ', ' + address.addressLine2 : ''}`,
+              deliveryCity: address.city,
+              deliveryState: address.state,
+              deliveryPincode: address.pincode,
+              deliveryLat: deliveryLat || undefined,
+              deliveryLng: deliveryLng || undefined,
+              deliveryFullAddress: mapAddress || undefined,
             }),
           })
         )
@@ -199,11 +209,28 @@ function CheckoutDialog({
               </div>
             </div>
 
-            {/* Map Placeholder */}
-            <div className="glass-card p-4 flex flex-col items-center justify-center gap-2 min-h-[120px]">
-              <Map className="w-8 h-8 text-muted-foreground/30" />
-              <p className="text-xs text-muted-foreground">Map integration coming soon</p>
-            </div>
+            {/* Map Picker */}
+            <MapPicker
+              latitude={deliveryLat}
+              longitude={deliveryLng}
+              address={mapAddress}
+              onLocationSelect={(data) => {
+                setDeliveryLat(data.latitude)
+                setDeliveryLng(data.longitude)
+                setMapAddress(data.address)
+                // Auto-fill address fields from map selection
+                setAddress((a) => ({
+                  ...a,
+                  addressLine1: data.address.split(',').slice(0, 2).join(', ') || a.addressLine1,
+                  // Try to extract city and state from the address
+                  city: data.address.split(',').find((_, i, arr) => i === arr.length - 3)?.trim() || a.city,
+                  state: data.address.split(',').find((_, i, arr) => i === arr.length - 2)?.trim() || a.state,
+                }))
+              }}
+              label="Delivery Location"
+              markerColor="#ef4444"
+              height="220px"
+            />
           </div>
 
           <Separator className="bg-white/5" />

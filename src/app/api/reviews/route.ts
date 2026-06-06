@@ -6,17 +6,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const targetId = searchParams.get('targetId')
     const reviewerId = searchParams.get('reviewerId')
-    const productId = searchParams.get('productId')
 
+    // Review table only has: id, reviewerId, targetId, rating, comment, createdAt
+    // No productId column - reviews are per-seller, not per-product
     let query = supabase
       .from('Review')
-      .select('*, reviewer:User!reviewerId(id, name, companyName), product:Product!productId(id, name, category)')
+      .select('*, reviewer:User!reviewerId(id, name, companyName, role)')
       .order('createdAt', { ascending: false })
       .limit(50)
 
     if (targetId) query = query.eq('targetId', targetId)
     if (reviewerId) query = query.eq('reviewerId', reviewerId)
-    if (productId) query = query.eq('productId', productId)
 
     const { data: reviews, error: reviewsError } = await query
 
@@ -35,19 +35,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { reviewerId, targetId, productId, rating, comment } = body
+    const { reviewerId, targetId, rating, comment } = body
 
     if (!reviewerId || !targetId || !rating) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Create the review
+    // Create the review (no productId column exists)
     const { data: review, error: reviewError } = await supabase
       .from('Review')
       .insert({
         reviewerId,
         targetId,
-        productId: productId || null,
         rating: parseInt(rating),
         comment,
       })
