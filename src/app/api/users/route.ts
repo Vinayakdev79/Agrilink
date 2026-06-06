@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     if (id) {
       const { data: user, error: userError } = await supabase
         .from('User')
-        .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
+        .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
         .eq('id', id)
         .maybeSingle()
 
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     // List users with filters
     let query = supabase
       .from('User')
-      .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, avatar, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
+      .select('id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt')
       .order('createdAt', { ascending: false })
 
     if (role) {
@@ -121,7 +121,11 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()
-    const { userId, verificationStatus, name, phone, companyName, state, city, gstNumber } = body
+    const {
+      userId, verificationStatus, name, phone, companyName, state, city, gstNumber,
+      avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation,
+      yearsExperience, certifications,
+    } = body
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
@@ -135,6 +139,14 @@ export async function PATCH(request: Request) {
     if (state !== undefined) updateData.state = state || null
     if (city !== undefined) updateData.city = city || null
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber || null
+    if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl || null
+    if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl || null
+    if (address !== undefined) updateData.address = address || null
+    if (farmName !== undefined) updateData.farmName = farmName || null
+    if (farmSize !== undefined) updateData.farmSize = farmSize || null
+    if (farmLocation !== undefined) updateData.farmLocation = farmLocation || null
+    if (yearsExperience !== undefined) updateData.yearsExperience = yearsExperience || null
+    if (certifications !== undefined) updateData.certifications = certifications || null
 
     const { data: user, error } = await supabase
       .from('User')

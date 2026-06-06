@@ -25,14 +25,6 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -67,6 +59,7 @@ interface Product {
   state?: string
   qualityGrade?: string
   images?: string
+  imageUrl?: string
   isActive: boolean
   createdAt: string
   seller: Seller
@@ -100,6 +93,28 @@ const GRADE_COLORS: Record<string, string> = {
   A: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
   B: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
   C: 'bg-red-500/15 text-red-400 border-red-500/25',
+}
+
+const CATEGORY_GRADIENTS: Record<string, string> = {
+  grains: 'from-amber-900/40 to-amber-700/20',
+  vegetables: 'from-emerald-900/40 to-emerald-700/20',
+  fruits: 'from-rose-900/40 to-rose-700/20',
+  spices: 'from-orange-900/40 to-orange-700/20',
+  dairy: 'from-sky-900/40 to-sky-700/20',
+  poultry: 'from-lime-900/40 to-lime-700/20',
+  pulses: 'from-violet-900/40 to-violet-700/20',
+  oilseeds: 'from-yellow-900/40 to-yellow-700/20',
+}
+
+const CATEGORY_ICONS: Record<string, string> = {
+  grains: '🌾',
+  vegetables: '🥬',
+  fruits: '🥭',
+  spices: '🌶️',
+  dairy: '🥛',
+  poultry: '🍗',
+  pulses: '🫘',
+  oilseeds: '🌻',
 }
 
 const INDIAN_STATES = [
@@ -141,23 +156,26 @@ const scaleIn = {
 // ─── Product Card Skeleton ────────────────────────────────────────────────────
 function ProductCardSkeleton() {
   return (
-    <div className="glass-card p-5 space-y-4">
-      <div className="flex items-start justify-between">
-        <Skeleton className="h-5 w-20 rounded-lg" />
-        <Skeleton className="h-5 w-8 rounded-lg" />
-      </div>
-      <Skeleton className="h-6 w-3/4 rounded-lg" />
-      <div className="space-y-2">
-        <Skeleton className="h-5 w-24 rounded-lg" />
-        <Skeleton className="h-4 w-32 rounded-lg" />
-      </div>
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-4 w-20 rounded" />
-        <Skeleton className="h-4 w-16 rounded" />
-      </div>
-      <div className="flex gap-2 pt-2">
-        <Skeleton className="h-9 flex-1 rounded-xl" />
-        <Skeleton className="h-9 flex-1 rounded-xl" />
+    <div className="glass-card overflow-hidden">
+      <Skeleton className="aspect-[4/3] w-full rounded-none" />
+      <div className="p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <Skeleton className="h-5 w-20 rounded-lg" />
+          <Skeleton className="h-5 w-8 rounded-lg" />
+        </div>
+        <Skeleton className="h-6 w-3/4 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-24 rounded-lg" />
+          <Skeleton className="h-4 w-32 rounded-lg" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-20 rounded" />
+          <Skeleton className="h-4 w-16 rounded" />
+        </div>
+        <div className="flex gap-2 pt-2">
+          <Skeleton className="h-9 flex-1 rounded-xl" />
+          <Skeleton className="h-9 flex-1 rounded-xl" />
+        </div>
       </div>
     </div>
   )
@@ -167,106 +185,161 @@ function ProductCardSkeleton() {
 function ProductCard({
   product,
   onContact,
-  onOrder,
 }: {
   product: Product
   onContact: (p: Product) => void
-  onOrder: (p: Product) => void
 }) {
-  const { setSelectedProductId, setView } = useAppStore()
+  const { setSelectedProductId, setView, addToCart, cart, setCartOpen, user } = useAppStore()
   const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
   const gradeColor = GRADE_COLORS[product.qualityGrade || ''] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+  const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
+  const emoji = CATEGORY_ICONS[product.category] || '📦'
+
+  // Parse product image
+  const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!user) {
+      toast.error('Please sign in to add items to cart')
+      return
+    }
+    if (user.role !== 'buyer' && user.role !== 'admin') {
+      toast.error('Only buyers can add items to cart')
+      return
+    }
+
+    addToCart({
+      productId: product.id,
+      productName: product.name,
+      productImage: productImage || undefined,
+      sellerId: product.sellerId,
+      sellerName: product.seller.companyName || product.seller.name,
+      quantity: product.minOrderQty || 1,
+      unit: product.unit,
+      pricePerUnit: product.pricePerUnit,
+      minOrderQty: product.minOrderQty || 1,
+      maxQuantity: product.quantity,
+      location: product.location,
+      state: product.state,
+    })
+    toast.success(`${product.name} added to cart`)
+  }
 
   return (
     <motion.div
       variants={fadeUp}
       whileHover={{ y: -4, transition: { duration: 0.25 } }}
-      className="glass-card p-5 hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer"
+      className="glass-card overflow-hidden hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer flex flex-col"
       onClick={() => {
         setSelectedProductId(product.id)
         setView('product')
       }}
     >
-      {/* Top badges */}
-      <div className="flex items-start justify-between mb-3">
-        <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${catColor}`}>
-          {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-        </span>
-        {product.qualityGrade && (
-          <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${gradeColor}`}>
-            {product.qualityGrade}
-          </span>
+      {/* Product Image / Placeholder */}
+      <div className="aspect-[4/3] relative overflow-hidden">
+        {productImage ? (
+          <img
+            src={productImage}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+              const parent = (e.target as HTMLImageElement).parentElement
+              if (parent) {
+                parent.classList.add('bg-gradient-to-br', gradient)
+                parent.innerHTML = `<span class="text-5xl">${emoji}</span>`
+                parent.style.display = 'flex'
+                parent.style.alignItems = 'center'
+                parent.style.justifyContent = 'center'
+              }
+            }}
+          />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <span className="text-5xl">{emoji}</span>
+          </div>
         )}
-      </div>
 
-      {/* Name */}
-      <h3 className="text-base font-semibold text-foreground leading-tight group-hover:text-emerald-400 transition-colors mb-2">
-        {product.name}
-      </h3>
-
-      {/* Price */}
-      <div className="flex items-baseline gap-1 mb-2">
-        <IndianRupee className="w-3.5 h-3.5 text-emerald-400" />
-        <span className="text-xl font-bold text-foreground">
-          {product.pricePerUnit.toLocaleString('en-IN')}
-        </span>
-        <span className="text-xs text-muted-foreground">/ {product.unit}</span>
-      </div>
-
-      {/* Quantity */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1.5">
-        <Package className="w-3.5 h-3.5" />
-        <span>{product.quantity.toLocaleString('en-IN')} {product.unit} available</span>
-      </div>
-
-      {/* Location */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3">
-        <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-        <span>{product.location}{product.state ? `, ${product.state}` : ''}</span>
-      </div>
-
-      {/* Seller */}
-      <div className="flex items-center gap-2 pt-3 border-t border-white/5 mb-3">
-        <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-          <span className="text-xs font-bold text-emerald-400">
-            {(product.seller.name || product.seller.companyName || '?')[0].toUpperCase()}
+        {/* Top badges overlay */}
+        <div className="absolute top-2 left-2 right-2 flex items-start justify-between">
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
+            {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
           </span>
+          {product.qualityGrade && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${gradeColor}`}>
+              {product.qualityGrade}
+            </span>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground truncate">
+      </div>
+
+      {/* Card Content */}
+      <div className="p-4 flex flex-col flex-1">
+        {/* Name */}
+        <h3 className="text-sm font-semibold text-foreground leading-tight group-hover:text-emerald-400 transition-colors mb-2">
+          {product.name}
+        </h3>
+
+        {/* Price */}
+        <div className="flex items-baseline gap-1 mb-2">
+          <IndianRupee className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-lg font-bold text-foreground">
+            {product.pricePerUnit.toLocaleString('en-IN')}
+          </span>
+          <span className="text-xs text-muted-foreground">/ {product.unit}</span>
+        </div>
+
+        {/* Quantity */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+          <Package className="w-3 h-3" />
+          <span>{product.quantity.toLocaleString('en-IN')} {product.unit} available</span>
+        </div>
+
+        {/* Location */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <MapPin className="w-3 h-3 text-emerald-400" />
+          <span>{product.location}{product.state ? `, ${product.state}` : ''}</span>
+        </div>
+
+        {/* Seller */}
+        <div className="flex items-center gap-2 pt-2 border-t border-white/5 mb-3">
+          <div className="w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-bold text-emerald-400">
+              {(product.seller.name || product.seller.companyName || '?')[0].toUpperCase()}
+            </span>
+          </div>
+          <p className="text-xs font-medium text-foreground truncate flex-1">
             {product.seller.companyName || product.seller.name}
           </p>
+          {product.seller.verificationStatus === 'verified' && (
+            <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          )}
         </div>
-        {product.seller.verificationStatus === 'verified' && (
-          <BadgeCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-        )}
-      </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1 h-9 text-xs border-white/10 hover:bg-white/5 hover:border-white/20"
-          onClick={(e) => {
-            e.stopPropagation()
-            onContact(product)
-          }}
-        >
-          <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-          Contact
-        </Button>
-        <Button
-          size="sm"
-          className="flex-1 h-9 text-xs bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-          onClick={(e) => {
-            e.stopPropagation()
-            onOrder(product)
-          }}
-        >
-          <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
-          Order
-        </Button>
+        {/* Action buttons */}
+        <div className="flex gap-2 mt-auto">
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1 h-8 text-xs border-white/10 hover:bg-white/5 hover:border-white/20"
+            onClick={(e) => {
+              e.stopPropagation()
+              onContact(product)
+            }}
+          >
+            <MessageSquare className="w-3 h-3 mr-1" />
+            Contact
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1 h-8 text-xs bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+            onClick={handleAddToCart}
+          >
+            <ShoppingCart className="w-3 h-3 mr-1" />
+            Add to Cart
+          </Button>
+        </div>
       </div>
     </motion.div>
   )
@@ -386,179 +459,14 @@ function FilterSidebar({
   )
 }
 
-// ─── Product Detail Dialog ────────────────────────────────────────────────────
-function ProductDetailDialog({
-  product,
-  open,
-  onClose,
-  onOrder,
-  onMessage,
-}: {
-  product: Product | null
-  open: boolean
-  onClose: () => void
-  onOrder: (product: Product, qty: number) => void
-  onMessage: (product: Product) => void
-}) {
-  const [qty, setQty] = useState(1)
-
-  if (!product) return null
-
-  const totalPrice = qty * product.pricePerUnit
-  const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
-  const gradeColor = GRADE_COLORS[product.qualityGrade || ''] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-w-lg p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-0">
-          <div className="flex items-start justify-between">
-            <div className="space-y-2 flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${catColor}`}>
-                  {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-                </span>
-                {product.qualityGrade && (
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${gradeColor}`}>
-                    Grade {product.qualityGrade}
-                  </span>
-                )}
-              </div>
-              <DialogTitle className="text-xl font-bold text-foreground">
-                {product.name}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                {product.description || 'No description provided.'}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div className="p-6 space-y-4">
-          {/* Price */}
-          <div className="flex items-baseline gap-1.5">
-            <IndianRupee className="w-5 h-5 text-emerald-400" />
-            <span className="text-2xl font-bold text-foreground">
-              {product.pricePerUnit.toLocaleString('en-IN')}
-            </span>
-            <span className="text-sm text-muted-foreground">/ {product.unit}</span>
-          </div>
-
-          {/* Details grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="glass-card p-3">
-              <p className="text-xs text-muted-foreground mb-1">Available</p>
-              <p className="text-sm font-semibold text-foreground">
-                {product.quantity.toLocaleString('en-IN')} {product.unit}
-              </p>
-            </div>
-            <div className="glass-card p-3">
-              <p className="text-xs text-muted-foreground mb-1">Min. Order</p>
-              <p className="text-sm font-semibold text-foreground">
-                {product.minOrderQty || 1} {product.unit}
-              </p>
-            </div>
-            <div className="glass-card p-3">
-              <p className="text-xs text-muted-foreground mb-1">Location</p>
-              <p className="text-sm font-semibold text-foreground flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-emerald-400" />
-                {product.location}
-              </p>
-            </div>
-            <div className="glass-card p-3">
-              <p className="text-xs text-muted-foreground mb-1">Listed</p>
-              <p className="text-sm font-semibold text-foreground">
-                {new Date(product.createdAt).toLocaleDateString('en-IN')}
-              </p>
-            </div>
-          </div>
-
-          {/* Seller info */}
-          <div className="glass-card p-4">
-            <p className="text-xs text-muted-foreground mb-2">Seller</p>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-emerald-400">
-                  {(product.seller.name || product.seller.companyName || '?')[0].toUpperCase()}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">
-                  {product.seller.companyName || product.seller.name}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {product.seller.city && product.seller.state
-                    ? `${product.seller.city}, ${product.seller.state}`
-                    : product.seller.state || 'India'}
-                </p>
-              </div>
-              {product.seller.verificationStatus === 'verified' && (
-                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 text-xs">
-                  <BadgeCheck className="w-3 h-3 mr-1" />
-                  Verified
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          {/* Order form */}
-          <div className="glass-card p-4">
-            <Label className="text-xs text-muted-foreground mb-2 block">Place Order</Label>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <Input
-                  type="number"
-                  min={product.minOrderQty || 1}
-                  max={product.quantity}
-                  value={qty}
-                  onChange={(e) => setQty(Math.max(1, Number(e.target.value)))}
-                  className="h-10 bg-white/5 border-white/10 text-sm"
-                />
-              </div>
-              <span className="text-xs text-muted-foreground">{product.unit}</span>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Total</p>
-                <p className="text-lg font-bold text-emerald-400">
-                  ₹{totalPrice.toLocaleString('en-IN')}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter className="p-6 pt-0 gap-2">
-          <Button
-            variant="outline"
-            className="flex-1 border-white/10 hover:bg-white/5 hover:border-white/20"
-            onClick={() => onMessage(product)}
-          >
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Message Seller
-          </Button>
-          <Button
-            className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-            onClick={() => onOrder(product, qty)}
-          >
-            <ShoppingCart className="w-4 h-4 mr-2" />
-            Place Order
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 // ─── Main Marketplace Page ────────────────────────────────────────────────────
 export function MarketplacePage() {
-  const { setView, user, marketplaceCategory, setMarketplaceCategory, marketplaceSearch, setMarketplaceSearch, setChatOpen, setActiveChatUser } = useAppStore()
+  const { setView, user, marketplaceCategory, setMarketplaceCategory, marketplaceSearch, setMarketplaceSearch, setChatOpen, setActiveChatUser, setCartOpen, cart } = useAppStore()
 
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [searchInput, setSearchInput] = useState(marketplaceSearch)
-  const [ordering, setOrdering] = useState(false)
 
   const [filters, setFilters] = useState({
     state: '',
@@ -566,6 +474,9 @@ export function MarketplacePage() {
     priceRange: [50000] as number[],
     verifiedOnly: false,
   })
+
+  // Cart item count
+  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
   // Fetch products
   const fetchProducts = useCallback(async () => {
@@ -615,45 +526,6 @@ export function MarketplacePage() {
     setActiveChatUser(product.seller.id)
     setChatOpen(true)
     toast.success(`Chat opened with ${product.seller.companyName || product.seller.name}`)
-  }
-
-  // Handle place order
-  const handleOrder = async (product: Product, qty: number) => {
-    if (!user) {
-      toast.error('Please sign in to place an order')
-      setView('auth')
-      return
-    }
-    if (user.role !== 'buyer' && user.role !== 'admin') {
-      toast.error('Only buyers can place orders')
-      return
-    }
-
-    setOrdering(true)
-    try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          buyerId: user.id,
-          sellerId: product.sellerId,
-          productId: product.id,
-          quantity: qty,
-          unitPrice: product.pricePerUnit,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        toast.success(`Order placed for ${qty} ${product.unit} of ${product.name}`)
-        setDetailOpen(false)
-      } else {
-        toast.error(data.error || 'Failed to place order')
-      }
-    } catch {
-      toast.error('Failed to place order')
-    } finally {
-      setOrdering(false)
-    }
   }
 
   const resetFilters = () => {
@@ -719,6 +591,21 @@ export function MarketplacePage() {
           >
             <SlidersHorizontal className="w-4 h-4 mr-1.5" />
             Filters
+          </Button>
+
+          {/* Cart Icon Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="relative border-white/10 hover:bg-white/5 hover:border-white/20 h-9 w-9 p-0"
+            onClick={() => setCartOpen(true)}
+          >
+            <ShoppingCart className="w-4 h-4" />
+            {cartItemCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold">
+                {cartItemCount > 99 ? '99+' : cartItemCount}
+              </span>
+            )}
           </Button>
         </motion.div>
 
@@ -859,10 +746,6 @@ export function MarketplacePage() {
                     key={product.id}
                     product={product}
                     onContact={handleContact}
-                    onOrder={(p) => {
-                      setSelectedProduct(p)
-                      setDetailOpen(true)
-                    }}
                   />
                 ))}
               </motion.div>
@@ -873,19 +756,6 @@ export function MarketplacePage() {
         {/* Bottom spacing */}
         <div className="h-16" />
       </div>
-
-      {/* Product Detail Dialog */}
-      <ProductDetailDialog
-        key={selectedProduct?.id || 'none'}
-        product={selectedProduct}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        onOrder={(product, qty) => handleOrder(product, qty)}
-        onMessage={(product) => {
-          handleContact(product)
-          setDetailOpen(false)
-        }}
-      />
     </div>
   )
 }

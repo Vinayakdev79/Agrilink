@@ -30,12 +30,16 @@ import {
   User,
   ChevronRight,
   Sprout,
+  Zap,
+  Send,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Seller {
@@ -100,6 +104,7 @@ interface Review {
   id: string
   reviewerId: string
   targetId: string
+  productId?: string
   rating: number
   comment?: string
   createdAt: string
@@ -189,6 +194,36 @@ function StarRating({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md
   )
 }
 
+// ─── Interactive Star Rating (for review form) ────────────────────────────────
+function InteractiveStarRating({ value, onChange }: { value: number; onChange: (val: number) => void }) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => onChange(star)}
+          onMouseEnter={() => setHover(star)}
+          onMouseLeave={() => setHover(0)}
+          className="transition-transform hover:scale-110"
+        >
+          <Star
+            className={`w-6 h-6 ${
+              star <= (hover || value)
+                ? 'text-amber-400 fill-amber-400'
+                : 'text-muted-foreground/30'
+            } transition-colors`}
+          />
+        </button>
+      ))}
+      {value > 0 && (
+        <span className="text-sm text-muted-foreground ml-2">{value}/5</span>
+      )}
+    </div>
+  )
+}
+
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 function ProductPageSkeleton() {
   return (
@@ -226,35 +261,50 @@ function RelatedProductCard({ product, onClick }: { product: Product; onClick: (
   const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
   const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
   const emoji = CATEGORY_ICONS[product.category] || '📦'
+  const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
 
   return (
     <motion.div
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="glass-card p-4 cursor-pointer hover:bg-white/[0.07] transition-all min-w-[220px] shrink-0"
+      className="glass-card overflow-hidden cursor-pointer hover:bg-white/[0.07] transition-all min-w-[200px] shrink-0"
       onClick={onClick}
     >
-      {/* Image placeholder */}
-      <div className={`aspect-[4/3] rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center mb-3 relative overflow-hidden`}>
-        <span className="text-4xl">{emoji}</span>
+      <div className="aspect-[4/3] relative overflow-hidden">
+        {productImage ? (
+          <img
+            src={productImage}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }}
+          />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <span className="text-4xl">{emoji}</span>
+          </div>
+        )}
         {product.qualityGrade && (
-          <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-md border ${GRADE_COLORS[product.qualityGrade] || ''}`}>
+          <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${GRADE_COLORS[product.qualityGrade] || ''}`}>
             {product.qualityGrade}
           </span>
         )}
       </div>
-      <h4 className="text-sm font-semibold text-foreground truncate mb-1">{product.name}</h4>
-      <div className="flex items-center gap-1 mb-1">
-        <IndianRupee className="w-3 h-3 text-emerald-400" />
-        <span className="text-sm font-bold text-foreground">{product.pricePerUnit.toLocaleString('en-IN')}</span>
-        <span className="text-[10px] text-muted-foreground">/ {product.unit}</span>
+      <div className="p-3">
+        <h4 className="text-sm font-semibold text-foreground truncate mb-1">{product.name}</h4>
+        <div className="flex items-center gap-1 mb-1">
+          <IndianRupee className="w-3 h-3 text-emerald-400" />
+          <span className="text-sm font-bold text-foreground">{product.pricePerUnit.toLocaleString('en-IN')}</span>
+          <span className="text-[10px] text-muted-foreground">/ {product.unit}</span>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <MapPin className="w-3 h-3 text-emerald-400" />
+          <span className="truncate">{product.location}</span>
+        </div>
+        <span className={`inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border ${catColor}`}>
+          {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+        </span>
       </div>
-      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <MapPin className="w-3 h-3 text-emerald-400" />
-        <span className="truncate">{product.location}</span>
-      </div>
-      <span className={`inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border ${catColor}`}>
-        {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-      </span>
     </motion.div>
   )
 }
@@ -269,17 +319,23 @@ export function ProductPage() {
     setActiveChatUser,
     setChatOpen,
     user,
+    addToCart,
+    setCartOpen,
   } = useAppStore()
 
   const [product, setProduct] = useState<Product | null>(null)
   const [producer, setProducer] = useState<ProducerInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [orderQty, setOrderQty] = useState(1)
-  const [ordering, setOrdering] = useState(false)
   const [selectedImageIdx, setSelectedImageIdx] = useState(0)
   const [sellerProducts, setSellerProducts] = useState<Product[]>([])
   const [similarProducts, setSimilarProducts] = useState<Product[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
+
+  // Review form state
+  const [reviewRating, setReviewRating] = useState(0)
+  const [reviewComment, setReviewComment] = useState('')
+  const [submittingReview, setSubmittingReview] = useState(false)
 
   // Fetch product by ID
   const fetchProduct = useCallback(async () => {
@@ -363,15 +419,25 @@ export function ProductPage() {
     fetchSimilar()
   }, [product?.category, product?.id, product?.sellerId])
 
-  // Fetch reviews (mock if no API)
+  // Fetch reviews
   useEffect(() => {
-    if (!product?.sellerId) return
+    if (!product?.id) return
     const fetchReviews = async () => {
       try {
-        const res = await fetch(`/api/reviews?targetId=${product.sellerId}`)
+        // Try product-specific reviews first
+        const res = await fetch(`/api/reviews?productId=${product.id}`)
         if (res.ok) {
           const data = await res.json()
-          setReviews(data.reviews || [])
+          if (data.reviews && data.reviews.length > 0) {
+            setReviews(data.reviews)
+            return
+          }
+        }
+        // Fallback to seller reviews
+        const sellerRes = await fetch(`/api/reviews?targetId=${product.sellerId}`)
+        if (sellerRes.ok) {
+          const sellerData = await sellerRes.json()
+          setReviews(sellerData.reviews || [])
         } else {
           // Mock reviews
           setReviews([
@@ -388,44 +454,97 @@ export function ProductPage() {
       }
     }
     fetchReviews()
-  }, [product?.sellerId])
+  }, [product?.id, product?.sellerId])
 
-  // Handle place order
-  const handlePlaceOrder = async () => {
+  // Handle Add to Cart
+  const handleAddToCart = () => {
     if (!user) {
-      toast.error('Please sign in to place an order')
+      toast.error('Please sign in to add items to cart')
       setView('auth')
       return
     }
     if (user.role !== 'buyer' && user.role !== 'admin') {
-      toast.error('Only buyers can place orders')
+      toast.error('Only buyers can add items to cart')
       return
     }
     if (!product) return
 
-    setOrdering(true)
+    const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : undefined)
+    addToCart({
+      productId: product.id,
+      productName: product.name,
+      productImage,
+      sellerId: product.sellerId,
+      sellerName: product.seller.companyName || product.seller.name,
+      quantity: orderQty,
+      unit: product.unit,
+      pricePerUnit: product.pricePerUnit,
+      minOrderQty: product.minOrderQty || 1,
+      maxQuantity: product.quantity,
+      location: product.location,
+      state: product.state,
+    })
+    toast.success(`${product.name} added to cart`)
+  }
+
+  // Handle Buy Now (add to cart + open cart)
+  const handleBuyNow = () => {
+    handleAddToCart()
+    setCartOpen(true)
+  }
+
+  // Handle submit review
+  const handleSubmitReview = async () => {
+    if (!user) {
+      toast.error('Please sign in to write a review')
+      setView('auth')
+      return
+    }
+    if (!product) return
+    if (reviewRating === 0) {
+      toast.error('Please select a rating')
+      return
+    }
+    if (!reviewComment.trim()) {
+      toast.error('Please write a comment')
+      return
+    }
+
+    setSubmittingReview(true)
     try {
-      const res = await fetch('/api/orders', {
+      const res = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          buyerId: user.id,
-          sellerId: product.sellerId,
+          reviewerId: user.id,
+          targetId: product.sellerId,
           productId: product.id,
-          quantity: orderQty,
-          unitPrice: product.pricePerUnit,
+          rating: reviewRating,
+          comment: reviewComment.trim(),
         }),
       })
-      const data = await res.json()
       if (res.ok) {
-        toast.success(`Order placed for ${orderQty} ${product.unit} of ${product.name}`)
+        const data = await res.json()
+        setReviews((prev) => [data.review || {
+          id: Date.now().toString(),
+          reviewerId: user.id,
+          targetId: product.sellerId,
+          rating: reviewRating,
+          comment: reviewComment.trim(),
+          createdAt: new Date().toISOString(),
+          reviewer: { name: user.name, companyName: user.companyName },
+        }, ...prev])
+        setReviewRating(0)
+        setReviewComment('')
+        toast.success('Review submitted successfully!')
       } else {
-        toast.error(data.error || 'Failed to place order')
+        const data = await res.json()
+        toast.error(data.error || 'Failed to submit review')
       }
     } catch {
-      toast.error('Failed to place order')
+      toast.error('Failed to submit review')
     } finally {
-      setOrdering(false)
+      setSubmittingReview(false)
     }
   }
 
@@ -467,6 +586,9 @@ export function ProductPage() {
   // Certifications
   const productCerts = product?.certifications ? product.certifications.split(',').map((c) => c.trim()).filter(Boolean) : []
   const producerCerts = producer?.certifications ? producer.certifications.split(',').map((c) => c.trim()).filter(Boolean) : []
+
+  // Average review rating
+  const avgRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0
 
   // Format date
   const formatDate = (dateStr?: string) => {
@@ -541,7 +663,7 @@ export function ProductPage() {
           animate="visible"
           className="px-4 sm:px-6 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"
         >
-          {/* ─── Left Column: Product Images ──────────────────────────────────── */}
+          {/* ─── Left Column: Product Images + Seller's Other Products ───────── */}
           <motion.div variants={fadeUp} className="space-y-4">
             {/* Main Image Area */}
             <div className="glass-card p-4">
@@ -618,6 +740,29 @@ export function ProductPage() {
                 </div>
               )}
             </div>
+
+            {/* Seller's Other Products */}
+            {sellerProducts.length > 0 && (
+              <div className="glass-card p-4">
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-emerald-400" />
+                  Seller&apos;s Other Products
+                </h3>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                  {sellerProducts.map((sp) => (
+                    <RelatedProductCard
+                      key={sp.id}
+                      product={sp}
+                      onClick={() => {
+                        setSelectedProductId(sp.id)
+                        setSelectedImageIdx(0)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* ─── Right Column: Product Details ────────────────────────────────── */}
@@ -712,15 +857,12 @@ export function ProductPage() {
                 Quality & Certifications
               </h3>
               <div className="space-y-3">
-                {/* Quality Grade */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Quality Grade</span>
                   <span className={`text-sm font-bold px-3 py-1 rounded-lg border ${gradeColor}`}>
                     {product.qualityGrade || 'N/A'}
                   </span>
                 </div>
-
-                {/* Organic Status */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Organic Status</span>
                   {product.isOrganic ? (
@@ -735,14 +877,10 @@ export function ProductPage() {
                     </span>
                   )}
                 </div>
-
-                {/* Pesticides */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Pesticides Used</span>
                   <span className="text-sm font-medium text-foreground">{product.pesticidesUsed || 'Not specified'}</span>
                 </div>
-
-                {/* Certifications */}
                 {productCerts.length > 0 && (
                   <div className="pt-2">
                     <p className="text-xs text-muted-foreground mb-2">Certifications</p>
@@ -786,11 +924,11 @@ export function ProductPage() {
               </div>
             </div>
 
-            {/* 5. Order Section */}
+            {/* 5. Add to Cart / Buy Now Section */}
             <div className="glass-card-strong p-5 space-y-4">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ShoppingCart className="w-4 h-4 text-emerald-400" />
-                Place Order
+                Add to Cart
               </h3>
 
               <div className="flex items-center gap-4">
@@ -836,30 +974,31 @@ export function ProductPage() {
               <div className="flex gap-3">
                 <Button
                   className="flex-1 h-12 text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-                  onClick={handlePlaceOrder}
-                  disabled={ordering}
+                  onClick={handleAddToCart}
                 >
-                  {ordering ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-5 h-5 mr-2" />
-                      Place Order
-                    </>
-                  )}
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Add to Cart
                 </Button>
                 <Button
-                  variant="outline"
-                  className="h-12 px-6 border-white/10 hover:bg-white/5 hover:border-white/20"
-                  onClick={() => {
-                    setActiveChatUser(product.sellerId)
-                    setChatOpen(true)
-                  }}
+                  className="h-12 px-5 text-base font-semibold bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-500/20"
+                  onClick={handleBuyNow}
                 >
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Message Seller
+                  <Zap className="w-5 h-5 mr-2" />
+                  Buy Now
                 </Button>
               </div>
+
+              <Button
+                variant="outline"
+                className="w-full h-10 border-white/10 hover:bg-white/5 hover:border-white/20"
+                onClick={() => {
+                  setActiveChatUser(product.sellerId)
+                  setChatOpen(true)
+                }}
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Message Seller
+              </Button>
             </div>
 
             {/* 6. Delivery Information Card */}
@@ -970,11 +1109,11 @@ export function ProductPage() {
 
                   {/* Certifications */}
                   {producerCerts.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-3">
                       {producerCerts.map((cert, idx) => (
                         <span
                           key={idx}
-                          className="text-[10px] font-medium px-2 py-0.5 rounded-md border bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          className="text-xs font-medium px-2.5 py-1 rounded-lg border bg-amber-500/10 text-amber-400 border-amber-500/20"
                         >
                           {cert}
                         </span>
@@ -984,208 +1123,110 @@ export function ProductPage() {
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex sm:flex-col gap-2 sm:items-end shrink-0">
+              {/* Action buttons */}
+              <div className="flex sm:flex-col gap-2 sm:w-48 shrink-0">
                 <Button
                   variant="outline"
-                  className="border-white/10 hover:bg-white/5 hover:border-white/20 text-sm"
+                  className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 hover:border-white/20"
                   onClick={() => {
                     setSelectedProducerId(product.sellerId)
                     setView('producer-profile')
                   }}
                 >
-                  View Full Profile
-                  <ChevronRight className="w-4 h-4 ml-1" />
+                  <User className="w-4 h-4 mr-2" />
+                  View Profile
                 </Button>
                 <Button
                   variant="outline"
-                  className="border-white/10 hover:bg-white/5 hover:border-white/20 text-sm"
+                  className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 hover:border-white/20"
                   onClick={() => {
                     setActiveChatUser(product.sellerId)
                     setChatOpen(true)
                   }}
                 >
-                  <MessageSquare className="w-4 h-4 mr-1.5" />
-                  Contact Producer
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Message
                 </Button>
               </div>
             </div>
           </div>
         </motion.div>
 
-        {/* 8. Product Description */}
+        {/* 8. Reviews Section */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.5 }}
-          className="px-4 sm:px-6 mt-6"
+          className="px-4 sm:px-6 mt-8"
         >
           <div className="glass-card p-6">
-            <h3 className="text-base font-semibold text-foreground mb-4">Product Description</h3>
-
-            {product.description ? (
-              <p className="text-sm text-muted-foreground leading-relaxed">{product.description}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground italic">No description provided for this product.</p>
-            )}
-
-            {/* Detailed Crop Information Table */}
-            <div className="mt-6">
-              <h4 className="text-sm font-semibold text-foreground mb-3">Detailed Information</h4>
-              <div className="rounded-xl overflow-hidden border border-white/10">
-                <table className="w-full text-sm">
-                  <tbody>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02] w-1/3">Category</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground capitalize">{product.category}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Crop Variety</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.cropVariety || 'Standard'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Quality Grade</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.qualityGrade || 'N/A'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Organic</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.isOrganic ? 'Yes' : 'No'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Harvest Date</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{formatDate(product.harvestDate)}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Freshness</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.freshness || 'N/A'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Moisture Content</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.moistureContent || 'N/A'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Shelf Life</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.shelfLife || 'N/A'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Storage Condition</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.storageCondition || 'N/A'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Pesticides Used</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.pesticidesUsed || 'Not specified'}</td>
-                    </tr>
-                    <tr className="border-b border-white/5">
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Available Quantity</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.quantity.toLocaleString('en-IN')} {product.unit}</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-2.5 text-muted-foreground bg-white/[0.02]">Min. Order Qty</td>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{product.minOrderQty || 1} {product.unit}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 9. Related Products */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-          className="px-4 sm:px-6 mt-6 space-y-6"
-        >
-          {/* Other Products from This Producer */}
-          {sellerProducts.length > 0 && (
-            <div className="glass-card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-foreground">Other Products from This Producer</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setSelectedProducerId(product.sellerId)
-                    setView('producer-profile')
-                  }}
-                >
-                  View All
-                  <ChevronRight className="w-3 h-3 ml-1" />
-                </Button>
-              </div>
-              <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-                {sellerProducts.map((p) => (
-                  <RelatedProductCard
-                    key={p.id}
-                    product={p}
-                    onClick={() => {
-                      setSelectedProductId(p.id)
-                      setView('product')
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Similar Products */}
-          {similarProducts.length > 0 && (
-            <div className="glass-card p-5">
-              <h3 className="text-base font-semibold text-foreground mb-4">Similar Products</h3>
-              <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-                {similarProducts.map((p) => (
-                  <RelatedProductCard
-                    key={p.id}
-                    product={p}
-                    onClick={() => {
-                      setSelectedProductId(p.id)
-                      setView('product')
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </motion.div>
-
-        {/* 10. Reviews Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, duration: 0.5 }}
-          className="px-4 sm:px-6 mt-6"
-        >
-          <div className="glass-card p-6">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-6">
               <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-400" />
                 Reviews
+                {reviews.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({reviews.length} review{reviews.length !== 1 ? 's' : ''})
+                  </span>
+                )}
               </h3>
-              {producer && producer.totalReviews > 0 && (
+              {reviews.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <StarRating rating={producer.avgRating} size="md" />
-                  <span className="text-lg font-bold text-foreground">{producer.avgRating.toFixed(1)}</span>
-                  <span className="text-sm text-muted-foreground">({producer.totalReviews})</span>
+                  <StarRating rating={avgRating} size="sm" />
+                  <span className="text-sm font-semibold text-foreground">{avgRating.toFixed(1)}</span>
                 </div>
               )}
             </div>
 
+            {/* Write a Review (for buyers) */}
+            {user && user.role === 'buyer' && (
+              <div className="glass-card p-4 mb-6 space-y-3">
+                <h4 className="text-sm font-semibold text-foreground">Write a Review</h4>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Your Rating</Label>
+                  <InteractiveStarRating value={reviewRating} onChange={setReviewRating} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Your Review</Label>
+                  <Textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Share your experience with this product and seller..."
+                    className="min-h-[80px] bg-white/5 border-white/10 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none"
+                  />
+                </div>
+                <Button
+                  className="bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                  onClick={handleSubmitReview}
+                  disabled={submittingReview || reviewRating === 0}
+                >
+                  {submittingReview ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Submit Review
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Reviews List */}
             {reviews.length === 0 ? (
               <div className="text-center py-8">
                 <Star className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">No reviews yet for this producer.</p>
+                <p className="text-sm text-muted-foreground">No reviews yet. Be the first to review!</p>
               </div>
             ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto">
+              <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
                 {reviews.map((review) => (
                   <div key={review.id} className="glass-card p-4">
-                    <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-emerald-400">
-                            {(review.reviewer?.name || 'U')[0].toUpperCase()}
+                        <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-bold text-amber-400">
+                            {(review.reviewer?.name || '?')[0].toUpperCase()}
                           </span>
                         </div>
                         <div>
@@ -1193,24 +1234,58 @@ export function ProductPage() {
                             {review.reviewer?.name || 'Anonymous'}
                           </p>
                           {review.reviewer?.companyName && (
-                            <p className="text-xs text-amber-400">{review.reviewer.companyName}</p>
+                            <p className="text-xs text-amber-400/70">{review.reviewer.companyName}</p>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex flex-col items-end gap-1 shrink-0">
                         <StarRating rating={review.rating} size="sm" />
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDate(review.createdAt)}
+                        </span>
                       </div>
                     </div>
                     {review.comment && (
-                      <p className="text-sm text-muted-foreground leading-relaxed mt-1">{review.comment}</p>
+                      <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                        {review.comment}
+                      </p>
                     )}
-                    <p className="text-[10px] text-muted-foreground mt-2">{formatDate(review.createdAt)}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
         </motion.div>
+
+        {/* 9. Similar Products Section */}
+        {similarProducts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.5 }}
+            className="px-4 sm:px-6 mt-8"
+          >
+            <div className="glass-card p-6">
+              <h3 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+                <ChevronRight className="w-4 h-4 text-emerald-400" />
+                Similar Products
+              </h3>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                {similarProducts.map((sp) => (
+                  <RelatedProductCard
+                    key={sp.id}
+                    product={sp}
+                    onClick={() => {
+                      setSelectedProductId(sp.id)
+                      setSelectedImageIdx(0)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Bottom spacing */}
         <div className="h-16" />

@@ -6,15 +6,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const targetId = searchParams.get('targetId')
     const reviewerId = searchParams.get('reviewerId')
+    const productId = searchParams.get('productId')
 
     let query = supabase
       .from('Review')
-      .select('*, reviewer:User!reviewerId(id, name, companyName)')
+      .select('*, reviewer:User!reviewerId(id, name, companyName), product:Product!productId(id, name, category)')
       .order('createdAt', { ascending: false })
       .limit(50)
 
     if (targetId) query = query.eq('targetId', targetId)
     if (reviewerId) query = query.eq('reviewerId', reviewerId)
+    if (productId) query = query.eq('productId', productId)
 
     const { data: reviews, error: reviewsError } = await query
 
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { reviewerId, targetId, rating, comment } = body
+    const { reviewerId, targetId, productId, rating, comment } = body
 
     if (!reviewerId || !targetId || !rating) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
       .insert({
         reviewerId,
         targetId,
+        productId: productId || null,
         rating: parseInt(rating),
         comment,
       })

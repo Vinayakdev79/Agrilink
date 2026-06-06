@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore, type UserRole, type AppUser } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -30,7 +31,11 @@ import {
   XCircle,
   Leaf,
   FileText,
+  Camera,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 // ─── Role Config ──────────────────────────────────────────────────────────────
 const roleConfig: Record<UserRole, { label: string; color: string; bgClass: string; borderClass: string; icon: typeof User }> = {
@@ -116,7 +121,7 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number] },
   },
 }
 
@@ -124,6 +129,10 @@ const itemVariants = {
 export function ProfilePage() {
   const { user, setUser, setView } = useAppStore()
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -131,7 +140,17 @@ export function ProfilePage() {
     state: '',
     city: '',
     gstNumber: '',
+    address: '',
+    // Producer-specific fields
+    farmName: '',
+    farmSize: '',
+    farmLocation: '',
+    yearsExperience: '',
+    certifications: '',
   })
+
+  const bannerInputRef = useRef<HTMLInputElement>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // Sync form data with user
   useEffect(() => {
@@ -143,11 +162,19 @@ export function ProfilePage() {
         state: user.state || '',
         city: user.city || '',
         gstNumber: '',
+        address: user.address || '',
+        farmName: user.farmName || '',
+        farmSize: user.farmSize || '',
+        farmLocation: user.farmLocation || '',
+        yearsExperience: user.yearsExperience ? String(user.yearsExperience) : '',
+        certifications: user.certifications || '',
       })
+      setBannerUrl(user.bannerUrl || null)
+      setAvatarUrl(user.avatarUrl || null)
     }
   }, [user])
 
-  // Fetch latest user data including gstNumber
+  // Fetch latest user data including all new fields
   useEffect(() => {
     if (!user) return
     async function fetchUser() {
@@ -164,7 +191,15 @@ export function ProfilePage() {
               state: data.user.state || prev.state,
               city: data.user.city || prev.city,
               gstNumber: data.user.gstNumber || '',
+              address: data.user.address || '',
+              farmName: data.user.farmName || '',
+              farmSize: data.user.farmSize || '',
+              farmLocation: data.user.farmLocation || '',
+              yearsExperience: data.user.yearsExperience ? String(data.user.yearsExperience) : '',
+              certifications: data.user.certifications || '',
             }))
+            if (data.user.avatarUrl) setAvatarUrl(data.user.avatarUrl)
+            if (data.user.bannerUrl) setBannerUrl(data.user.bannerUrl)
           }
         }
       } catch {
@@ -174,12 +209,75 @@ export function ProfilePage() {
     fetchUser()
   }, [user])
 
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingBanner(true)
+    try {
+      const uploadForm = new FormData()
+      uploadForm.append('file', file)
+      uploadForm.append('folder', 'banners')
+      const res = await fetch('/api/upload', { method: 'POST', body: uploadForm })
+      if (res.ok) {
+        const data = await res.json()
+        setBannerUrl(data.url)
+        // Update user on server
+        await fetch('/api/users', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user!.id, bannerUrl: data.url }),
+        })
+        // Update local store
+        if (user) setUser({ ...user, bannerUrl: data.url })
+        toast.success('Banner updated!')
+      } else {
+        toast.error('Failed to upload banner')
+      }
+    } catch {
+      toast.error('Failed to upload banner')
+    } finally {
+      setUploadingBanner(false)
+    }
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAvatar(true)
+    try {
+      const uploadForm = new FormData()
+      uploadForm.append('file', file)
+      uploadForm.append('folder', 'avatars')
+      const res = await fetch('/api/upload', { method: 'POST', body: uploadForm })
+      if (res.ok) {
+        const data = await res.json()
+        setAvatarUrl(data.url)
+        // Update user on server
+        await fetch('/api/users', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user!.id, avatarUrl: data.url }),
+        })
+        // Update local store
+        if (user) setUser({ ...user, avatarUrl: data.url })
+        toast.success('Avatar updated!')
+      } else {
+        toast.error('Failed to upload avatar')
+      }
+    } catch {
+      toast.error('Failed to upload avatar')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
   if (!user) return null
 
   const roleInfo = roleConfig[user.role]
   const verifyInfo = verificationConfig[user.verificationStatus] || verificationConfig.pending
   const VerifyIcon = verifyInfo.icon
   const RoleIcon = roleInfo.icon
+  const isProducer = user.role === 'producer'
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -189,18 +287,30 @@ export function ProfilePage() {
 
     setIsSaving(true)
     try {
+      const body: Record<string, unknown> = {
+        userId: user.id,
+        name: formData.name,
+        phone: formData.phone || undefined,
+        companyName: formData.companyName || undefined,
+        state: formData.state || undefined,
+        city: formData.city || undefined,
+        gstNumber: formData.gstNumber || undefined,
+        address: formData.address || undefined,
+      }
+
+      // Producer-specific fields
+      if (isProducer) {
+        body.farmName = formData.farmName || undefined
+        body.farmSize = formData.farmSize || undefined
+        body.farmLocation = formData.farmLocation || undefined
+        body.yearsExperience = formData.yearsExperience ? parseInt(formData.yearsExperience) : undefined
+        body.certifications = formData.certifications || undefined
+      }
+
       const res = await fetch('/api/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          name: formData.name,
-          phone: formData.phone || undefined,
-          companyName: formData.companyName || undefined,
-          state: formData.state || undefined,
-          city: formData.city || undefined,
-          gstNumber: formData.gstNumber || undefined,
-        }),
+        body: JSON.stringify(body),
       })
 
       const data = await res.json()
@@ -219,6 +329,12 @@ export function ProfilePage() {
         companyName: data.user.companyName || undefined,
         state: data.user.state || undefined,
         city: data.user.city || undefined,
+        address: data.user.address || undefined,
+        farmName: data.user.farmName || undefined,
+        farmSize: data.user.farmSize || undefined,
+        farmLocation: data.user.farmLocation || undefined,
+        yearsExperience: data.user.yearsExperience || undefined,
+        certifications: data.user.certifications || undefined,
       }
       setUser(updatedUser)
 
@@ -229,6 +345,8 @@ export function ProfilePage() {
       setIsSaving(false)
     }
   }
+
+  const getInitials = (name: string) => name.slice(0, 2).toUpperCase() || 'U'
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -268,6 +386,40 @@ export function ProfilePage() {
           animate="visible"
           className="space-y-6"
         >
+          {/* Banner Image */}
+          <motion.div variants={itemVariants}>
+            <div className="relative w-full h-40 rounded-2xl overflow-hidden border border-glass-border group">
+              {bannerUrl ? (
+                <img src={bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-r from-emerald-900/40 via-teal-900/30 to-amber-900/40" />
+              )}
+              <button
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={uploadingBanner}
+                className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors cursor-pointer"
+              >
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1">
+                  {uploadingBanner ? (
+                    <Loader2 className="h-6 w-6 text-white animate-spin" />
+                  ) : (
+                    <Camera className="h-6 w-6 text-white" />
+                  )}
+                  <span className="text-white text-xs font-medium">
+                    {uploadingBanner ? 'Uploading...' : 'Edit Banner'}
+                  </span>
+                </div>
+              </button>
+              <input
+                ref={bannerInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleBannerUpload}
+              />
+            </div>
+          </motion.div>
+
           {/* Verification Status Card */}
           <motion.div variants={itemVariants}>
             <Card className={`${verifyInfo.bgClass} border ${verifyInfo.borderClass} p-5 rounded-2xl`}>
@@ -294,8 +446,34 @@ export function ProfilePage() {
           <motion.div variants={itemVariants}>
             <Card className="glass-card p-6 rounded-2xl">
               <div className="flex items-center gap-5">
-                <div className="w-20 h-20 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                  <User className="w-10 h-10 text-emerald-400" />
+                {/* Avatar with upload */}
+                <div className="relative group">
+                  <Avatar className="w-20 h-20 border-2 border-glass-border shrink-0">
+                    {avatarUrl ? (
+                      <AvatarImage src={avatarUrl} alt={user.name || ''} />
+                    ) : null}
+                    <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-2xl font-bold">
+                      {getInitials(user.name || '')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 border-2 border-background flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                    ) : (
+                      <Camera className="h-3.5 w-3.5 text-white" />
+                    )}
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h2 className="text-xl font-bold text-foreground truncate">{user.name || 'Unnamed User'}</h2>
@@ -438,6 +616,110 @@ export function ProfilePage() {
                     />
                   </div>
                 </div>
+
+                {/* Address - for ALL users */}
+                <div className="space-y-2">
+                  <Label htmlFor="address" className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5" />
+                    Full Address
+                  </Label>
+                  <Textarea
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className="glass-input text-foreground placeholder:text-muted-foreground/50 min-h-[80px]"
+                    placeholder="Enter your full address"
+                  />
+                </div>
+
+                {/* ─── Producer-Specific Fields ──────────────────────────── */}
+                {isProducer && (
+                  <>
+                    <div className="border-t border-glass-border pt-5 mt-5">
+                      <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2 mb-4">
+                        <Leaf className="h-4 w-4" />
+                        Farm & Producer Details
+                      </h4>
+                    </div>
+
+                    {/* Farm Name */}
+                    <div className="space-y-2">
+                      <Label htmlFor="farmName" className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <Leaf className="h-3.5 w-3.5" />
+                        Farm Name
+                      </Label>
+                      <Input
+                        id="farmName"
+                        value={formData.farmName}
+                        onChange={(e) => setFormData({ ...formData, farmName: e.target.value })}
+                        className="glass-input h-11 text-foreground placeholder:text-muted-foreground/50"
+                        placeholder="e.g. Green Valley Farms"
+                      />
+                    </div>
+
+                    {/* Farm Size & Farm Location */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="farmSize" className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5" />
+                          Farm Size
+                        </Label>
+                        <Input
+                          id="farmSize"
+                          value={formData.farmSize}
+                          onChange={(e) => setFormData({ ...formData, farmSize: e.target.value })}
+                          className="glass-input h-11 text-foreground placeholder:text-muted-foreground/50"
+                          placeholder="e.g. 50 acres"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="farmLocation" className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5" />
+                          Farm Location
+                        </Label>
+                        <Input
+                          id="farmLocation"
+                          value={formData.farmLocation}
+                          onChange={(e) => setFormData({ ...formData, farmLocation: e.target.value })}
+                          className="glass-input h-11 text-foreground placeholder:text-muted-foreground/50"
+                          placeholder="e.g. Nashik, Maharashtra"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Years of Experience */}
+                    <div className="space-y-2">
+                      <Label htmlFor="yearsExperience" className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <User className="h-3.5 w-3.5" />
+                        Years of Experience
+                      </Label>
+                      <Input
+                        id="yearsExperience"
+                        type="number"
+                        value={formData.yearsExperience}
+                        onChange={(e) => setFormData({ ...formData, yearsExperience: e.target.value })}
+                        className="glass-input h-11 text-foreground placeholder:text-muted-foreground/50"
+                        placeholder="e.g. 15"
+                      />
+                    </div>
+
+                    {/* Certifications */}
+                    <div className="space-y-2">
+                      <Label htmlFor="certifications" className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5" />
+                        Certifications
+                      </Label>
+                      <Input
+                        id="certifications"
+                        value={formData.certifications}
+                        onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
+                        className="glass-input h-11 text-foreground placeholder:text-muted-foreground/50"
+                        placeholder="e.g. FSSAI, APEDA, Organic India (comma separated)"
+                      />
+                      <p className="text-[11px] text-muted-foreground/60">Separate multiple certifications with commas</p>
+                    </div>
+                  </>
+                )}
 
                 {/* Role (read-only) */}
                 <div className="space-y-2">

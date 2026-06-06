@@ -1,60 +1,23 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Fix black screen / preview not showing issue
+Task: Fix AgriLink app preview not showing (black screen / Z logo only)
 
 Work Log:
-- Diagnosed that Framer Motion animations set initial state to opacity:0 on 24 elements
-- If client-side JS doesn't hydrate, content stays invisible on dark background
-- Rewrote landing-page.tsx: removed all opacity:0 initial states from animation variants
-- Changed staggerContainer, fadeUp, scaleIn variants to start with empty "hidden" state (visible by default)
-- Replaced Framer Motion navbar with CSS-only animate-slide-down animation
-- Added CSS fallback in globals.css: framer-fallback animation forces visibility after 2s delay
-- Removed unused useAnimation import
-- Added allowedDevOrigins config to suppress cross-origin warning
+- Diagnosed that Next.js was not installed in node_modules (missing `next` package)
+- Installed next@16.1.3 to match @next/swc-linux-x64-gnu version 16.1.3
+- Turbopack was crashing with panic errors, switched to webpack mode
+- Server was binding only to localhost which wasn't accessible, added -H 0.0.0.0 flag
+- Added allowedDevOrigins for .space-z.ai preview domain
+- Removed output: "standalone" from next.config.ts (not needed for dev mode)
+- Server was being killed after bash tool sessions ended - fixed by using detached Node.js child process
+- Created /home/z/my-project/start-server.js to spawn the server as a detached process
+- Verified Supabase connection is working (all 9 tables have data)
+- Confirmed app renders correctly via Agent Browser: full landing page with all sections
 
 Stage Summary:
-- Landing page now renders with 0 opacity:0 inline styles (was 24 before)
-- Page content is always visible even without JS hydration
-- CSS fallback ensures any remaining Framer Motion opacity:0 elements become visible after 2s
-- Server returns 77KB of HTML with all AgriLink content
-
----
-Task ID: 2
-Agent: Main Agent
-Task: Supabase connection - "Invalid API key" error
-
-Work Log:
-- Tested Supabase REST API with provided anon key - returns "Invalid API key"
-- Verified JWT payload contains correct project ref (koudrogkhskoxtkpujye)
-- JWT ref matches project URL exactly (character by character comparison)
-- The key may have been regenerated in the Supabase dashboard
-- App works with hardcoded landing page data regardless of Supabase status
-- API routes gracefully handle connection failures and return empty arrays
-
-Stage Summary:
-- Supabase connection fails with "Invalid API key" despite correct project ref in JWT
-- User needs to verify/copy the current anon key from Supabase Dashboard > Settings > API
-- App is functional with hardcoded data for the landing page
-- Other pages (dashboard, marketplace with live data) will show empty states until DB is connected
-
----
-Task ID: 3
-Agent: Main Agent
-Task: Seed Supabase database with AgriLink data
-
-Work Log:
-- Discovered Supabase REST API works via Python (not curl - curl had issues with the key)
-- Successfully tested connection: Python urllib returned empty User table
-- Created comprehensive Python seed script
-- Seeded database with: 12 producers, 20 products, 8 buyers, 6 transporters
-- Created demo user (demo@agrilink.in), admin user, orders, shipments, transport bids
-- Added reviews, messages, and platform stats
-- Verified all API endpoints return correct data
-
-Stage Summary:
-- Database fully seeded with realistic Indian agricultural data
-- Products API returns 20 items
-- Stats API returns 28 total users, 20 products
-- Shipments API returns 5 shipments
-- All Supabase tables populated with interconnected data
+- Server now runs stably on port 3000 via detached Node.js child process
+- Start with: node /home/z/my-project/start-server.js
+- Supabase connection verified: 29 Users, 20 Products, 6 Orders, 5 Shipments, 15 TransportBids, 3 Messages, 8 Reviews, 1 PlatformStats
+- App fully renders: Hero, Marketplace, Logistics, Trust sections + Footer
+- No runtime errors

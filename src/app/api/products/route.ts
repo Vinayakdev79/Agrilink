@@ -70,7 +70,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { sellerId, category, name, description, quantity, unit, pricePerUnit, minOrderQty, location, state, qualityGrade } = body
+    const {
+      sellerId, category, name, description, quantity, unit, pricePerUnit,
+      minOrderQty, location, state, qualityGrade,
+      imageUrl, images, cropVariety, harvestDate, freshness,
+      isOrganic, pesticidesUsed, moistureContent, shelfLife,
+      storageCondition, certifications,
+    } = body
 
     if (!sellerId || !category || !name || !quantity || !unit || !pricePerUnit || !location) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -90,6 +96,17 @@ export async function POST(request: Request) {
         location,
         state,
         qualityGrade,
+        imageUrl: imageUrl || null,
+        images: images || null,
+        cropVariety: cropVariety || null,
+        harvestDate: harvestDate || null,
+        freshness: freshness || null,
+        isOrganic: isOrganic || false,
+        pesticidesUsed: pesticidesUsed || null,
+        moistureContent: moistureContent || null,
+        shelfLife: shelfLife || null,
+        storageCondition: storageCondition || null,
+        certifications: certifications || null,
         isActive: true,
       })
       .select()

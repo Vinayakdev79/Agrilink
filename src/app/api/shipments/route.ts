@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       pickupLatitude, pickupLongitude,
       dropLatitude, dropLongitude,
       expectedPickupDate,
+      budgetMin, budgetMax,
     } = body
 
     const { data: shipment, error: shipmentError } = await supabase
@@ -70,6 +71,8 @@ export async function POST(request: Request) {
         dropLatitude: dropLatitude || null,
         dropLongitude: dropLongitude || null,
         expectedPickupDate: expectedPickupDate ? new Date(expectedPickupDate).toISOString() : null,
+        budgetMin: budgetMin ? parseFloat(budgetMin) : null,
+        budgetMax: budgetMax ? parseFloat(budgetMax) : null,
       })
       .select()
       .single()
@@ -103,6 +106,7 @@ export async function PATCH(request: Request) {
       shipmentId, status, transporterId, vehicleType, vehicleNumber,
       driverName, driverPhone,
       currentLatitude, currentLongitude,
+      expectedPickupDate,
     } = body
 
     const updateData: Record<string, unknown> = { status }
@@ -111,6 +115,7 @@ export async function PATCH(request: Request) {
     if (vehicleNumber) updateData.vehicleNumber = vehicleNumber
     if (driverName) updateData.driverName = driverName
     if (driverPhone) updateData.driverPhone = driverPhone
+    if (expectedPickupDate !== undefined) updateData.expectedPickupDate = expectedPickupDate ? new Date(expectedPickupDate).toISOString() : null
 
     if (status === 'delivered') {
       updateData.actualDelivery = new Date().toISOString()

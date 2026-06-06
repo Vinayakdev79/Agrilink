@@ -1,13 +1,13 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   ClipboardList, ShoppingCart, IndianRupee, Users, Store, Plus,
   MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
   ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield, ChevronRight,
-  Eye, Gavel, Phone, Crosshair
+  Eye, Gavel, Phone, Crosshair, CalendarDays, Image as ImageIcon, Upload, User
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +27,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts'
 import { toast } from 'sonner'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
 
 interface BuyerDashboardProps {
@@ -56,6 +56,15 @@ const bidStatusColors: Record<string, string> = {
   pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   accepted: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
+}
+
+const shipmentStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
 }
 
 const categories = ['grains', 'vegetables', 'fruits', 'spices', 'dairy', 'poultry', 'pulses', 'oilseeds']
@@ -98,8 +107,10 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
     deliveryLocation: '', deliveryState: '', maxBudget: '', description: ''
   })
   const [requirements, setRequirements] = useState<any[]>([])
-  const [shipmentForm, setShipmentForm] = useState<{ open: boolean; orderId: string; origin: string; destination: string; distance: string }>({
-    open: false, orderId: '', origin: '', destination: '', distance: ''
+  const [shipmentForm, setShipmentForm] = useState<{
+    open: boolean; orderId: string; origin: string; originState: string; destination: string; destinationState: string; distance: string; budgetMin: string; budgetMax: string
+  }>({
+    open: false, orderId: '', origin: '', originState: '', destination: '', destinationState: '', distance: '', budgetMin: '', budgetMax: ''
   })
   // Producers tab state
   const [producers, setProducers] = useState<any[]>([])
@@ -181,19 +192,23 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
 
   const handleCreateShipment = async () => {
     try {
+      const body: Record<string, unknown> = {
+        orderId: shipmentForm.orderId,
+        origin: shipmentForm.origin,
+        destination: shipmentForm.destination,
+        distance: shipmentForm.distance,
+      }
+      if (shipmentForm.budgetMin) body.budgetMin = shipmentForm.budgetMin
+      if (shipmentForm.budgetMax) body.budgetMax = shipmentForm.budgetMax
+
       const res = await fetch('/api/shipments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: shipmentForm.orderId,
-          origin: shipmentForm.origin,
-          destination: shipmentForm.destination,
-          distance: shipmentForm.distance
-        })
+        body: JSON.stringify(body)
       })
       if (res.ok) {
         toast.success('Shipment created! Transporters will be notified.')
-        setShipmentForm({ open: false, orderId: '', origin: '', destination: '', distance: '' })
+        setShipmentForm({ open: false, orderId: '', origin: '', originState: '', destination: '', destinationState: '', distance: '', budgetMin: '', budgetMax: '' })
         fetchData()
       } else {
         toast.error('Failed to create shipment')
@@ -538,135 +553,305 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
       <div className="space-y-6">
         <h3 className="text-xl font-semibold text-foreground">Orders</h3>
         {loading ? (
-          <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+          <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}</div>
         ) : orders.length === 0 ? (
           <div className="glass-card p-12 text-center">
             <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">No orders yet</p>
           </div>
         ) : (
-          <div className="glass-card overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-glass-border hover:bg-transparent">
-                  <TableHead className="text-muted-foreground">Product</TableHead>
-                  <TableHead className="text-muted-foreground">Supplier</TableHead>
-                  <TableHead className="text-muted-foreground">Quantity</TableHead>
-                  <TableHead className="text-muted-foreground">Total</TableHead>
-                  <TableHead className="text-muted-foreground">Date</TableHead>
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-muted-foreground">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((order) => {
-                  const shipment = getShipmentForOrder(order.id)
-                  const hasShipment = !!shipment
-                  const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
+          <div className="space-y-4">
+            {orders.map((order) => {
+              const shipment = getShipmentForOrder(order.id)
+              const hasShipment = !!shipment
+              const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
+              const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
 
-                  return (
-                    <TableRow key={order.id} className="border-glass-border">
-                      <TableCell className="font-medium text-foreground">{order.product?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.seller?.name || order.seller?.companyName || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.quantity} {order.product?.unit || ''}</TableCell>
-                      <TableCell className="text-amber-400 font-medium">₹{order.totalPrice?.toLocaleString()}</TableCell>
-                      <TableCell className="text-muted-foreground text-xs">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <Badge className={`${statusColors[order.status] || ''} border text-xs`}>
+              return (
+                <motion.div
+                  key={order.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-5 space-y-4"
+                >
+                  {/* Order header with product image */}
+                  <div className="flex gap-4">
+                    {/* Product Image */}
+                    {order.product?.imageUrl ? (
+                      <div className="w-20 h-20 rounded-xl overflow-hidden border border-glass-border shrink-0">
+                        <img src={order.product.imageUrl} alt={order.product?.name || 'Product'} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                        <ShoppingBag className="h-8 w-8 text-emerald-400/50" />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-semibold text-foreground">{order.product?.name || 'N/A'}</h4>
+                          <p className="text-xs text-muted-foreground capitalize">{order.product?.category || ''}</p>
+                        </div>
+                        <Badge className={`${statusColors[order.status] || ''} border text-xs shrink-0`}>
                           {order.status}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Create Shipment button - for confirmed orders without shipments */}
-                          {order.status === 'confirmed' && !hasShipment && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1 text-xs"
-                              onClick={() => setShipmentForm({
-                                open: true,
-                                orderId: order.id,
-                                origin: order.seller?.city || '',
-                                destination: user?.city || '',
-                                distance: ''
-                              })}
-                            >
-                              <Truck className="h-3 w-3" /> Create Shipment
-                            </Button>
-                          )}
+                      </div>
 
-                          {/* View Bids button - for orders with shipments that are pending/bidding */}
-                          {hasShipment && ['pending', 'bidding'].includes(shipment.status) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 text-xs"
-                              onClick={() => handleViewBids(shipment.id)}
-                            >
-                              <Gavel className="h-3 w-3" /> View Bids
-                              {shipment.transportBids?.length > 0 && (
-                                <span className="ml-0.5 px-1 py-0 rounded-full bg-amber-500/20 text-[9px]">
-                                  {shipment.transportBids.length}
-                                </span>
-                              )}
-                            </Button>
-                          )}
-
-                          {/* Shipped badge for assigned shipments */}
-                          {hasShipment && shipment.status === 'assigned' && (
-                            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
-                              <Truck className="h-3 w-3 mr-1" /> Assigned
-                            </Badge>
-                          )}
-
-                          {/* Track Shipment button for in-transit */}
-                          {isShippedOrInTransit && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1 text-xs"
-                              onClick={() => handleTrackShipment(shipment)}
-                            >
-                              <Crosshair className="h-3 w-3" /> Track
-                            </Button>
-                          )}
-
-                          {/* Delivered badge */}
-                          {hasShipment && shipment.status === 'delivered' && (
-                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
-                              <CheckCircle className="h-3 w-3 mr-1" /> Delivered
-                            </Badge>
-                          )}
+                      {/* Price details */}
+                      <div className="flex items-center gap-4 mt-2 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Qty</p>
+                          <p className="text-foreground font-medium">{order.quantity} {order.product?.unit || ''}</p>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Unit Price</p>
+                          <p className="text-foreground font-medium">₹{order.product?.pricePerUnit?.toLocaleString() || '—'}/{order.product?.unit || ''}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Total</p>
+                          <p className="text-amber-400 font-bold">₹{order.totalPrice?.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Seller info */}
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-glass-border">
+                    <Avatar className="h-8 w-8 border border-glass-border shrink-0">
+                      {order.seller?.avatarUrl ? (
+                        <AvatarImage src={order.seller.avatarUrl} alt={order.seller?.name || ''} />
+                      ) : null}
+                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                        {(order.seller?.name || 'S').slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{order.seller?.name || order.seller?.companyName || 'Unknown Seller'}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {order.seller?.companyName && <span>{order.seller.companyName}</span>}
+                        {(order.seller?.city || order.seller?.state) && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {[order.seller?.city, order.seller?.state].filter(Boolean).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString()}</p>
+                  </div>
+
+                  {/* Shipment Transport Details */}
+                  {hasTransport && (
+                    <div className="glass-card p-4 border border-teal-500/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Truck className="h-4 w-4 text-teal-400" />
+                        <h5 className="text-sm font-semibold text-foreground">Transport Details</h5>
+                        <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px] ml-auto`}>
+                          {shipment.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Company</p>
+                          <p className="text-foreground font-medium text-xs">
+                            {shipment.transporter?.companyName || shipment.transporter?.name || 'N/A'}
+                          </p>
+                        </div>
+                        {shipment.driverName && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Driver</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <User className="h-3 w-3 text-emerald-400" />
+                              {shipment.driverName}
+                            </p>
+                            {shipment.driverPhone && (
+                              <p className="text-muted-foreground text-[10px] flex items-center gap-1 mt-0.5">
+                                <Phone className="h-2.5 w-2.5" />
+                                {shipment.driverPhone}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {(shipment.vehicleType || shipment.vehicleNumber) && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Vehicle</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <Truck className="h-3 w-3 text-emerald-400" />
+                              {shipment.vehicleType || 'N/A'}
+                              {shipment.vehicleNumber && ` (${shipment.vehicleNumber})`}
+                            </p>
+                          </div>
+                        )}
+                        {shipment.expectedPickupDate && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Expected Pickup</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <CalendarDays className="h-3 w-3 text-amber-400" />
+                              {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN')}
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Pickup</p>
+                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-emerald-400" />
+                            {shipment.exactPickupAddress || shipment.origin}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Drop-off</p>
+                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-red-400" />
+                            {shipment.exactDropAddress || shipment.destination}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Track Shipment Button */}
+                      {isShippedOrInTransit && (
+                        <div className="mt-3 pt-3 border-t border-glass-border">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1.5 text-xs"
+                            onClick={() => handleTrackShipment(shipment)}
+                          >
+                            <Crosshair className="h-3.5 w-3.5" /> Track Shipment
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {order.status === 'confirmed' && !hasShipment && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1 text-xs"
+                        onClick={() => {
+                          const sellerCity = order.seller?.city || ''
+                          const sellerState = order.seller?.state || ''
+                          const buyerCity = user?.city || ''
+                          const buyerState = user?.state || ''
+                          setShipmentForm({
+                            open: true,
+                            orderId: order.id,
+                            origin: sellerCity,
+                            originState: sellerState,
+                            destination: buyerCity,
+                            destinationState: buyerState,
+                            distance: '',
+                            budgetMin: '',
+                            budgetMax: ''
+                          })
+                        }}
+                      >
+                        <Truck className="h-3 w-3" /> Create Shipment
+                      </Button>
+                    )}
+
+                    {hasShipment && ['pending', 'bidding'].includes(shipment.status) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 text-xs"
+                        onClick={() => handleViewBids(shipment.id)}
+                      >
+                        <Gavel className="h-3 w-3" /> View Bids
+                        {shipment.transportBids?.length > 0 && (
+                          <span className="ml-0.5 px-1 py-0 rounded-full bg-amber-500/20 text-[9px]">
+                            {shipment.transportBids.length}
+                          </span>
+                        )}
+                      </Button>
+                    )}
+
+                    {hasShipment && shipment.status === 'assigned' && (
+                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
+                        <Truck className="h-3 w-3 mr-1" /> Transporter Assigned
+                      </Badge>
+                    )}
+
+                    {hasShipment && shipment.status === 'delivered' && (
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
+                        <CheckCircle className="h-3 w-3 mr-1" /> Delivered
+                      </Badge>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         )}
 
         {/* Create Shipment Dialog */}
         <Dialog open={shipmentForm.open} onOpenChange={(open) => setShipmentForm(prev => ({ ...prev, open }))}>
-          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl">
+          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-foreground">Create Shipment</DialogTitle>
               <DialogDescription className="text-muted-foreground">Set up shipment for this order</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label className="text-foreground">Origin</Label>
-                <Input className="glass-input text-foreground" value={shipmentForm.origin} onChange={e => setShipmentForm(p => ({ ...p, origin: e.target.value }))} />
+              {/* Pickup info */}
+              <div className="glass-card p-3 border border-emerald-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin className="h-4 w-4 text-emerald-400" />
+                  <span className="text-sm font-medium text-foreground">Pickup from</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1">
+                    <Label className="text-foreground text-xs">City</Label>
+                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.origin} onChange={e => setShipmentForm(p => ({ ...p, origin: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-foreground text-xs">State</Label>
+                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.originState} onChange={e => setShipmentForm(p => ({ ...p, originState: e.target.value }))} />
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label className="text-foreground">Destination</Label>
-                <Input className="glass-input text-foreground" value={shipmentForm.destination} onChange={e => setShipmentForm(p => ({ ...p, destination: e.target.value }))} />
+
+              {/* Destination info */}
+              <div className="glass-card p-3 border border-amber-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin className="h-4 w-4 text-amber-400" />
+                  <span className="text-sm font-medium text-foreground">Deliver to</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1">
+                    <Label className="text-foreground text-xs">City</Label>
+                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.destination} onChange={e => setShipmentForm(p => ({ ...p, destination: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-foreground text-xs">State</Label>
+                    <Input className="glass-input text-foreground text-sm h-9" value={shipmentForm.destinationState} onChange={e => setShipmentForm(p => ({ ...p, destinationState: e.target.value }))} />
+                  </div>
+                </div>
               </div>
+
               <div className="grid gap-2">
                 <Label className="text-foreground">Distance (km)</Label>
                 <Input type="number" className="glass-input text-foreground" placeholder="e.g. 500" value={shipmentForm.distance} onChange={e => setShipmentForm(p => ({ ...p, distance: e.target.value }))} />
+              </div>
+
+              {/* Budget Range */}
+              <div className="glass-card p-3 border border-teal-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <IndianRupee className="h-4 w-4 text-teal-400" />
+                  <span className="text-sm font-medium text-foreground">Transport Budget Range</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1">
+                    <Label className="text-foreground text-xs">Budget Min (₹)</Label>
+                    <Input type="number" className="glass-input text-foreground text-sm h-9" placeholder="e.g. 5000" value={shipmentForm.budgetMin} onChange={e => setShipmentForm(p => ({ ...p, budgetMin: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-foreground text-xs">Budget Max (₹)</Label>
+                    <Input type="number" className="glass-input text-foreground text-sm h-9" placeholder="e.g. 15000" value={shipmentForm.budgetMax} onChange={e => setShipmentForm(p => ({ ...p, budgetMax: e.target.value }))} />
+                  </div>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -890,12 +1075,14 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   whileHover={{ y: -4 }}
-                  className="glass-card p-4 cursor-pointer hover:border-emerald-500/30 transition-all"
-                  onClick={() => { setSelectedProducerId(p.id); setView('producer-profile') }}
+                  className="glass-card p-5 cursor-pointer hover:border-emerald-500/30 transition-all"
                 >
                   <div className="flex items-start gap-3 mb-3">
-                    <Avatar className="h-12 w-12 border border-glass-border shrink-0">
-                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-sm font-semibold">
+                    <Avatar className="h-14 w-14 border border-glass-border shrink-0">
+                      {p.avatarUrl ? (
+                        <AvatarImage src={p.avatarUrl} alt={p.name || ''} />
+                      ) : null}
+                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-base font-semibold">
                         {initials}
                       </AvatarFallback>
                     </Avatar>
@@ -908,21 +1095,23 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         <p className="text-xs text-amber-400 truncate">{p.companyName}</p>
                       )}
                       {p.farmName && (
-                        <p className="text-xs text-muted-foreground truncate">{p.farmName}</p>
+                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                          <Sprout className="h-3 w-3" /> {p.farmName}
+                        </p>
                       )}
                     </div>
                   </div>
 
                   {/* Location */}
                   {(p.city || p.state) && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
                       <MapPin className="h-3 w-3 text-emerald-400" />
                       {[p.city, p.state].filter(Boolean).join(', ')}
                     </div>
                   )}
 
-                  {/* Verification & Rating */}
-                  <div className="flex items-center gap-3 mb-2">
+                  {/* Rating & Verification */}
+                  <div className="flex items-center gap-3 mb-3">
                     <Badge className={`border text-[10px] ${
                       isVerified ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
                       isPending ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
@@ -932,10 +1121,13 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                        isPending ? <><Clock className="h-2.5 w-2.5 mr-0.5" /> Pending</> :
                        <><Shield className="h-2.5 w-2.5 mr-0.5" /> Rejected</>}
                     </Badge>
-                    {p.avgRating > 0 && (
+                    {(p.avgRating > 0 || p.totalReviews > 0) && (
                       <div className="flex items-center gap-1">
                         <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                        <span className="text-xs text-amber-400 font-medium">{p.avgRating.toFixed(1)}</span>
+                        <span className="text-xs text-amber-400 font-medium">{(p.avgRating || 0).toFixed(1)}</span>
+                        {p.totalReviews > 0 && (
+                          <span className="text-[10px] text-muted-foreground">({p.totalReviews})</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -958,7 +1150,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
 
                   {/* Certifications */}
                   {pCerts.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1 mb-3">
                       {pCerts.slice(0, 3).map((cert: string, ci: number) => (
                         <Badge key={ci} className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px] px-1.5 py-0">
                           {cert}
@@ -972,9 +1164,15 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-end mt-2">
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                  {/* View Profile Button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1.5 text-xs"
+                    onClick={() => { setSelectedProducerId(p.id); setView('producer-profile') }}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View Profile
+                  </Button>
                 </motion.div>
               )
             })}
@@ -999,7 +1197,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
         {conversations.length === 0 ? (
           <div className="glass-card p-12 text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No conversations yet. Start ordering to connect with suppliers!</p>
+            <p className="text-muted-foreground">No conversations yet. Start trading to connect with suppliers!</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1031,11 +1229,11 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
   // Default: profile tab
   return (
     <div className="glass-card p-6 text-center">
-      <ShoppingBag className="h-12 w-12 text-amber-400 mx-auto mb-4" />
+      <User className="h-12 w-12 text-amber-400 mx-auto mb-4" />
       <h3 className="text-xl font-semibold text-foreground mb-2">Profile Settings</h3>
       <p className="text-muted-foreground mb-4">Manage your account details and verification status</p>
       <Button className="bg-amber-600 hover:bg-amber-500 gap-2" onClick={() => useAppStore.getState().setView('profile')}>
-        <ShoppingBag className="h-4 w-4" /> Go to Profile
+        <User className="h-4 w-4" /> Go to Profile
       </Button>
     </div>
   )

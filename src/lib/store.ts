@@ -25,6 +25,10 @@ export interface AppUser {
   city?: string
   verificationStatus: string
   avatar?: string
+  avatarUrl?: string
+  bannerUrl?: string
+  address?: string
+  gstNumber?: string
   farmName?: string
   farmSize?: string
   farmLocation?: string
@@ -33,6 +37,21 @@ export interface AppUser {
   totalTransactions?: number
   avgRating?: number
   totalReviews?: number
+}
+
+export interface CartItem {
+  productId: string
+  productName: string
+  productImage?: string
+  sellerId: string
+  sellerName: string
+  quantity: number
+  unit: string
+  pricePerUnit: number
+  minOrderQty: number
+  maxQuantity: number
+  location: string
+  state?: string
 }
 
 interface AppState {
@@ -72,6 +91,15 @@ interface AppState {
   setChatOpen: (open: boolean) => void
   activeChatUser: string | null
   setActiveChatUser: (userId: string | null) => void
+
+  // Cart
+  cart: CartItem[]
+  addToCart: (item: CartItem) => void
+  removeFromCart: (productId: string) => void
+  updateCartQty: (productId: string, qty: number) => void
+  clearCart: () => void
+  cartOpen: boolean
+  setCartOpen: (open: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -104,4 +132,19 @@ export const useAppStore = create<AppState>((set) => ({
   setChatOpen: (open) => set({ chatOpen: open }),
   activeChatUser: null,
   setActiveChatUser: (userId) => set({ activeChatUser: userId }),
+
+  // Cart
+  cart: [],
+  addToCart: (item) => set((state) => {
+    const existing = state.cart.find(c => c.productId === item.productId)
+    if (existing) {
+      return { cart: state.cart.map(c => c.productId === item.productId ? { ...c, quantity: c.quantity + item.quantity } : c) }
+    }
+    return { cart: [...state.cart, item] }
+  }),
+  removeFromCart: (productId) => set((state) => ({ cart: state.cart.filter(c => c.productId !== productId) })),
+  updateCartQty: (productId, qty) => set((state) => ({ cart: state.cart.map(c => c.productId === productId ? { ...c, quantity: qty } : c) })),
+  clearCart: () => set({ cart: [] }),
+  cartOpen: false,
+  setCartOpen: (open) => set({ cartOpen: open }),
 }))

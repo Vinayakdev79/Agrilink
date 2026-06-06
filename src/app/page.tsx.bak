@@ -9,7 +9,6 @@ import { DashboardPage } from '@/components/agrilink/dashboard-page'
 import { ProfilePage } from '@/components/agrilink/profile-page'
 import { ProducerProfilePage } from '@/components/agrilink/producer-profile-page'
 import { ChatPanel } from '@/components/agrilink/chat-panel'
-import { CartPanel } from '@/components/agrilink/cart-panel'
 import { ProductPage } from '@/components/agrilink/product-page'
 import { useAppStore } from '@/lib/store'
 
@@ -29,7 +28,6 @@ export default function Home() {
       {currentView === 'product' && <ProductPage />}
       {currentView === 'producer-profile' && <ProducerProfilePage />}
       <ChatPanel />
-      <CartPanel />
     </div>
   )
 }

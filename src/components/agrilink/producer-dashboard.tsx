@@ -1,12 +1,13 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Package, ShoppingCart, IndianRupee, Star, Plus, MessageSquare,
   TrendingUp, TrendingDown, MapPin, Eye, Check, X, User,
-  Truck, Phone, Clock, Crosshair, CalendarDays
+  Truck, Phone, Clock, Crosshair, CalendarDays,
+  Upload, Image as ImageIcon, Leaf, FileText, Droplets, Shield
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger
@@ -91,15 +93,287 @@ function StatCard({ icon, value, label, trend, trendUp }: {
   )
 }
 
+// ─── Enhanced Add Listing Form ───────────────────────────────────────────────
+function AddListingForm({ formData, setFormData, onSubmit, onCancel, isSubmitting }: {
+  formData: any; setFormData: React.Dispatch<React.SetStateAction<any>>;
+  onSubmit: () => void; onCancel: () => void; isSubmitting: boolean
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const uploadForm = new FormData()
+      uploadForm.append('file', file)
+      uploadForm.append('folder', 'products')
+      const res = await fetch('/api/upload', { method: 'POST', body: uploadForm })
+      if (res.ok) {
+        const data = await res.json()
+        setFormData((prev: any) => ({ ...prev, imageUrl: data.url }))
+        setImagePreview(data.url)
+        toast.success('Image uploaded!')
+      } else {
+        toast.error('Failed to upload image')
+      }
+    } catch {
+      toast.error('Failed to upload image')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-5 py-4">
+      {/* Section 1: Basic Details */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <Package className="h-4 w-4" /> Basic Details
+        </h4>
+        <div className="grid gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Product Name *</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. Basmati Rice" value={formData.name} onChange={e => setFormData((p: any) => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label className="text-foreground text-xs">Category *</Label>
+              <Select value={formData.category} onValueChange={v => setFormData((p: any) => ({ ...p, category: v }))}>
+                <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-foreground text-xs">Quality Grade</Label>
+              <Select value={formData.qualityGrade} onValueChange={v => setFormData((p: any) => ({ ...p, qualityGrade: v }))}>
+                <SelectTrigger className="glass-input text-foreground"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="A">Grade A</SelectItem>
+                  <SelectItem value="B">Grade B</SelectItem>
+                  <SelectItem value="C">Grade C</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Section 2: Images */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <ImageIcon className="h-4 w-4" /> Product Image
+        </h4>
+        <div className="grid gap-3">
+          {imagePreview || formData.imageUrl ? (
+            <div className="relative w-full h-40 rounded-xl overflow-hidden border border-glass-border">
+              <img src={imagePreview || formData.imageUrl} alt="Product preview" className="w-full h-full object-cover" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="absolute top-2 right-2 border-glass-border bg-black/50 text-white hover:bg-black/70 h-7 text-xs"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Change
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full h-32 rounded-xl border-2 border-dashed border-glass-border hover:border-emerald-500/40 flex flex-col items-center justify-center gap-2 transition-colors bg-white/[0.02]"
+            >
+              {uploading ? (
+                <>
+                  <span className="h-6 w-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+                  <p className="text-xs text-muted-foreground">Uploading...</p>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Click to upload product image</p>
+                  <p className="text-[10px] text-muted-foreground/60">JPEG, PNG, WebP — Max 5MB</p>
+                </>
+              )}
+            </button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+        </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Section 3: Pricing & Quantity */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <IndianRupee className="h-4 w-4" /> Pricing & Quantity
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Price per Unit (₹) *</Label>
+            <Input type="number" className="glass-input text-foreground" placeholder="500" value={formData.pricePerUnit} onChange={e => setFormData((p: any) => ({ ...p, pricePerUnit: e.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Unit *</Label>
+            <Select value={formData.unit} onValueChange={v => setFormData((p: any) => ({ ...p, unit: v }))}>
+              <SelectTrigger className="glass-input text-foreground"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kg">Kg</SelectItem>
+                <SelectItem value="quintal">Quintal</SelectItem>
+                <SelectItem value="tonne">Tonne</SelectItem>
+                <SelectItem value="litre">Litre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Quantity *</Label>
+            <Input type="number" className="glass-input text-foreground" placeholder="100" value={formData.quantity} onChange={e => setFormData((p: any) => ({ ...p, quantity: e.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Min Order Qty</Label>
+            <Input type="number" className="glass-input text-foreground" placeholder="10" value={formData.minOrderQty} onChange={e => setFormData((p: any) => ({ ...p, minOrderQty: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Section 4: Location */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <MapPin className="h-4 w-4" /> Location
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Location *</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. Nashik" value={formData.location} onChange={e => setFormData((p: any) => ({ ...p, location: e.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">State</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. Maharashtra" value={formData.state} onChange={e => setFormData((p: any) => ({ ...p, state: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Section 5: Crop Details */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <Leaf className="h-4 w-4" /> Crop Details
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Crop Variety</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. 1121, Alphonso" value={formData.cropVariety} onChange={e => setFormData((p: any) => ({ ...p, cropVariety: e.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Harvest Date</Label>
+            <Input type="date" className="glass-input text-foreground" value={formData.harvestDate} onChange={e => setFormData((p: any) => ({ ...p, harvestDate: e.target.value }))} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Freshness</Label>
+            <Select value={formData.freshness} onValueChange={v => setFormData((p: any) => ({ ...p, freshness: v }))}>
+              <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Fresh">Fresh</SelectItem>
+                <SelectItem value="Recently Harvested">Recently Harvested</SelectItem>
+                <SelectItem value="Stored">Stored</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Is Organic</Label>
+            <div className="flex items-center gap-3 h-10">
+              <Switch
+                checked={formData.isOrganic}
+                onCheckedChange={(checked) => setFormData((p: any) => ({ ...p, isOrganic: checked }))}
+              />
+              <span className="text-sm text-foreground">{formData.isOrganic ? 'Yes' : 'No'}</span>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Pesticides Used</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. Neem-based" value={formData.pesticidesUsed} onChange={e => setFormData((p: any) => ({ ...p, pesticidesUsed: e.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Moisture Content</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. 12%" value={formData.moistureContent} onChange={e => setFormData((p: any) => ({ ...p, moistureContent: e.target.value }))} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Shelf Life</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. 6 months" value={formData.shelfLife} onChange={e => setFormData((p: any) => ({ ...p, shelfLife: e.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Storage Condition</Label>
+            <Input className="glass-input text-foreground" placeholder="e.g. Cool, dry place" value={formData.storageCondition} onChange={e => setFormData((p: any) => ({ ...p, storageCondition: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Section 6: Certifications */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <Shield className="h-4 w-4" /> Certifications
+        </h4>
+        <div className="grid gap-2">
+          <Label className="text-foreground text-xs">Product Certifications</Label>
+          <Input className="glass-input text-foreground" placeholder="e.g. FSSAI, APEDA, Organic India (comma separated)" value={formData.certifications} onChange={e => setFormData((p: any) => ({ ...p, certifications: e.target.value }))} />
+        </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Section 7: Description */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <FileText className="h-4 w-4" /> Description
+        </h4>
+        <div className="grid gap-2">
+          <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your product..." value={formData.description} onChange={e => setFormData((p: any) => ({ ...p, description: e.target.value }))} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ProducerDashboard({ tab }: ProducerDashboardProps) {
   const { user, setChatOpen, setActiveChatUser, setDashboardTab } = useAppStore()
   const [orders, setOrders] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [addListingOpen, setAddListingOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '', category: '', description: '', quantity: '', unit: 'kg',
-    pricePerUnit: '', minOrderQty: '', location: '', state: '', qualityGrade: 'A'
+    pricePerUnit: '', minOrderQty: '', location: '', state: '', qualityGrade: 'A',
+    imageUrl: '', cropVariety: '', harvestDate: '', freshness: '',
+    isOrganic: false, pesticidesUsed: '', moistureContent: '', shelfLife: '',
+    storageCondition: '', certifications: '',
   })
 
   // Shipment data for transport details
@@ -139,8 +413,19 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     fetchData()
   }, [fetchData])
 
+  const resetFormData = () => {
+    setFormData({
+      name: '', category: '', description: '', quantity: '', unit: 'kg',
+      pricePerUnit: '', minOrderQty: '', location: '', state: '', qualityGrade: 'A',
+      imageUrl: '', cropVariety: '', harvestDate: '', freshness: '',
+      isOrganic: false, pesticidesUsed: '', moistureContent: '', shelfLife: '',
+      storageCondition: '', certifications: '',
+    })
+  }
+
   const handleAddListing = async () => {
     if (!user) return
+    setIsSubmitting(true)
     try {
       const res = await fetch('/api/products', {
         method: 'POST',
@@ -150,13 +435,15 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
       if (res.ok) {
         toast.success('Listing created successfully!')
         setAddListingOpen(false)
-        setFormData({ name: '', category: '', description: '', quantity: '', unit: 'kg', pricePerUnit: '', minOrderQty: '', location: '', state: '', qualityGrade: 'A' })
+        resetFormData()
         fetchData()
       } else {
         toast.error('Failed to create listing')
       }
     } catch {
       toast.error('Failed to create listing')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -290,79 +577,22 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
               <DialogTitle className="text-foreground">Add New Listing</DialogTitle>
               <DialogDescription className="text-muted-foreground">Create a new product listing for the marketplace</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label className="text-foreground">Product Name</Label>
-                <Input className="glass-input text-foreground" placeholder="e.g. Basmati Rice" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Category</Label>
-                  <Select value={formData.category} onValueChange={v => setFormData(p => ({ ...p, category: v }))}>
-                    <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>
-                      {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Quality Grade</Label>
-                  <Select value={formData.qualityGrade} onValueChange={v => setFormData(p => ({ ...p, qualityGrade: v }))}>
-                    <SelectTrigger className="glass-input text-foreground"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A">Grade A</SelectItem>
-                      <SelectItem value="B">Grade B</SelectItem>
-                      <SelectItem value="C">Grade C</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Quantity</Label>
-                  <Input type="number" className="glass-input text-foreground" placeholder="100" value={formData.quantity} onChange={e => setFormData(p => ({ ...p, quantity: e.target.value }))} />
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Unit</Label>
-                  <Select value={formData.unit} onValueChange={v => setFormData(p => ({ ...p, unit: v }))}>
-                    <SelectTrigger className="glass-input text-foreground"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kg">Kg</SelectItem>
-                      <SelectItem value="quintal">Quintal</SelectItem>
-                      <SelectItem value="tonne">Tonne</SelectItem>
-                      <SelectItem value="litre">Litre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Price per Unit (₹)</Label>
-                  <Input type="number" className="glass-input text-foreground" placeholder="500" value={formData.pricePerUnit} onChange={e => setFormData(p => ({ ...p, pricePerUnit: e.target.value }))} />
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Min Order Qty</Label>
-                  <Input type="number" className="glass-input text-foreground" placeholder="10" value={formData.minOrderQty} onChange={e => setFormData(p => ({ ...p, minOrderQty: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Location</Label>
-                  <Input className="glass-input text-foreground" placeholder="e.g. Nashik" value={formData.location} onChange={e => setFormData(p => ({ ...p, location: e.target.value }))} />
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">State</Label>
-                  <Input className="glass-input text-foreground" placeholder="e.g. Maharashtra" value={formData.state} onChange={e => setFormData(p => ({ ...p, state: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-foreground">Description</Label>
-                <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your product..." value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} />
-              </div>
-            </div>
+            <AddListingForm
+              formData={formData}
+              setFormData={setFormData}
+              onSubmit={handleAddListing}
+              onCancel={() => setAddListingOpen(false)}
+              isSubmitting={isSubmitting}
+            />
             <DialogFooter>
               <Button variant="outline" className="border-glass-border" onClick={() => setAddListingOpen(false)}>Cancel</Button>
-              <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={handleAddListing}>Create Listing</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={handleAddListing} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> Creating...</>
+                ) : (
+                  'Create Listing'
+                )}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -386,79 +616,22 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                 <DialogTitle className="text-foreground">Add New Listing</DialogTitle>
                 <DialogDescription className="text-muted-foreground">Create a new product listing</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Product Name</Label>
-                  <Input className="glass-input text-foreground" placeholder="e.g. Basmati Rice" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Category</Label>
-                    <Select value={formData.category} onValueChange={v => setFormData(p => ({ ...p, category: v }))}>
-                      <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
-                        {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Quality Grade</Label>
-                    <Select value={formData.qualityGrade} onValueChange={v => setFormData(p => ({ ...p, qualityGrade: v }))}>
-                      <SelectTrigger className="glass-input text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="A">Grade A</SelectItem>
-                        <SelectItem value="B">Grade B</SelectItem>
-                        <SelectItem value="C">Grade C</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Quantity</Label>
-                    <Input type="number" className="glass-input text-foreground" placeholder="100" value={formData.quantity} onChange={e => setFormData(p => ({ ...p, quantity: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Unit</Label>
-                    <Select value={formData.unit} onValueChange={v => setFormData(p => ({ ...p, unit: v }))}>
-                      <SelectTrigger className="glass-input text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="kg">Kg</SelectItem>
-                        <SelectItem value="quintal">Quintal</SelectItem>
-                        <SelectItem value="tonne">Tonne</SelectItem>
-                        <SelectItem value="litre">Litre</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Price per Unit (₹)</Label>
-                    <Input type="number" className="glass-input text-foreground" placeholder="500" value={formData.pricePerUnit} onChange={e => setFormData(p => ({ ...p, pricePerUnit: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Min Order Qty</Label>
-                    <Input type="number" className="glass-input text-foreground" placeholder="10" value={formData.minOrderQty} onChange={e => setFormData(p => ({ ...p, minOrderQty: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Location</Label>
-                    <Input className="glass-input text-foreground" placeholder="e.g. Nashik" value={formData.location} onChange={e => setFormData(p => ({ ...p, location: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">State</Label>
-                    <Input className="glass-input text-foreground" placeholder="e.g. Maharashtra" value={formData.state} onChange={e => setFormData(p => ({ ...p, state: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Description</Label>
-                  <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your product..." value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} />
-                </div>
-              </div>
+              <AddListingForm
+                formData={formData}
+                setFormData={setFormData}
+                onSubmit={handleAddListing}
+                onCancel={() => setAddListingOpen(false)}
+                isSubmitting={isSubmitting}
+              />
               <DialogFooter>
                 <Button variant="outline" className="border-glass-border" onClick={() => setAddListingOpen(false)}>Cancel</Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={handleAddListing}>Create Listing</Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={handleAddListing} disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> Creating...</>
+                  ) : (
+                    'Create Listing'
+                  )}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -483,6 +656,12 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                 transition={{ delay: i * 0.05 }}
                 className="glass-card p-5 space-y-3 hover:border-emerald-500/30 transition-colors"
               >
+                {/* Product Image */}
+                {product.imageUrl ? (
+                  <div className="w-full h-32 rounded-xl overflow-hidden border border-glass-border">
+                    <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                  </div>
+                ) : null}
                 <div className="flex items-start justify-between">
                   <div>
                     <h4 className="font-semibold text-foreground">{product.name}</h4>
@@ -512,6 +691,17 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                       <span className="text-muted-foreground">Grade</span>
                       <span className="text-amber-400 font-medium">{product.qualityGrade}</span>
                     </div>
+                  )}
+                  {product.cropVariety && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Variety</span>
+                      <span className="text-foreground">{product.cropVariety}</span>
+                    </div>
+                  )}
+                  {product.isOrganic && (
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px]">
+                      <Leaf className="h-2.5 w-2.5 mr-0.5" /> Organic
+                    </Badge>
                   )}
                 </div>
                 <div className="pt-2 border-t border-glass-border">
@@ -580,6 +770,23 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                     </div>
                   </div>
 
+                  {/* Expected Pickup Date - prominent display */}
+                  {hasTransport && shipment.expectedPickupDate && (
+                    <div className="glass-card p-3 border border-amber-500/20 bg-amber-500/5">
+                      <div className="flex items-center gap-2">
+                        <CalendarDays className="h-5 w-5 text-amber-400" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Expected Pickup Date</p>
+                          <p className="text-sm font-bold text-amber-400">
+                            {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', {
+                              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Transport Details Card */}
                   {hasTransport && (
                     <div className="glass-card p-4 border border-teal-500/20">
@@ -622,16 +829,6 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                               <Truck className="h-3 w-3 text-emerald-400" />
                               {shipment.vehicleType || 'N/A'}
                               {shipment.vehicleNumber && ` (${shipment.vehicleNumber})`}
-                            </p>
-                          </div>
-                        )}
-                        {/* Expected Pickup Date */}
-                        {shipment.expectedPickupDate && (
-                          <div>
-                            <p className="text-muted-foreground text-[10px]">Expected Pickup</p>
-                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                              <CalendarDays className="h-3 w-3 text-amber-400" />
-                              {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN')}
                             </p>
                           </div>
                         )}

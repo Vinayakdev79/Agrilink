@@ -118,6 +118,11 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
   const [trackingShipment, setTrackingShipment] = useState<any>(null)
   const [trackerOpen, setTrackerOpen] = useState(false)
 
+  // Pickup date state
+  const [pickupDateDialogOpen, setPickupDateDialogOpen] = useState(false)
+  const [pickupDateShipmentId, setPickupDateShipmentId] = useState<string>('')
+  const [pickupDateValue, setPickupDateValue] = useState('')
+
   const fetchData = useCallback(async () => {
     if (!user) return
     setLoading(true)
@@ -188,12 +193,14 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
     }
   }
 
-  const handleShipmentStatus = async (shipmentId: string, status: string) => {
+  const handleShipmentStatus = async (shipmentId: string, status: string, extraData?: Record<string, unknown>) => {
     try {
+      const body: Record<string, unknown> = { shipmentId, status }
+      if (extraData) Object.assign(body, extraData)
       const res = await fetch('/api/shipments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shipmentId, status })
+        body: JSON.stringify(body)
       })
       if (res.ok) {
         toast.success(`Shipment status updated to ${status.replace('_', ' ')}`)
@@ -204,6 +211,17 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
     } catch {
       toast.error('Failed to update shipment')
     }
+  }
+
+  const handleSetPickupDate = async () => {
+    if (!pickupDateValue) {
+      toast.error('Please select a pickup date')
+      return
+    }
+    await handleShipmentStatus(pickupDateShipmentId, 'assigned', { expectedPickupDate: pickupDateValue })
+    setPickupDateDialogOpen(false)
+    setPickupDateValue('')
+    setPickupDateShipmentId('')
   }
 
   const handleTrackShipment = (shipment: any) => {
@@ -546,6 +564,35 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
                   </div>
                 </div>
 
+                {/* Expected Pickup Date - set by transporter */}
+                {shipment.status === 'assigned' && !shipment.expectedPickupDate && (
+                  <div className="pt-2 border-t border-glass-border">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 text-xs w-full"
+                      onClick={() => {
+                        setPickupDateShipmentId(shipment.id)
+                        setPickupDateValue('')
+                        setPickupDateDialogOpen(true)
+                      }}
+                    >
+                      <CalendarDays className="h-3 w-3" /> Set Expected Pickup Date
+                    </Button>
+                  </div>
+                )}
+                {shipment.expectedPickupDate && (
+                  <div className="pt-2 border-t border-glass-border">
+                    <div className="flex items-center gap-2 text-xs">
+                      <CalendarDays className="h-3 w-3 text-amber-400" />
+                      <span className="text-muted-foreground">Expected Pickup:</span>
+                      <span className="text-amber-400 font-medium">
+                        {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Status actions */}
                 {['assigned', 'picked_up', 'in_transit'].includes(shipment.status) && (
                   <div className="pt-2 border-t border-glass-border flex gap-2 flex-wrap">
@@ -577,6 +624,36 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
           open={trackerOpen}
           onClose={() => setTrackerOpen(false)}
         />
+
+        {/* Set Pickup Date Dialog */}
+        <Dialog open={pickupDateDialogOpen} onOpenChange={setPickupDateDialogOpen}>
+          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl">
+            <DialogHeader>
+              <DialogTitle className="text-foreground flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-amber-400" />
+                Set Expected Pickup Date
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Set the expected pickup date for this shipment. This will be visible to the buyer and producer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label className="text-foreground">Expected Pickup Date</Label>
+                <Input
+                  type="date"
+                  className="glass-input text-foreground"
+                  value={pickupDateValue}
+                  onChange={(e) => setPickupDateValue(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" className="border-glass-border" onClick={() => setPickupDateDialogOpen(false)}>Cancel</Button>
+              <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleSetPickupDate}>Set Pickup Date</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
