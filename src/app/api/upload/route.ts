@@ -1,42 +1,8 @@
 import { NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
-import { existsSync } from 'fs'
 
-// Supabase Storage upload (when bucket is available)
-async function uploadToSupabase(file: File, folder: string, filename: string): Promise<string | null> {
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseKey) return null
-
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-
-    const filePath = `${folder}/${filename}`
-
-    const res = await fetch(`${supabaseUrl}/storage/v1/object/agrilink-images/${filePath}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
-        'Content-Type': file.type || 'application/octet-stream',
-      },
-      body: buffer,
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      // Return the public URL
-      return `${supabaseUrl}/storage/v1/object/public/agrilink-images/${filePath}`
-    }
-
-    return null
-  } catch {
-    return null
-  }
-}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const BUCKET_NAME = 'agrilink-images'
 
 export async function POST(request: Request) {
   try {
@@ -59,31 +25,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid file type. Allowed: JPEG, PNG, WebP, GIF' }, { status: 400 })
     }
 
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
+    }
+
     // Generate unique filename
     const ext = file.name.split('.').pop() || 'jpg'
     const filename = `${folder}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`
+    const filePath = `${folder}/${filename}`
 
-    // Try Supabase Storage first
-    const supabaseUrl = await uploadToSupabase(file, folder, filename)
-    if (supabaseUrl) {
-      return NextResponse.json({ url: supabaseUrl, storage: 'supabase' })
-    }
-
-    // Fallback: Save to local filesystem (public/uploads/)
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', folder)
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true })
-    }
-
-    const filePath = path.join(uploadDir, filename)
+    // Upload to Supabase Storage
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    await writeFile(filePath, buffer)
 
-    // Return the local URL path
-    const localUrl = `/uploads/${folder}/${filename}`
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${filePath}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': file.type || 'application/octet-stream',
+      },
+      body: buffer,
+    })
 
-    return NextResponse.json({ url: localUrl, storage: 'local' })
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('Supabase upload error:', res.status, errorText)
+      return NextResponse.json({ error: 'Failed to upload to storage' }, { status: 500 })
+    }
+
+    // Return the public URL
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${filePath}`
+
+    return NextResponse.json({ url: publicUrl, storage: 'supabase' })
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 })

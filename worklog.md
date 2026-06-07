@@ -28,3 +28,26 @@ Stage Summary:
 - Pickup date already shown in producer dashboard
 - 3 subagent improvements completed: producers list redesign, shipment auto-fill, transporter pickup date
 - App verified working via Agent Browser testing
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix image storage - migrate from local filesystem to Supabase Storage Bucket
+
+Work Log:
+- Verified Supabase Storage Bucket `agrilink-images` was created via SQL migration (user ran in Supabase SQL Editor)
+- Tested bucket upload and public read access - both working
+- Updated `/api/upload/route.ts` to use Supabase Storage exclusively (removed local filesystem fallback)
+- Updated `/api/users/route.ts` to use `avatarUrl` and `bannerUrl` columns directly (removed `banner:` prefix hack)
+- Uploaded all 24 product images from `public/images/` to Supabase Storage `agrilink-images/products/`
+- Uploaded all user avatars, banners, and product images from `public/uploads/` to Supabase Storage
+- Updated 23 Product records in database with Supabase Storage URLs
+- Updated 3 User records in database with Supabase Storage URLs
+- Verified all API endpoints return 200
+- Verified no browser errors via Agent Browser testing
+
+Stage Summary:
+- All images now stored in Supabase Storage Bucket `agrilink-images` instead of local `public/uploads/` and `public/images/`
+- Upload API no longer saves files locally - only to Supabase Storage
+- Users API properly uses `avatarUrl` and `bannerUrl` columns (added by migration SQL)
+- All 23 products have proper Supabase image URLs in the database
+- App verified working end-to-end with no errors

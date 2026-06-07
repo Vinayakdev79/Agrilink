@@ -8,8 +8,8 @@ export async function GET(request: Request) {
     const verificationStatus = searchParams.get('verificationStatus')
     const id = searchParams.get('id')
 
-    // Columns that exist in the User table
-    const userSelect = 'id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt'
+    // Columns that exist in the User table (including new avatarUrl/bannerUrl)
+    const userSelect = 'id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt'
 
     // Single user lookup by ID
     if (id) {
@@ -27,18 +27,11 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 })
       }
 
-      // Map 'avatar' to 'avatarUrl' for frontend compatibility
-      // Extract bannerUrl from farmImages if stored with 'banner:' prefix
-      const farmImagesRaw = user.farmImages || ''
-      const farmImageParts = farmImagesRaw.split(',').map((p: string) => p.trim()).filter(Boolean)
-      const bannerPart = farmImageParts.find((p: string) => p.startsWith('banner:'))
-      const cleanFarmImages = farmImageParts.filter((p: string) => !p.startsWith('banner:')).join(',')
-
+      // Use avatarUrl/bannerUrl columns directly, fallback to avatar for legacy data
       const mappedUser = {
         ...user,
-        avatarUrl: user.avatar || null,
-        bannerUrl: bannerPart ? bannerPart.replace('banner:', '') : null,
-        farmImages: cleanFarmImages || null,
+        avatarUrl: user.avatarUrl || user.avatar || null,
+        bannerUrl: user.bannerUrl || null,
       }
 
       // Fetch counts separately
@@ -86,20 +79,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ users: [] })
     }
 
-    // Map avatar -> avatarUrl for each user, extract bannerUrl from farmImages
-    const mappedUsers = users.map(u => {
-      const farmImagesRaw = u.farmImages || ''
-      const farmImageParts = farmImagesRaw.split(',').map((p: string) => p.trim()).filter(Boolean)
-      const bannerPart = farmImageParts.find((p: string) => p.startsWith('banner:'))
-      const cleanFarmImages = farmImageParts.filter((p: string) => !p.startsWith('banner:')).join(',')
-
-      return {
-        ...u,
-        avatarUrl: u.avatar || null,
-        bannerUrl: bannerPart ? bannerPart.replace('banner:', '') : null,
-        farmImages: cleanFarmImages || null,
-      }
-    })
+    // Map avatar -> avatarUrl for each user
+    const mappedUsers = users.map(u => ({
+      ...u,
+      avatarUrl: u.avatarUrl || u.avatar || null,
+      bannerUrl: u.bannerUrl || null,
+    }))
 
     // Fetch all related FK values and compute counts in JS
     const userIds = mappedUsers.map(u => u.id)
@@ -156,7 +141,7 @@ export async function PATCH(request: Request) {
     const {
       userId, verificationStatus, name, phone, companyName, state, city, gstNumber,
       avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation,
-      yearsExperience, certifications, latitude, longitude,
+      yearsExperience, certifications, latitude, longitude, farmImages,
     } = body
 
     if (!userId) {
@@ -171,19 +156,9 @@ export async function PATCH(request: Request) {
     if (state !== undefined) updateData.state = state || null
     if (city !== undefined) updateData.city = city || null
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber || null
-    // Map avatarUrl back to 'avatar' column since that's what exists in DB
-    if (avatarUrl !== undefined) updateData.avatar = avatarUrl || null
-    // bannerUrl - store in a way that can be retrieved later
-    // Since the column doesn't exist, we store it as JSON in the 'avatar' field 
-    // with a special prefix. When the column is added, this will be migrated.
-    if (bannerUrl !== undefined) {
-      // Store banner URL in farmImages field temporarily (hack until column is added)
-      // We use a prefix to distinguish from actual farm images
-      const existingFarmImages = (await supabase.from('User').select('farmImages').eq('id', userId).single()).data?.farmImages || ''
-      const farmImageParts = existingFarmImages.split(',').filter((p: string) => !p.startsWith('banner:'))
-      if (bannerUrl) farmImageParts.unshift(`banner:${bannerUrl}`)
-      updateData.farmImages = farmImageParts.join(',')
-    }
+    // Save avatarUrl and bannerUrl to their dedicated columns
+    if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl || null
+    if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl || null
     if (address !== undefined) updateData.address = address || null
     if (farmName !== undefined) updateData.farmName = farmName || null
     if (farmSize !== undefined) updateData.farmSize = farmSize || null
@@ -192,6 +167,7 @@ export async function PATCH(request: Request) {
     if (certifications !== undefined) updateData.certifications = certifications || null
     if (latitude !== undefined) updateData.latitude = latitude || null
     if (longitude !== undefined) updateData.longitude = longitude || null
+    if (farmImages !== undefined) updateData.farmImages = farmImages || null
 
     const { data: user, error } = await supabase
       .from('User')
@@ -208,8 +184,8 @@ export async function PATCH(request: Request) {
     // Map avatar -> avatarUrl for frontend compatibility
     const mappedUser = {
       ...user,
-      avatarUrl: user?.avatar || null,
-      bannerUrl: null,
+      avatarUrl: user?.avatarUrl || user?.avatar || null,
+      bannerUrl: user?.bannerUrl || null,
     }
 
     return NextResponse.json({ user: mappedUser })
