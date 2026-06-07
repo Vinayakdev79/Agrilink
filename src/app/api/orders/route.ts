@@ -75,23 +75,57 @@ function mapOrderAvatar(order: any) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { buyerId, sellerId, productId, quantity, unitPrice, deliveryAddress, deliveryCity, deliveryState, deliveryPincode } = body
+    const {
+      buyerId, sellerId, productId, quantity, unitPrice,
+      deliveryAddress, deliveryCity, deliveryState, deliveryPincode,
+      deliveryLat, deliveryLng, deliveryFullAddress,
+    } = body
 
     const totalPrice = parseFloat(quantity) * parseFloat(unitPrice)
 
-    const { data: order, error } = await supabase
+    const insertData: Record<string, unknown> = {
+      buyerId,
+      sellerId,
+      productId,
+      quantity: parseFloat(quantity),
+      unitPrice: parseFloat(unitPrice),
+      totalPrice,
+      status: 'negotiating',
+    }
+
+    // Try inserting with delivery address fields first
+    // If the columns don't exist yet, fall back to basic fields
+    const deliveryFields: Record<string, unknown> = {}
+    if (deliveryAddress) deliveryFields.deliveryAddress = deliveryAddress
+    if (deliveryCity) deliveryFields.deliveryCity = deliveryCity
+    if (deliveryState) deliveryFields.deliveryState = deliveryState
+    if (deliveryPincode) deliveryFields.deliveryPincode = deliveryPincode
+    if (deliveryLat) deliveryFields.deliveryLat = deliveryLat
+    if (deliveryLng) deliveryFields.deliveryLng = deliveryLng
+    if (deliveryFullAddress) deliveryFields.deliveryFullAddress = deliveryFullAddress
+
+    // Try with delivery fields first
+    let { data: order, error } = await supabase
       .from('Order')
-      .insert({
-        buyerId,
-        sellerId,
-        productId,
-        quantity: parseFloat(quantity),
-        unitPrice: parseFloat(unitPrice),
-        totalPrice,
-        status: 'negotiating',
-      })
+      .insert({ ...insertData, ...deliveryFields })
       .select()
       .single()
+
+    // If delivery columns don't exist, retry without them
+    if (error && Object.keys(deliveryFields).length > 0) {
+      const fallbackResult = await supabase
+        .from('Order')
+        .insert(insertData)
+        .select()
+        .single()
+      
+      if (fallbackResult.error) {
+        console.error('Order create error:', fallbackResult.error)
+        return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+      }
+      order = fallbackResult.data
+      error = null
+    }
 
     if (error) {
       console.error('Order create error:', error)

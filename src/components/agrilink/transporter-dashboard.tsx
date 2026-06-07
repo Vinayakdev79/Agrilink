@@ -8,6 +8,8 @@ import {
   TrendingUp, TrendingDown, CheckCircle, Navigation, MessageSquare,
   Crosshair, CalendarDays, Route as RouteIcon
 } from 'lucide-react'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -121,7 +123,7 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
   // Pickup date state
   const [pickupDateDialogOpen, setPickupDateDialogOpen] = useState(false)
   const [pickupDateShipmentId, setPickupDateShipmentId] = useState<string>('')
-  const [pickupDateValue, setPickupDateValue] = useState('')
+  const [pickupDateValue, setPickupDateValue] = useState<Date | undefined>(undefined)
 
   const fetchData = useCallback(async () => {
     if (!user) return
@@ -218,9 +220,10 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
       toast.error('Please select a pickup date')
       return
     }
-    await handleShipmentStatus(pickupDateShipmentId, 'assigned', { expectedPickupDate: pickupDateValue })
+    const dateStr = pickupDateValue.toISOString().split('T')[0]
+    await handleShipmentStatus(pickupDateShipmentId, 'assigned', { expectedPickupDate: dateStr })
     setPickupDateDialogOpen(false)
-    setPickupDateValue('')
+    setPickupDateValue(undefined)
     setPickupDateShipmentId('')
   }
 
@@ -573,7 +576,7 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
                       className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 text-xs w-full"
                       onClick={() => {
                         setPickupDateShipmentId(shipment.id)
-                        setPickupDateValue('')
+                        setPickupDateValue(undefined)
                         setPickupDateDialogOpen(true)
                       }}
                     >
@@ -640,12 +643,28 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label className="text-foreground">Expected Pickup Date</Label>
-                <Input
-                  type="date"
-                  className="glass-input text-foreground"
-                  value={pickupDateValue}
-                  onChange={(e) => setPickupDateValue(e.target.value)}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={`glass-input text-foreground justify-start gap-2 font-normal ${!pickupDateValue ? 'text-muted-foreground' : ''}`}
+                    >
+                      <CalendarDays className="h-4 w-4 text-amber-400" />
+                      {pickupDateValue
+                        ? pickupDateValue.toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+                        : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-[oklch(0.15_0.012_260/0.98)] border-white/20" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={pickupDateValue}
+                      onSelect={setPickupDateValue}
+                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <DialogFooter>

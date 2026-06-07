@@ -28,10 +28,17 @@ export async function GET(request: Request) {
       }
 
       // Map 'avatar' to 'avatarUrl' for frontend compatibility
+      // Extract bannerUrl from farmImages if stored with 'banner:' prefix
+      const farmImagesRaw = user.farmImages || ''
+      const farmImageParts = farmImagesRaw.split(',').map((p: string) => p.trim()).filter(Boolean)
+      const bannerPart = farmImageParts.find((p: string) => p.startsWith('banner:'))
+      const cleanFarmImages = farmImageParts.filter((p: string) => !p.startsWith('banner:')).join(',')
+
       const mappedUser = {
         ...user,
         avatarUrl: user.avatar || null,
-        bannerUrl: null, // Will be supported when column is added
+        bannerUrl: bannerPart ? bannerPart.replace('banner:', '') : null,
+        farmImages: cleanFarmImages || null,
       }
 
       // Fetch counts separately
@@ -79,12 +86,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ users: [] })
     }
 
-    // Map avatar -> avatarUrl for each user
-    const mappedUsers = users.map(u => ({
-      ...u,
-      avatarUrl: u.avatar || null,
-      bannerUrl: null,
-    }))
+    // Map avatar -> avatarUrl for each user, extract bannerUrl from farmImages
+    const mappedUsers = users.map(u => {
+      const farmImagesRaw = u.farmImages || ''
+      const farmImageParts = farmImagesRaw.split(',').map((p: string) => p.trim()).filter(Boolean)
+      const bannerPart = farmImageParts.find((p: string) => p.startsWith('banner:'))
+      const cleanFarmImages = farmImageParts.filter((p: string) => !p.startsWith('banner:')).join(',')
+
+      return {
+        ...u,
+        avatarUrl: u.avatar || null,
+        bannerUrl: bannerPart ? bannerPart.replace('banner:', '') : null,
+        farmImages: cleanFarmImages || null,
+      }
+    })
 
     // Fetch all related FK values and compute counts in JS
     const userIds = mappedUsers.map(u => u.id)
@@ -158,8 +173,17 @@ export async function PATCH(request: Request) {
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber || null
     // Map avatarUrl back to 'avatar' column since that's what exists in DB
     if (avatarUrl !== undefined) updateData.avatar = avatarUrl || null
-    // bannerUrl column doesn't exist yet - store in farmImages as workaround
-    // TODO: Add bannerUrl column to User table
+    // bannerUrl - store in a way that can be retrieved later
+    // Since the column doesn't exist, we store it as JSON in the 'avatar' field 
+    // with a special prefix. When the column is added, this will be migrated.
+    if (bannerUrl !== undefined) {
+      // Store banner URL in farmImages field temporarily (hack until column is added)
+      // We use a prefix to distinguish from actual farm images
+      const existingFarmImages = (await supabase.from('User').select('farmImages').eq('id', userId).single()).data?.farmImages || ''
+      const farmImageParts = existingFarmImages.split(',').filter((p: string) => !p.startsWith('banner:'))
+      if (bannerUrl) farmImageParts.unshift(`banner:${bannerUrl}`)
+      updateData.farmImages = farmImageParts.join(',')
+    }
     if (address !== undefined) updateData.address = address || null
     if (farmName !== undefined) updateData.farmName = farmName || null
     if (farmSize !== undefined) updateData.farmSize = farmSize || null

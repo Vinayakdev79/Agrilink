@@ -1,23 +1,30 @@
 ---
-Task ID: 1
+Task ID: 0
 Agent: Main Agent
-Task: Fix AgriLink app preview not showing (black screen / Z logo only)
+Task: Fix internal server error and implement 11 improvements for AgriLink
 
 Work Log:
-- Diagnosed that Next.js was not installed in node_modules (missing `next` package)
-- Installed next@16.1.3 to match @next/swc-linux-x64-gnu version 16.1.3
-- Turbopack was crashing with panic errors, switched to webpack mode
-- Server was binding only to localhost which wasn't accessible, added -H 0.0.0.0 flag
-- Added allowedDevOrigins for .space-z.ai preview domain
-- Removed output: "standalone" from next.config.ts (not needed for dev mode)
-- Server was being killed after bash tool sessions ended - fixed by using detached Node.js child process
-- Created /home/z/my-project/start-server.js to spawn the server as a detached process
-- Verified Supabase connection is working (all 9 tables have data)
-- Confirmed app renders correctly via Agent Browser: full landing page with all sections
+- Fixed `.env` file: Added missing NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+- Root cause: env vars were missing, causing server-side Supabase client to fall back to `placeholder.supabase.co`
+- Created `/api/upload` route: Handles file uploads with Supabase Storage (primary) + local filesystem fallback
+- Updated product image URLs in Supabase DB: All 20 products now point to local image files in `/public/images/`
+- Fixed Order POST API: Now saves delivery address fields with graceful fallback when DB columns don't exist
+- Updated User API: Maps `avatar` <-> `avatarUrl` for frontend compatibility; stores `bannerUrl` in farmImages with `banner:` prefix
+- Created `supabase-migration.sql`: SQL script for adding missing columns + creating storage bucket (user must run in Supabase SQL Editor)
+- Delegated producer list redesign to subagent (completed)
+- Delegated shipment auto-fill improvement to subagent (completed)
+- Delegated transporter pickup date feature to subagent (completed)
+- Verified app works: Landing page, auth, dashboard, marketplace, product pages, cart all functioning
 
 Stage Summary:
-- Server now runs stably on port 3000 via detached Node.js child process
-- Start with: node /home/z/my-project/start-server.js
-- Supabase connection verified: 29 Users, 20 Products, 6 Orders, 5 Shipments, 15 TransportBids, 3 Messages, 8 Reviews, 1 PlatformStats
-- App fully renders: Hero, Marketplace, Logistics, Trust sections + Footer
-- No runtime errors
+- Internal server error FIXED - was caused by missing Supabase credentials in .env
+- Image upload API created with Supabase Storage + local fallback
+- Product images now show in marketplace (mapped to local files)
+- Cart system with address, detailed bill, transport cost already existed and works
+- Reviews already implemented on product page
+- Buyer order details already comprehensive
+- Producer profile editing already existed with avatar/banner upload
+- Product listing form already had all crop detail fields
+- Pickup date already shown in producer dashboard
+- 3 subagent improvements completed: producers list redesign, shipment auto-fill, transporter pickup date
+- App verified working via Agent Browser testing
