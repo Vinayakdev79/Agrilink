@@ -43,6 +43,8 @@ interface Seller {
   verificationStatus: string
   state?: string
   city?: string
+  isSponsored?: boolean
+  sponsoredExpiry?: string
 }
 
 interface Product {
@@ -198,8 +200,19 @@ function ProductCard({
   // Parse product image
   const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
 
+  // Stock bar logic
+  const isOutOfStock = product.quantity === 0
+  const isLowStock = product.quantity > 0 && product.quantity < 10
+  const maxQty = product.minOrderQty ? Math.max(product.minOrderQty * 20, product.quantity) : product.quantity
+  const stockPercent = maxQty > 0 ? Math.min((product.quantity / maxQty) * 100, 100) : 0
+  const stockBarColor = isOutOfStock ? 'bg-red-500' : isLowStock ? 'bg-yellow-500' : stockPercent > 50 ? 'bg-emerald-500' : 'bg-yellow-500'
+
+  // Sponsored check
+  const isSponsored = product.seller?.isSponsored && product.seller?.sponsoredExpiry && new Date(product.seller.sponsoredExpiry) > new Date()
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (isOutOfStock) return
     if (!user) {
       toast.error('Please sign in to add items to cart')
       return
@@ -263,14 +276,33 @@ function ProductCard({
 
         {/* Top badges overlay */}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between">
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
-            {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-          </span>
-          {product.qualityGrade && (
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${gradeColor}`}>
-              {product.qualityGrade}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
+              {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
             </span>
-          )}
+            {isSponsored && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-amber-500/20 text-amber-400 border-amber-500/30">
+                Featured
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {isOutOfStock && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-red-500/20 text-red-400 border-red-500/30">
+                Out of Stock
+              </span>
+            )}
+            {isLowStock && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-orange-500/20 text-orange-400 border-orange-500/30">
+                Low Stock
+              </span>
+            )}
+            {product.qualityGrade && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${gradeColor}`}>
+                {product.qualityGrade}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -290,10 +322,24 @@ function ProductCard({
           <span className="text-xs text-muted-foreground">/ {product.unit}</span>
         </div>
 
-        {/* Quantity */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-          <Package className="w-3 h-3" />
-          <span>{product.quantity.toLocaleString('en-IN')} {product.unit} available</span>
+        {/* Quantity + Stock Bar */}
+        <div className="space-y-1.5 mb-1.5">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Package className="w-3 h-3" />
+            <span>{isOutOfStock ? 'Out of stock' : `${product.quantity.toLocaleString('en-IN')} ${product.unit} available`}</span>
+            {isLowStock && (
+              <span className="text-[10px] font-semibold text-orange-400">Low Stock</span>
+            )}
+          </div>
+          {/* Stock indicator bar */}
+          {!isOutOfStock && (
+            <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${stockBarColor}`}
+                style={{ width: `${stockPercent}%` }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Location */}
@@ -333,11 +379,12 @@ function ProductCard({
           </Button>
           <Button
             size="sm"
-            className="flex-1 h-8 text-xs bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+            className="flex-1 h-8 text-xs bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleAddToCart}
+            disabled={isOutOfStock}
           >
             <ShoppingCart className="w-3 h-3 mr-1" />
-            Add to Cart
+            {isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
           </Button>
         </div>
       </div>

@@ -10,10 +10,7 @@ import {
   IndianRupee,
   MessageSquare,
   Share2,
-  TrendingUp,
   Star,
-  Shield,
-  BadgeCheck,
   Leaf,
   Package,
   Truck,
@@ -27,11 +24,13 @@ import {
   Minus,
   Plus,
   ShoppingCart,
-  User,
   ChevronRight,
   Sprout,
-  Zap,
   Send,
+  AlertTriangle,
+  Info,
+  User,
+  BadgeCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -151,11 +150,8 @@ const CATEGORY_ICONS: Record<string, string> = {
   oilseeds: '🌻',
 }
 
-const TRANSPORT_PARTNERS = [
-  'AgriLogistics Express',
-  'FarmFreight India',
-  'GreenRoute Transport',
-]
+const TRANSPORT_ESTIMATE_RATE = 0.035 // 3.5%
+const PLATFORM_FEE_RATE = 0.02 // 2%
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
 const fadeUp = {
@@ -256,8 +252,8 @@ function ProductPageSkeleton() {
   )
 }
 
-// ─── Related Product Card ─────────────────────────────────────────────────────
-function RelatedProductCard({ product, onClick }: { product: Product; onClick: () => void }) {
+// ─── Similar Product Card (Grid Layout) ───────────────────────────────────────
+function SimilarProductCard({ product, onClick, onAddToCart }: { product: Product; onClick: () => void; onAddToCart: () => void }) {
   const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
   const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
   const emoji = CATEGORY_ICONS[product.category] || '📦'
@@ -266,15 +262,15 @@ function RelatedProductCard({ product, onClick }: { product: Product; onClick: (
   return (
     <motion.div
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="glass-card overflow-hidden cursor-pointer hover:bg-white/[0.07] transition-all min-w-[200px] shrink-0"
-      onClick={onClick}
+      className="glass-card overflow-hidden cursor-pointer hover:bg-white/[0.07] transition-all group"
     >
-      <div className="aspect-[4/3] relative overflow-hidden">
+      {/* Image */}
+      <div className="aspect-[4/3] relative overflow-hidden" onClick={onClick}>
         {productImage ? (
           <img
             src={productImage}
             alt={product.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none'
             }}
@@ -284,26 +280,129 @@ function RelatedProductCard({ product, onClick }: { product: Product; onClick: (
             <span className="text-4xl">{emoji}</span>
           </div>
         )}
+        {/* Category Badge */}
+        <span className={`absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
+          {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+        </span>
+        {/* Quality Grade */}
         {product.qualityGrade && (
           <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${GRADE_COLORS[product.qualityGrade] || ''}`}>
             {product.qualityGrade}
           </span>
         )}
       </div>
-      <div className="p-3">
-        <h4 className="text-sm font-semibold text-foreground truncate mb-1">{product.name}</h4>
-        <div className="flex items-center gap-1 mb-1">
+
+      {/* Content */}
+      <div className="p-3 space-y-2">
+        <h4 className="text-sm font-semibold text-foreground truncate">{product.name}</h4>
+
+        {/* Price */}
+        <div className="flex items-center gap-1">
           <IndianRupee className="w-3 h-3 text-emerald-400" />
           <span className="text-sm font-bold text-foreground">{product.pricePerUnit.toLocaleString('en-IN')}</span>
           <span className="text-[10px] text-muted-foreground">/ {product.unit}</span>
         </div>
+
+        {/* Available quantity */}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <MapPin className="w-3 h-3 text-emerald-400" />
-          <span className="truncate">{product.location}</span>
+          <Package className="w-3 h-3" />
+          <span>{product.quantity} {product.unit} available</span>
         </div>
-        <span className={`inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border ${catColor}`}>
+
+        {/* Producer name */}
+        <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+          <User className="w-3 h-3 shrink-0" />
+          <span className="truncate">{product.seller.companyName || product.seller.name}</span>
+        </div>
+
+        {/* Quick Add to Cart */}
+        <Button
+          size="sm"
+          className="w-full h-8 text-xs bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/25"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAddToCart()
+          }}
+        >
+          <ShoppingCart className="w-3 h-3 mr-1" />
+          Add to Cart
+        </Button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Producer Product Card (Grid Layout) ──────────────────────────────────────
+function ProducerProductCard({ product, onClick, onAddToCart }: { product: Product; onClick: () => void; onAddToCart: () => void }) {
+  const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+  const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
+  const emoji = CATEGORY_ICONS[product.category] || '📦'
+  const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+
+  return (
+    <motion.div
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      className="glass-card overflow-hidden cursor-pointer hover:bg-white/[0.07] transition-all group"
+    >
+      {/* Image */}
+      <div className="aspect-[4/3] relative overflow-hidden" onClick={onClick}>
+        {productImage ? (
+          <img
+            src={productImage}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }}
+          />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+            <span className="text-4xl">{emoji}</span>
+          </div>
+        )}
+        {/* Category Badge */}
+        <span className={`absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
           {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
         </span>
+      </div>
+
+      {/* Content */}
+      <div className="p-3 space-y-2">
+        <h4 className="text-sm font-semibold text-foreground truncate">{product.name}</h4>
+
+        {/* Price */}
+        <div className="flex items-center gap-1">
+          <IndianRupee className="w-3 h-3 text-emerald-400" />
+          <span className="text-sm font-bold text-foreground">{product.pricePerUnit.toLocaleString('en-IN')}</span>
+          <span className="text-[10px] text-muted-foreground">/ {product.unit}</span>
+        </div>
+
+        {/* Available quantity */}
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Package className="w-3 h-3" />
+          <span>{product.quantity} {product.unit} available</span>
+        </div>
+
+        {/* Producer info - same producer */}
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <BadgeCheck className="w-3 h-3 text-emerald-400" />
+          <span className="truncate">Same Producer</span>
+        </div>
+
+        {/* Quick Add to Cart */}
+        <Button
+          size="sm"
+          className="w-full h-8 text-xs bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/25"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAddToCart()
+          }}
+        >
+          <ShoppingCart className="w-3 h-3 mr-1" />
+          Add to Cart
+        </Button>
       </div>
     </motion.div>
   )
@@ -419,12 +518,22 @@ export function ProductPage() {
     fetchSimilar()
   }, [product?.category, product?.id, product?.sellerId])
 
-  // Fetch reviews (reviews are per-seller since Review table doesn't have productId)
+  // Fetch reviews - try by productId first, fallback to seller reviews
   useEffect(() => {
-    if (!product?.id) return
+    if (!product?.id || !product?.sellerId) return
     const fetchReviews = async () => {
       try {
-        // Fetch seller reviews
+        // First try fetching reviews filtered by productId
+        const productRes = await fetch(`/api/reviews?targetId=${product.sellerId}&productId=${product.id}`)
+        if (productRes.ok) {
+          const productData = await productRes.json()
+          if (productData.reviews && productData.reviews.length > 0) {
+            setReviews(productData.reviews)
+            return
+          }
+        }
+
+        // Fallback: fetch seller reviews
         const sellerRes = await fetch(`/api/reviews?targetId=${product.sellerId}`)
         if (sellerRes.ok) {
           const sellerData = await sellerRes.json()
@@ -433,24 +542,25 @@ export function ProductPage() {
             return
           }
         }
+
         // Fallback to mock reviews if no real ones exist
         setReviews([
-          { id: '1', reviewerId: 'r1', targetId: product.sellerId, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged. Will order again!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar', companyName: 'RK Traders' } },
-          { id: '2', reviewerId: 'r2', targetId: product.sellerId, rating: 4, comment: 'Good quality and timely delivery. Slight delay in communication but overall satisfied.', createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), reviewer: { name: 'Priya Sharma', companyName: 'Sharma Enterprises' } },
-          { id: '3', reviewerId: 'r3', targetId: product.sellerId, rating: 5, comment: 'Best supplier we have worked with. Consistent quality every time.', createdAt: new Date(Date.now() - 86400000 * 7).toISOString(), reviewer: { name: 'Amit Patel' } },
+          { id: '1', reviewerId: 'r1', targetId: product.sellerId, productId: product.id, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged. Will order again!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar', companyName: 'RK Traders' } },
+          { id: '2', reviewerId: 'r2', targetId: product.sellerId, productId: product.id, rating: 4, comment: 'Good quality and timely delivery. Slight delay in communication but overall satisfied.', createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), reviewer: { name: 'Priya Sharma', companyName: 'Sharma Enterprises' } },
+          { id: '3', reviewerId: 'r3', targetId: product.sellerId, productId: product.id, rating: 5, comment: 'Best supplier we have worked with. Consistent quality every time.', createdAt: new Date(Date.now() - 86400000 * 7).toISOString(), reviewer: { name: 'Amit Patel' } },
         ])
       } catch {
         setReviews([
-          { id: '1', reviewerId: 'r1', targetId: product.sellerId, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar' } },
-          { id: '2', reviewerId: 'r2', targetId: product.sellerId, rating: 4, comment: 'Good quality and timely delivery. Recommended.', createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), reviewer: { name: 'Priya Sharma' } },
+          { id: '1', reviewerId: 'r1', targetId: product.sellerId, productId: product.id, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar' } },
+          { id: '2', reviewerId: 'r2', targetId: product.sellerId, productId: product.id, rating: 4, comment: 'Good quality and timely delivery. Recommended.', createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), reviewer: { name: 'Priya Sharma' } },
         ])
       }
     }
     fetchReviews()
   }, [product?.id, product?.sellerId])
 
-  // Handle Add to Cart
-  const handleAddToCart = () => {
+  // Handle Add to Cart for current product
+  const handleAddToCart = useCallback(() => {
     if (!user) {
       toast.error('Please sign in to add items to cart')
       setView('auth')
@@ -478,7 +588,37 @@ export function ProductPage() {
       state: product.state,
     })
     toast.success(`${product.name} added to cart`)
-  }
+  }, [user, product, orderQty, addToCart, setView])
+
+  // Handle Add to Cart for related/similar product
+  const handleQuickAddToCart = useCallback((p: Product) => {
+    if (!user) {
+      toast.error('Please sign in to add items to cart')
+      setView('auth')
+      return
+    }
+    if (user.role !== 'buyer' && user.role !== 'admin') {
+      toast.error('Only buyers can add items to cart')
+      return
+    }
+
+    const productImage = p.imageUrl || (p.images ? p.images.split(',')[0] : undefined)
+    addToCart({
+      productId: p.id,
+      productName: p.name,
+      productImage,
+      sellerId: p.sellerId,
+      sellerName: p.seller.companyName || p.seller.name,
+      quantity: p.minOrderQty || 1,
+      unit: p.unit,
+      pricePerUnit: p.pricePerUnit,
+      minOrderQty: p.minOrderQty || 1,
+      maxQuantity: p.quantity,
+      location: p.location,
+      state: p.state,
+    })
+    toast.success(`${p.name} added to cart`)
+  }, [user, addToCart, setView])
 
   // Handle Buy Now (add to cart + open cart)
   const handleBuyNow = () => {
@@ -486,7 +626,7 @@ export function ProductPage() {
     setCartOpen(true)
   }
 
-  // Handle submit review
+  // Handle submit review - include productId
   const handleSubmitReview = async () => {
     if (!user) {
       toast.error('Please sign in to write a review')
@@ -511,6 +651,7 @@ export function ProductPage() {
         body: JSON.stringify({
           reviewerId: user.id,
           targetId: product.sellerId,
+          productId: product.id,
           rating: reviewRating,
           comment: reviewComment.trim(),
         }),
@@ -521,6 +662,7 @@ export function ProductPage() {
           id: Date.now().toString(),
           reviewerId: user.id,
           targetId: product.sellerId,
+          productId: product.id,
           rating: reviewRating,
           comment: reviewComment.trim(),
           createdAt: new Date().toISOString(),
@@ -577,7 +719,6 @@ export function ProductPage() {
 
   // Certifications
   const productCerts = product?.certifications ? product.certifications.split(',').map((c) => c.trim()).filter(Boolean) : []
-  const producerCerts = producer?.certifications ? producer.certifications.split(',').map((c) => c.trim()).filter(Boolean) : []
 
   // Average review rating
   const avgRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0
@@ -655,7 +796,7 @@ export function ProductPage() {
           animate="visible"
           className="px-4 sm:px-6 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"
         >
-          {/* ─── Left Column: Product Images + Seller's Other Products ───────── */}
+          {/* ─── Left Column: Product Images ──────────────────────────────────── */}
           <motion.div variants={fadeUp} className="space-y-4">
             {/* Main Image Area */}
             <div className="glass-card p-4">
@@ -733,7 +874,7 @@ export function ProductPage() {
               )}
             </div>
 
-            {/* Delivery Estimation Card - Below Image */}
+            {/* Delivery Estimation Card - Simplified */}
             <div className="glass-card p-4 space-y-3 border border-emerald-500/10">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Truck className="w-4 h-4 text-emerald-400" />
@@ -756,45 +897,20 @@ export function ProductPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Est. Transport Cost</span>
                   <div className="text-right">
-                    <span className="text-amber-400 font-semibold">₹{Math.round(totalPrice * 0.035).toLocaleString('en-IN')}</span>
-                    <p className="text-[10px] text-muted-foreground">2-5% of order value</p>
+                    <span className="text-amber-400 font-semibold">₹{Math.round(totalPrice * TRANSPORT_ESTIMATE_RATE).toLocaleString('en-IN')}</span>
+                    <p className="text-[10px] text-muted-foreground/60">~3.5% of order value (estimate only)</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Est. GST (18%)</span>
-                  <span className="text-foreground font-medium">₹{Math.round(totalPrice * 0.18).toLocaleString('en-IN')}</span>
-                </div>
-                <Separator className="bg-white/5" />
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Est. Total</span>
-                  <span className="text-base font-bold text-emerald-400">₹{Math.round(totalPrice + totalPrice * 0.035 + totalPrice * 0.18).toLocaleString('en-IN')}</span>
+                  <span className="text-muted-foreground">Platform Fee</span>
+                  <div className="text-right">
+                    <span className="text-foreground font-medium">2%</span>
+                    <p className="text-[10px] text-muted-foreground/60">Calculated at checkout</p>
+                  </div>
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground/60">Final cost calculated at checkout based on delivery location</p>
+              <p className="text-[10px] text-muted-foreground/60">Transport & platform fees are estimates. Final cost calculated at checkout.</p>
             </div>
-
-            {/* Seller's Other Products */}
-            {sellerProducts.length > 0 && (
-              <div className="glass-card p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-emerald-400" />
-                  Seller&apos;s Other Products
-                </h3>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                  {sellerProducts.map((sp) => (
-                    <RelatedProductCard
-                      key={sp.id}
-                      product={sp}
-                      onClick={() => {
-                        setSelectedProductId(sp.id)
-                        setSelectedImageIdx(0)
-                        window.scrollTo({ top: 0, behavior: 'smooth' })
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
           </motion.div>
 
           {/* ─── Right Column: Product Details ────────────────────────────────── */}
@@ -815,7 +931,7 @@ export function ProductPage() {
 
               <h2 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">{product.name}</h2>
 
-              {/* Price */}
+              {/* Price - ONLY actual price set by producer */}
               <div className="flex items-end gap-2">
                 <div className="flex items-baseline gap-1">
                   <IndianRupee className="w-6 h-6 text-emerald-400" />
@@ -826,11 +942,24 @@ export function ProductPage() {
                 <span className="text-base text-muted-foreground mb-1">/ {product.unit}</span>
               </div>
 
-              {/* Price Trend */}
-              <div className="flex items-center gap-1.5 text-sm">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">+3.2% this week</span>
-                <span className="text-muted-foreground">· Market trend</span>
+              {/* Available Quantity - Prominent Display */}
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                  product.quantity < 10
+                    ? 'bg-red-500/10 border-red-500/25'
+                    : 'bg-emerald-500/10 border-emerald-500/25'
+                }`}>
+                  <Package className={`w-4 h-4 ${product.quantity < 10 ? 'text-red-400' : 'text-emerald-400'}`} />
+                  <span className={`text-sm font-bold ${product.quantity < 10 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {product.quantity.toLocaleString('en-IN')} units available
+                  </span>
+                </div>
+                {product.quantity < 10 && (
+                  <div className="flex items-center gap-1 text-red-400">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="text-xs font-semibold">Low stock!</span>
+                  </div>
+                )}
               </div>
 
               {/* Location */}
@@ -938,10 +1067,13 @@ export function ProductPage() {
                 Availability & Pricing
               </h3>
               <div className="grid grid-cols-3 gap-3">
-                <div className="glass-card p-3 text-center">
+                <div className={`glass-card p-3 text-center ${product.quantity < 10 ? 'border border-red-500/20' : ''}`}>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Available</p>
-                  <p className="text-base font-bold text-foreground">{product.quantity.toLocaleString('en-IN')}</p>
+                  <p className={`text-base font-bold ${product.quantity < 10 ? 'text-red-400' : 'text-foreground'}`}>{product.quantity.toLocaleString('en-IN')}</p>
                   <p className="text-[10px] text-muted-foreground">{product.unit}</p>
+                  {product.quantity < 10 && (
+                    <p className="text-[9px] text-red-400 font-semibold mt-0.5">Low stock!</p>
+                  )}
                 </div>
                 <div className="glass-card p-3 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Min Order</p>
@@ -994,317 +1126,173 @@ export function ProductPage() {
                   </Button>
                 </div>
 
-                <span className="text-sm text-muted-foreground">{product.unit}</span>
-
-                {/* Live Total */}
+                {/* Total Price */}
                 <div className="flex-1 text-right">
                   <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-2xl font-bold text-emerald-400">₹{totalPrice.toLocaleString('en-IN')}</p>
+                  <div className="flex items-baseline justify-end gap-1">
+                    <IndianRupee className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xl font-bold text-foreground">{totalPrice.toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3">
                 <Button
-                  className="flex-1 h-12 text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                  className="h-11 text-sm font-semibold bg-white/10 hover:bg-white/15 text-foreground border border-white/10"
+                  variant="outline"
                   onClick={handleAddToCart}
                 >
-                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  <ShoppingCart className="w-4 h-4 mr-2" />
                   Add to Cart
                 </Button>
                 <Button
-                  className="h-12 px-5 text-base font-semibold bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-500/20"
+                  className="h-11 text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
                   onClick={handleBuyNow}
                 >
-                  <Zap className="w-5 h-5 mr-2" />
                   Buy Now
+                  <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
-
-              <Button
-                variant="outline"
-                className="w-full h-10 border-white/10 hover:bg-white/5 hover:border-white/20"
-                onClick={() => {
-                  setActiveChatUser(product.sellerId)
-                  setChatOpen(true)
-                }}
-              >
-                <MessageSquare className="w-4 h-4 mr-2" />
-                Message Seller
-              </Button>
             </div>
 
-            {/* 6. Delivery Information Card */}
-            <div className="glass-card p-5 space-y-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Truck className="w-4 h-4 text-emerald-400" />
-                Delivery Information
-              </h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5" /> Pickup Location
-                  </span>
-                  <span className="font-medium text-foreground">{product.location}{product.state ? `, ${product.state}` : ''}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" /> Est. Delivery
-                  </span>
-                  <span className="font-medium text-foreground">2-4 business days</span>
-                </div>
-                <Separator className="bg-white/5" />
-                <div>
-                  <p className="text-xs text-muted-foreground mb-2">Transport Partners</p>
-                  <div className="flex flex-wrap gap-2">
-                    {TRANSPORT_PARTNERS.map((partner, idx) => (
-                      <span
-                        key={idx}
-                        className="text-xs font-medium px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-foreground"
-                      >
-                        {partner}
-                      </span>
-                    ))}
+            {/* 6. Producer Info Card */}
+            {producer && (
+              <div
+                className="glass-card p-4 cursor-pointer hover:bg-white/[0.04] transition-colors"
+                onClick={() => {
+                  setSelectedProducerId(product.sellerId)
+                  setView('producer-profile')
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-lg font-bold text-emerald-400">
+                    {(producer.companyName || producer.name).charAt(0).toUpperCase()}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-foreground truncate">
+                      {producer.companyName || producer.name}
+                    </h4>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {producer.farmName && `${producer.farmName} · `}{producer.city}{producer.state ? `, ${producer.state}` : ''}
+                    </p>
+                    {producer.avgRating !== undefined && producer.avgRating > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <StarRating rating={producer.avgRating} size="sm" />
+                        <span className="text-xs text-muted-foreground">
+                          {producer.avgRating.toFixed(1)} ({producer.totalReviews || 0})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 </div>
+              </div>
+            )}
+
+            {/* 7. Reviews Section */}
+            <div className="glass-card p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                Reviews
+                {reviews.length > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {avgRating.toFixed(1)} avg · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </h3>
+
+              {/* Review Form */}
+              {user && user.role === 'buyer' && (
+                <div className="glass-card p-4 space-y-3 border border-white/10">
+                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Write a Review</h4>
+                  <InteractiveStarRating value={reviewRating} onChange={setReviewRating} />
+                  <Textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Share your experience with this product..."
+                    className="min-h-[80px] bg-white/5 border-white/10 text-sm resize-none"
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-emerald-500 hover:bg-emerald-400 text-white"
+                    onClick={handleSubmitReview}
+                    disabled={submittingReview || reviewRating === 0}
+                  >
+                    {submittingReview ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5 mr-1.5" />
+                        Submit Review
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Reviews List */}
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {reviews.length === 0 ? (
+                  <div className="text-center py-6">
+                    <Star className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No reviews yet</p>
+                    <p className="text-xs text-muted-foreground/60">Be the first to review this product</p>
+                  </div>
+                ) : (
+                  reviews.map((review) => (
+                    <div key={review.id} className="glass-card p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center text-xs font-bold text-emerald-400">
+                            {(review.reviewer?.name || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-foreground">{review.reviewer?.name || 'Anonymous'}</p>
+                            {review.reviewer?.companyName && (
+                              <p className="text-[10px] text-muted-foreground">{review.reviewer.companyName}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <StarRating rating={review.rating} size="sm" />
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(review.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                      {review.comment && (
+                        <p className="text-xs text-muted-foreground leading-relaxed">{review.comment}</p>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </motion.div>
         </motion.div>
 
-        {/* ─── Full Width Sections Below ────────────────────────────────────── */}
-
-        {/* 7. Producer Information Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-          className="px-4 sm:px-6 mt-8"
-        >
-          <div className="glass-card p-6">
-            <h3 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-              <User className="w-4 h-4 text-emerald-400" />
-              Producer Information
-            </h3>
-
-            <div className="flex flex-col sm:flex-row gap-5">
-              {/* Avatar & basic info */}
-              <div className="flex items-start gap-4 flex-1">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                  <span className="text-2xl font-bold text-emerald-400">
-                    {(producer?.name || product.seller.name || product.seller.companyName || '?')[0].toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-lg font-bold text-foreground">
-                      {producer?.name || product.seller.name || 'Unknown'}
-                    </h4>
-                    {product.seller.verificationStatus === 'verified' && (
-                      <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 text-xs">
-                        <BadgeCheck className="w-3 h-3 mr-1" />
-                        Verified
-                      </Badge>
-                    )}
-                  </div>
-                  {producer?.companyName && (
-                    <p className="text-sm text-amber-400 font-medium">{producer.companyName}</p>
-                  )}
-                  {producer?.farmName && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                      <Sprout className="w-3.5 h-3.5 text-emerald-400" />
-                      {producer.farmName}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                    {(producer?.city || producer?.state) && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {[producer?.city, producer?.state].filter(Boolean).join(', ')}
-                      </span>
-                    )}
-                    {producer?.yearsExperience != null && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {producer.yearsExperience} yrs experience
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Rating */}
-                  {producer && (producer.avgRating > 0 || producer.totalReviews > 0) && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <StarRating rating={producer.avgRating} size="sm" />
-                      <span className="text-sm font-semibold text-foreground">{producer.avgRating.toFixed(1)}</span>
-                      <span className="text-xs text-muted-foreground">({producer.totalReviews} reviews)</span>
-                    </div>
-                  )}
-
-                  {/* Certifications */}
-                  {producerCerts.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {producerCerts.map((cert, idx) => (
-                        <span
-                          key={idx}
-                          className="text-xs font-medium px-2.5 py-1 rounded-lg border bg-amber-500/10 text-amber-400 border-amber-500/20"
-                        >
-                          {cert}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex sm:flex-col gap-2 sm:w-48 shrink-0">
-                <Button
-                  variant="outline"
-                  className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 hover:border-white/20"
-                  onClick={() => {
-                    setSelectedProducerId(product.sellerId)
-                    setView('producer-profile')
-                  }}
-                >
-                  <User className="w-4 h-4 mr-2" />
-                  View Profile
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 sm:flex-none border-white/10 hover:bg-white/5 hover:border-white/20"
-                  onClick={() => {
-                    setActiveChatUser(product.sellerId)
-                    setChatOpen(true)
-                  }}
-                >
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Message
-                </Button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 8. Reviews Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.5 }}
-          className="px-4 sm:px-6 mt-8"
-        >
-          <div className="glass-card p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Star className="w-4 h-4 text-amber-400" />
-                Reviews
-                {reviews.length > 0 && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    ({reviews.length} review{reviews.length !== 1 ? 's' : ''})
-                  </span>
-                )}
-              </h3>
-              {reviews.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <StarRating rating={avgRating} size="sm" />
-                  <span className="text-sm font-semibold text-foreground">{avgRating.toFixed(1)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Write a Review (for buyers) */}
-            {user && user.role === 'buyer' && (
-              <div className="glass-card p-4 mb-6 space-y-3">
-                <h4 className="text-sm font-semibold text-foreground">Write a Review</h4>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Your Rating</Label>
-                  <InteractiveStarRating value={reviewRating} onChange={setReviewRating} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Your Review</Label>
-                  <Textarea
-                    value={reviewComment}
-                    onChange={(e) => setReviewComment(e.target.value)}
-                    placeholder="Share your experience with this product and seller..."
-                    className="min-h-[80px] bg-white/5 border-white/10 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none"
-                  />
-                </div>
-                <Button
-                  className="bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-                  onClick={handleSubmitReview}
-                  disabled={submittingReview || reviewRating === 0}
-                >
-                  {submittingReview ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      Submit Review
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-
-            {/* Reviews List */}
-            {reviews.length === 0 ? (
-              <div className="text-center py-8">
-                <Star className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">No reviews yet. Be the first to review!</p>
-              </div>
-            ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-                {reviews.map((review) => (
-                  <div key={review.id} className="glass-card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-amber-400">
-                            {(review.reviewer?.name || '?')[0].toUpperCase()}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {review.reviewer?.name || 'Anonymous'}
-                          </p>
-                          {review.reviewer?.companyName && (
-                            <p className="text-xs text-amber-400/70">{review.reviewer.companyName}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <StarRating rating={review.rating} size="sm" />
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDate(review.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    {review.comment && (
-                      <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                        {review.comment}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* 9. Similar Products Section */}
+        {/* ─── Similar Products Section - Grid Layout ──────────────────────────── */}
         {similarProducts.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.5 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
             className="px-4 sm:px-6 mt-8"
           >
-            <div className="glass-card p-6">
-              <h3 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
-                <ChevronRight className="w-4 h-4 text-emerald-400" />
-                Similar Products
-              </h3>
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+            <div className="glass-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <Package className="w-5 h-5 text-emerald-400" />
+                  Similar Products
+                </h3>
+                <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground">
+                  {similarProducts.length} products
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {similarProducts.map((sp) => (
-                  <RelatedProductCard
+                  <SimilarProductCard
                     key={sp.id}
                     product={sp}
                     onClick={() => {
@@ -1312,6 +1300,7 @@ export function ProductPage() {
                       setSelectedImageIdx(0)
                       window.scrollTo({ top: 0, behavior: 'smooth' })
                     }}
+                    onAddToCart={() => handleQuickAddToCart(sp)}
                   />
                 ))}
               </div>
@@ -1319,8 +1308,41 @@ export function ProductPage() {
           </motion.div>
         )}
 
-        {/* Bottom spacing */}
-        <div className="h-16" />
+        {/* ─── Other Products From This Producer - Grid Layout ──────────────── */}
+        {sellerProducts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="px-4 sm:px-6 mt-6 mb-8"
+          >
+            <div className="glass-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <Award className="w-5 h-5 text-emerald-400" />
+                  More from {producer?.companyName || product.seller.companyName || product.seller.name}
+                </h3>
+                <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground">
+                  {sellerProducts.length} products
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {sellerProducts.map((sp) => (
+                  <ProducerProductCard
+                    key={sp.id}
+                    product={sp}
+                    onClick={() => {
+                      setSelectedProductId(sp.id)
+                      setSelectedImageIdx(0)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    onAddToCart={() => handleQuickAddToCart(sp)}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   )

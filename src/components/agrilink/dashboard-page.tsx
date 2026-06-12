@@ -26,6 +26,7 @@ const navItemsByRole: Record<UserRole, NavItem[]> = {
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-5 w-5" /> },
     { id: 'listings', label: 'My Listings', icon: <Package className="h-5 w-5" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingCart className="h-5 w-5" /> },
+    { id: 'shipments', label: 'Shipments', icon: <Truck className="h-5 w-5" /> },
     { id: 'messages', label: 'Messages', icon: <MessageSquare className="h-5 w-5" /> },
     { id: 'profile', label: 'Profile', icon: <User className="h-5 w-5" /> },
   ],

@@ -169,21 +169,59 @@ export function AuthPage() {
   const handleRoleDemo = async (email: string, roleName: string) => {
     setIsLoading(true)
     try {
-      // Try to get existing user
+      const roleToType: Record<string, string> = {
+        'producer1@agrilink.in': 'producer',
+        'buyer1@agrilink.in': 'buyer',
+        'transport1@agrilink.in': 'transporter',
+        'admin@agrilink.in': 'admin',
+      }
+      const desiredRole = (roleToType[email] || roleName.toLowerCase()) as UserRole
+
+      // Try to get existing user and update their role if needed
       const getRes = await fetch(`/api/auth?email=${encodeURIComponent(email)}`)
       if (getRes.ok) {
         const data = await getRes.json()
+        let userData = data.user
+
+        // If role doesn't match, update it via POST
+        if (userData.role !== desiredRole) {
+          const roleMap: Record<string, { name: string; company: string; phone: string; state: string; city: string }> = {
+            'producer1@agrilink.in': { name: 'Rajesh Farmer', company: 'Green Harvest Farms', phone: '+91-9876500001', state: 'Punjab', city: 'Ludhiana' },
+            'buyer1@agrilink.in': { name: 'Priya Buyer', company: 'Spice Route Trading', phone: '+91-9876500002', state: 'Maharashtra', city: 'Mumbai' },
+            'transport1@agrilink.in': { name: 'Amit Transporter', company: 'Swift Cargo Movers', phone: '+91-9876500003', state: 'Gujarat', city: 'Ahmedabad' },
+            'admin@agrilink.in': { name: 'Admin User', company: 'AgriLink Platform', phone: '+91-9876500000', state: 'Delhi', city: 'New Delhi' },
+          }
+          const info = roleMap[email] || { name: userData.name, company: userData.companyName, phone: userData.phone, state: userData.state, city: userData.city }
+          const updateRes = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email,
+              name: info.name,
+              role: desiredRole,
+              companyName: info.company,
+              phone: info.phone,
+              state: info.state,
+              city: info.city,
+            }),
+          })
+          if (updateRes.ok) {
+            const updateData = await updateRes.json()
+            userData = updateData.user
+          }
+        }
+
         const user: AppUser = {
-          id: data.user.id,
-          name: data.user.name || '',
-          email: data.user.email,
-          role: data.user.role as UserRole,
-          companyName: data.user.companyName || undefined,
-          phone: data.user.phone || undefined,
-          state: data.user.state || undefined,
-          city: data.user.city || undefined,
-          verificationStatus: data.user.verificationStatus,
-          avatar: data.user.avatar || undefined,
+          id: userData.id,
+          name: userData.name || '',
+          email: userData.email,
+          role: (userData.role || desiredRole) as UserRole,
+          companyName: userData.companyName || undefined,
+          phone: userData.phone || undefined,
+          state: userData.state || undefined,
+          city: userData.city || undefined,
+          verificationStatus: userData.verificationStatus,
+          avatar: userData.avatar || undefined,
         }
         setUser(user)
         toast.success(`Welcome! You're now signed in as a ${roleName}.`)
@@ -191,31 +229,18 @@ export function AuthPage() {
         return
       }
 
-      // If not found, create user
-      const roleMap: Record<string, { name: string; company: string; phone: string; state: string; city: string }> = {
-        'producer1@agrilink.in': { name: 'Rajesh Farmer', company: 'Green Harvest Farms', phone: '+91-9876500001', state: 'Punjab', city: 'Ludhiana' },
-        'buyer1@agrilink.in': { name: 'Priya Buyer', company: 'Spice Route Trading', phone: '+91-9876500002', state: 'Maharashtra', city: 'Mumbai' },
-        'transport1@agrilink.in': { name: 'Amit Transporter', company: 'Swift Cargo Movers', phone: '+91-9876500003', state: 'Gujarat', city: 'Ahmedabad' },
-        'admin@agrilink.in': { name: 'Admin User', company: 'AgriLink Platform', phone: '+91-9876500000', state: 'Delhi', city: 'New Delhi' },
-      }
-      const roleToType: Record<string, string> = {
-        'producer1@agrilink.in': 'producer',
-        'buyer1@agrilink.in': 'buyer',
-        'transport1@agrilink.in': 'transporter',
-        'admin@agrilink.in': 'admin',
-      }
-      const info = roleMap[email] || { name: roleName, company: '', phone: '', state: '', city: '' }
+      // If not found, create user (use already-defined roleMap from the if block above)
       const createRes = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email,
-          name: info.name,
-          role: roleToType[email] || 'buyer',
-          companyName: info.company,
-          phone: info.phone,
-          state: info.state,
-          city: info.city,
+          name: roleName,
+          role: desiredRole,
+          companyName: '',
+          phone: '',
+          state: '',
+          city: '',
         }),
       })
 

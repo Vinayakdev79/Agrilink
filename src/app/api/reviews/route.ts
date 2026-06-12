@@ -6,9 +6,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const targetId = searchParams.get('targetId')
     const reviewerId = searchParams.get('reviewerId')
+    const productId = searchParams.get('productId')
 
-    // Review table only has: id, reviewerId, targetId, rating, comment, createdAt
-    // No productId column - reviews are per-seller, not per-product
     let query = supabase
       .from('Review')
       .select('*, reviewer:User!reviewerId(id, name, companyName, role)')
@@ -17,6 +16,7 @@ export async function GET(request: Request) {
 
     if (targetId) query = query.eq('targetId', targetId)
     if (reviewerId) query = query.eq('reviewerId', reviewerId)
+    if (productId) query = query.eq('productId', productId)
 
     const { data: reviews, error: reviewsError } = await query
 
@@ -35,23 +35,52 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { reviewerId, targetId, rating, comment } = body
+    const { reviewerId, targetId, rating, comment, productId } = body
 
     if (!reviewerId || !targetId || !rating) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Create the review (no productId column exists)
-    const { data: review, error: reviewError } = await supabase
+    const insertData: Record<string, unknown> = {
+      reviewerId,
+      targetId,
+      rating: parseInt(rating),
+      comment,
+    }
+
+    // Include productId if provided (column added via migration)
+    if (productId) {
+      insertData.productId = productId
+    }
+
+    // Try insert with productId
+    let { data: review, error: reviewError } = await supabase
       .from('Review')
-      .insert({
+      .insert(insertData)
+      .select()
+      .single()
+
+    // If productId column doesn't exist, retry without it
+    if (reviewError && productId) {
+      const fallbackInsert: Record<string, unknown> = {
         reviewerId,
         targetId,
         rating: parseInt(rating),
         comment,
-      })
-      .select()
-      .single()
+      }
+      const fallbackResult = await supabase
+        .from('Review')
+        .insert(fallbackInsert)
+        .select()
+        .single()
+
+      if (fallbackResult.error) {
+        console.error('Review create error:', fallbackResult.error)
+        return NextResponse.json({ error: 'Failed to create review' }, { status: 500 })
+      }
+      review = fallbackResult.data
+      reviewError = null
+    }
 
     if (reviewError) {
       console.error('Review create error:', reviewError)

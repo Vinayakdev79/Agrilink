@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     if (id) {
       const { data: product, error } = await supabase
         .from('Product')
-        .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
+        .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry)')
         .eq('id', id)
         .maybeSingle()
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     // List products with filters
     let query = supabase
       .from('Product')
-      .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
+      .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry)')
       .eq('isActive', true)
       .order('createdAt', { ascending: false })
       .limit(50)
@@ -60,7 +60,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
     }
 
-    return NextResponse.json({ products: products ?? [] })
+    // Sort products so that sponsored sellers (with valid isSponsored and non-expired sponsoredExpiry) appear first
+    const now = new Date()
+    const sortedProducts = (products ?? []).sort((a: any, b: any) => {
+      const aSponsored = a.seller?.isSponsored && a.seller?.sponsoredExpiry && new Date(a.seller.sponsoredExpiry) > now
+      const bSponsored = b.seller?.isSponsored && b.seller?.sponsoredExpiry && new Date(b.seller.sponsoredExpiry) > now
+      if (aSponsored && !bSponsored) return -1
+      if (!aSponsored && bSponsored) return 1
+      return 0
+    })
+
+    return NextResponse.json({ products: sortedProducts })
   } catch (error) {
     console.error('Products error:', error)
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
@@ -121,5 +131,52 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Product create error:', error)
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json()
+    const { productId, quantity, isActive } = body
+
+    if (!productId) {
+      return NextResponse.json({ error: 'Missing productId' }, { status: 400 })
+    }
+
+    // Build update data - only include fields that are provided
+    const updateData: Record<string, unknown> = {}
+    if (quantity !== undefined) {
+      updateData.quantity = parseFloat(quantity)
+    }
+    if (isActive !== undefined) {
+      updateData.isActive = isActive
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    updateData.updatedAt = new Date().toISOString()
+
+    const { data: product, error } = await supabase
+      .from('Product')
+      .update(updateData)
+      .eq('id', productId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Product update error:', error)
+      return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
+    }
+
+    if (!product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ product })
+  } catch (error) {
+    console.error('Product update error:', error)
+    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
   }
 }

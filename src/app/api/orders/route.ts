@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     } else if (role === 'producer' || role === 'seller') {
       const { data, error } = await supabase
         .from('Order')
-        .select(`*, buyer:User!buyerId(id, name, companyName, phone, city, state, avatar, address), product:Product!productId(${productSelect})`)
+        .select(`*, buyer:User!buyerId(id, name, companyName, phone, city, state, avatar, avatarUrl, address), product:Product!productId(${productSelect})`)
         .eq('sellerId', userId)
         .order('createdAt', { ascending: false })
 
@@ -79,46 +79,96 @@ export async function POST(request: Request) {
       buyerId, sellerId, productId, quantity, unitPrice,
       deliveryAddress, deliveryCity, deliveryState, deliveryPincode,
       deliveryLat, deliveryLng, deliveryFullAddress,
+      // Payment breakdown fields from cart
+      platformFee: clientPlatformFee,
+      transportBookingFee: clientTransportBookingFee,
+      totalPayable: clientTotalPayable,
+      advancePayment: clientAdvancePayment,
+      remainingPayment: clientRemainingPayment,
+      estimatedTransportCost: clientEstimatedTransportCost,
+      paymentStatus: clientPaymentStatus,
+      status: clientStatus,
     } = body
 
-    const totalPrice = parseFloat(quantity) * parseFloat(unitPrice)
+    if (!buyerId || !sellerId || !productId || !quantity || !unitPrice) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const parsedQuantity = parseFloat(quantity)
+    const parsedUnitPrice = parseFloat(unitPrice)
+    const totalPrice = clientTotalPayable || (parsedQuantity * parsedUnitPrice)
+
+    // Use client-provided payment breakdown or calculate defaults
+    const platformFee = clientPlatformFee || Math.round(parsedQuantity * parsedUnitPrice * 0.02 * 100) / 100
+    const advanceAmount = clientAdvancePayment || Math.round(totalPrice * 0.5 * 100) / 100
+    const remainingAmount = clientRemainingPayment || Math.round(totalPrice * 0.5 * 100) / 100
+    const orderStatus = clientStatus || 'negotiating'
 
     const insertData: Record<string, unknown> = {
       buyerId,
       sellerId,
       productId,
-      quantity: parseFloat(quantity),
-      unitPrice: parseFloat(unitPrice),
+      quantity: parsedQuantity,
+      unitPrice: parsedUnitPrice,
       totalPrice,
-      status: 'negotiating',
+      status: orderStatus,
     }
 
-    // Try inserting with delivery address fields first
-    // If the columns don't exist yet, fall back to basic fields
-    const deliveryFields: Record<string, unknown> = {}
-    if (deliveryAddress) deliveryFields.deliveryAddress = deliveryAddress
-    if (deliveryCity) deliveryFields.deliveryCity = deliveryCity
-    if (deliveryState) deliveryFields.deliveryState = deliveryState
-    if (deliveryPincode) deliveryFields.deliveryPincode = deliveryPincode
-    if (deliveryLat) deliveryFields.deliveryLat = deliveryLat
-    if (deliveryLng) deliveryFields.deliveryLng = deliveryLng
-    if (deliveryFullAddress) deliveryFields.deliveryFullAddress = deliveryFullAddress
+    // Payment fields - try to include them (columns may not exist yet)
+    const paymentFields: Record<string, unknown> = {
+      paymentStatus: clientPaymentStatus || 'advance_paid',
+      advanceAmount,
+      remainingAmount,
+      platformFee,
+    }
 
-    // Try with delivery fields first
+    // Additional payment fields from cart checkout
+    if (clientTransportBookingFee) paymentFields.transportBookingFee = clientTransportBookingFee
+    if (clientEstimatedTransportCost) paymentFields.estimatedTransportCost = clientEstimatedTransportCost
+
+    // Delivery address fields
+    if (deliveryAddress) paymentFields.deliveryAddress = deliveryAddress
+    if (deliveryCity) paymentFields.deliveryCity = deliveryCity
+    if (deliveryState) paymentFields.deliveryState = deliveryState
+    if (deliveryPincode) paymentFields.deliveryPincode = deliveryPincode
+    if (deliveryLat) paymentFields.deliveryLat = deliveryLat
+    if (deliveryLng) paymentFields.deliveryLng = deliveryLng
+    if (deliveryFullAddress) paymentFields.deliveryFullAddress = deliveryFullAddress
+
+    // Try with all fields first
     let { data: order, error } = await supabase
       .from('Order')
-      .insert({ ...insertData, ...deliveryFields })
+      .insert({ ...insertData, ...paymentFields })
       .select()
       .single()
 
-    // If delivery columns don't exist, retry without them
-    if (error && Object.keys(deliveryFields).length > 0) {
-      const fallbackResult = await supabase
+    // If payment/delivery columns don't exist, retry without them
+    if (error) {
+      // Try without payment fields
+      const deliveryOnlyFields: Record<string, unknown> = {}
+      if (deliveryAddress) deliveryOnlyFields.deliveryAddress = deliveryAddress
+      if (deliveryCity) deliveryOnlyFields.deliveryCity = deliveryCity
+      if (deliveryState) deliveryOnlyFields.deliveryState = deliveryState
+      if (deliveryPincode) deliveryOnlyFields.deliveryPincode = deliveryPincode
+      if (deliveryLat) deliveryOnlyFields.deliveryLat = deliveryLat
+      if (deliveryLng) deliveryOnlyFields.deliveryLng = deliveryLng
+      if (deliveryFullAddress) deliveryOnlyFields.deliveryFullAddress = deliveryFullAddress
+
+      let fallbackResult = await supabase
         .from('Order')
-        .insert(insertData)
+        .insert({ ...insertData, ...deliveryOnlyFields })
         .select()
         .single()
-      
+
+      if (fallbackResult.error && Object.keys(deliveryOnlyFields).length > 0) {
+        // Try without delivery fields too
+        fallbackResult = await supabase
+          .from('Order')
+          .insert(insertData)
+          .select()
+          .single()
+      }
+
       if (fallbackResult.error) {
         console.error('Order create error:', fallbackResult.error)
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
@@ -132,7 +182,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
     }
 
-    return NextResponse.json({ order })
+    // Deduct ordered quantity from Product's available quantity
+    const { data: product } = await supabase
+      .from('Product')
+      .select('quantity')
+      .eq('id', productId)
+      .single()
+
+    if (product) {
+      const newQuantity = Math.max(0, product.quantity - parsedQuantity)
+      await supabase
+        .from('Product')
+        .update({ quantity: newQuantity, updatedAt: new Date().toISOString() })
+        .eq('id', productId)
+    }
+
+    // Create PlatformRevenue entry for the commission
+    try {
+      await supabase
+        .from('PlatformRevenue')
+        .insert({
+          orderId: order.id,
+          type: 'commission',
+          amount: platformFee,
+          userId: sellerId,
+          description: `2% platform commission on order ${order.id}`,
+        })
+    } catch (revenueError) {
+      // Table may not exist yet - log but don't fail the order
+      console.warn('Could not create PlatformRevenue entry (table may not exist):', revenueError)
+    }
+
+    return NextResponse.json({
+      order,
+      paymentDetails: {
+        totalPrice,
+        platformFee,
+        advanceAmount,
+        remainingAmount,
+        paymentStatus: 'advance_paid',
+      },
+    })
   } catch (error) {
     console.error('Order create error:', error)
     return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
@@ -148,12 +238,105 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { data: order, error } = await supabase
+    // Fetch the current order to get context
+    const { data: currentOrder, error: fetchError } = await supabase
       .from('Order')
-      .update({ status })
+      .select('*')
+      .eq('id', orderId)
+      .single()
+
+    if (fetchError || !currentOrder) {
+      console.error('Order fetch error:', fetchError)
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    const updateData: Record<string, unknown> = {
+      status,
+      updatedAt: new Date().toISOString(),
+    }
+
+    // When status changes to 'cancelled', restore the deducted quantity to the Product
+    if (status === 'cancelled') {
+      const { data: product } = await supabase
+        .from('Product')
+        .select('quantity')
+        .eq('id', currentOrder.productId)
+        .single()
+
+      if (product) {
+        const restoredQuantity = product.quantity + currentOrder.quantity
+        await supabase
+          .from('Product')
+          .update({ quantity: restoredQuantity, updatedAt: new Date().toISOString() })
+          .eq('id', currentOrder.productId)
+      }
+    }
+
+    // When status changes to 'delivered', update payment and transporter stats
+    if (status === 'delivered') {
+      // Try to update payment status to 'full_paid' and set remainingPaidAt
+      try {
+        updateData.paymentStatus = 'full_paid'
+        updateData.remainingPaidAt = new Date().toISOString()
+      } catch {
+        // Columns may not exist yet
+      }
+
+      // Update transporter's totalCompletedShipments
+      // Find the shipment for this order
+      const { data: shipment } = await supabase
+        .from('Shipment')
+        .select('transporterId')
+        .eq('orderId', orderId)
+        .single()
+
+      if (shipment?.transporterId) {
+        const { data: transporter } = await supabase
+          .from('User')
+          .select('totalTransactions')
+          .eq('id', shipment.transporterId)
+          .single()
+
+        if (transporter) {
+          await supabase
+            .from('User')
+            .update({
+              totalTransactions: (transporter.totalTransactions || 0) + 1,
+              updatedAt: new Date().toISOString(),
+            })
+            .eq('id', shipment.transporterId)
+        }
+      }
+    }
+
+    // Try update with new fields
+    let { data: order, error } = await supabase
+      .from('Order')
+      .update(updateData)
       .eq('id', orderId)
       .select()
       .single()
+
+    // If update fails due to missing columns, retry without payment fields
+    if (error && (updateData.paymentStatus || updateData.remainingPaidAt)) {
+      const fallbackData: Record<string, unknown> = {
+        status,
+        updatedAt: new Date().toISOString(),
+      }
+      const fallbackResult = await supabase
+        .from('Order')
+        .update(fallbackData)
+        .eq('id', orderId)
+        .select()
+        .single()
+
+      if (fallbackResult.error) {
+        console.error('Order update error:', fallbackResult.error)
+        return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+      }
+      order = fallbackResult.data
+      error = null
+    }
 
     if (error) {
       console.error('Order update error:', error)

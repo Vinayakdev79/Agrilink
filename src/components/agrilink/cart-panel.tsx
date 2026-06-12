@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, CartItem } from '@/lib/store'
 import { toast } from 'sonner'
@@ -16,6 +16,11 @@ import {
   CreditCard,
   ChevronRight,
   Package,
+  AlertTriangle,
+  Info,
+  ShieldCheck,
+  Clock,
+  Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,9 +37,9 @@ import {
 } from '@/components/ui/dialog'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const TRANSPORT_RATE_MIN = 0.02 // 2%
-const TRANSPORT_RATE_MAX = 0.05 // 5%
-const GST_RATE = 0.18 // 18%
+const PLATFORM_FEE_RATE = 0.02 // 2% of subtotal
+const TRANSPORT_BOOKING_FEE = 30 // ₹30 flat
+const TRANSPORT_ESTIMATE_RATE = 0.035 // 3.5% for estimate display
 
 // ─── Checkout Dialog ──────────────────────────────────────────────────────────
 function CheckoutDialog({
@@ -42,17 +47,23 @@ function CheckoutDialog({
   onClose,
   cart,
   subtotal,
-  transportCost,
-  gstAmount,
-  totalBill,
+  platformFee,
+  transportBookingFee,
+  estimatedTransportCost,
+  totalPayable,
+  advancePayment,
+  remainingPayment,
 }: {
   open: boolean
   onClose: () => void
   cart: CartItem[]
   subtotal: number
-  transportCost: number
-  gstAmount: number
-  totalBill: number
+  platformFee: number
+  transportBookingFee: number
+  estimatedTransportCost: number
+  totalPayable: number
+  advancePayment: number
+  remainingPayment: number
 }) {
   const { user, clearCart, setCartOpen } = useAppStore()
   const [placing, setPlacing] = useState(false)
@@ -69,6 +80,32 @@ function CheckoutDialog({
   const [deliveryLng, setDeliveryLng] = useState('')
   const [mapAddress, setMapAddress] = useState('')
 
+  // Pre-fill user address if available
+  useEffect(() => {
+    if (user) {
+      setAddress((a) => ({
+        ...a,
+        fullName: user.name || a.fullName,
+        phone: user.phone || a.phone,
+      }))
+    }
+  }, [user])
+
+  // Validate stock at checkout
+  const validateStock = (): boolean => {
+    for (const item of cart) {
+      if (item.quantity > item.maxQuantity) {
+        toast.error(`${item.productName}: Only ${item.maxQuantity} ${item.unit} available`)
+        return false
+      }
+      if (item.quantity < (item.minOrderQty || 1)) {
+        toast.error(`${item.productName}: Minimum order is ${item.minOrderQty || 1} ${item.unit}`)
+        return false
+      }
+    }
+    return true
+  }
+
   const handlePlaceOrder = async () => {
     if (!user) {
       toast.error('Please sign in to place an order')
@@ -78,13 +115,20 @@ function CheckoutDialog({
       toast.error('Please fill all required address fields')
       return
     }
+    if (!validateStock()) return
 
     setPlacing(true)
     try {
-      // Create an order for each cart item
+      // Create an order for each cart item with payment breakdown
       const results = await Promise.allSettled(
-        cart.map((item) =>
-          fetch('/api/orders', {
+        cart.map((item) => {
+          const itemSubtotal = item.quantity * item.pricePerUnit
+          const itemPlatformFee = Math.round(itemSubtotal * PLATFORM_FEE_RATE)
+          const itemTotal = itemSubtotal + itemPlatformFee + TRANSPORT_BOOKING_FEE
+          const itemAdvance = Math.round(itemTotal * 0.5)
+          const itemRemaining = itemTotal - itemAdvance
+
+          return fetch('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -100,16 +144,25 @@ function CheckoutDialog({
               deliveryLat: deliveryLat || undefined,
               deliveryLng: deliveryLng || undefined,
               deliveryFullAddress: mapAddress || undefined,
+              // Payment breakdown
+              platformFee: itemPlatformFee,
+              transportBookingFee: TRANSPORT_BOOKING_FEE,
+              totalPayable: itemTotal,
+              advancePayment: itemAdvance,
+              remainingPayment: itemRemaining,
+              estimatedTransportCost: Math.round(itemSubtotal * TRANSPORT_ESTIMATE_RATE),
+              paymentStatus: 'advance_paid',
+              status: 'confirmed',
             }),
           })
-        )
+        })
       )
 
       const succeeded = results.filter((r) => r.status === 'fulfilled').length
       const failed = results.filter((r) => r.status === 'rejected').length
 
       if (succeeded > 0) {
-        toast.success(`Order${succeeded > 1 ? 's' : ''} placed for ${succeeded} item${succeeded > 1 ? 's' : ''}${failed > 0 ? ` (${failed} failed)` : ''}`)
+        toast.success(`Order${succeeded > 1 ? 's' : ''} placed for ${succeeded} item${succeeded > 1 ? 's' : ''}! Advance payment of ₹${advancePayment.toLocaleString('en-IN')} confirmed.${failed > 0 ? ` (${failed} failed)` : ''}`)
         clearCart()
         setCartOpen(false)
         onClose()
@@ -218,11 +271,9 @@ function CheckoutDialog({
                 setDeliveryLat(data.latitude)
                 setDeliveryLng(data.longitude)
                 setMapAddress(data.address)
-                // Auto-fill address fields from map selection
                 setAddress((a) => ({
                   ...a,
                   addressLine1: data.address.split(',').slice(0, 2).join(', ') || a.addressLine1,
-                  // Try to extract city and state from the address
                   city: data.address.split(',').find((_, i, arr) => i === arr.length - 3)?.trim() || a.city,
                   state: data.address.split(',').find((_, i, arr) => i === arr.length - 2)?.trim() || a.state,
                 }))
@@ -268,30 +319,107 @@ function CheckoutDialog({
 
           <Separator className="bg-white/5" />
 
-          {/* Bill Breakdown */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="text-foreground">₹{subtotal.toLocaleString('en-IN')}</span>
+          {/* Bill Breakdown - Corrected Pricing */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              Bill Breakdown
+            </h3>
+            <div className="space-y-2">
+              {/* Product Cost (subtotal) */}
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Product Cost</span>
+                <span className="text-foreground font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
+              </div>
+
+              {/* Platform Fee */}
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  Platform Fee (2%)
+                </span>
+                <span className="text-foreground font-medium">₹{platformFee.toLocaleString('en-IN')}</span>
+              </div>
+
+              {/* Transport Booking Fee */}
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Truck className="w-3 h-3" />
+                  Transport Booking Fee
+                </span>
+                <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString('en-IN')}</span>
+              </div>
+
+              <Separator className="bg-white/5" />
+
+              {/* Total Payable */}
+              <div className="flex justify-between items-center">
+                <span className="text-base font-bold text-foreground">Total Payable</span>
+                <span className="text-xl font-bold text-emerald-400">₹{totalPayable.toLocaleString('en-IN')}</span>
+              </div>
+
+              <Separator className="bg-white/5" />
+
+              {/* Estimated Transport Cost - NOT added to total */}
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Info className="w-3 h-3 text-amber-400" />
+                  Est. Transport Cost
+                </span>
+                <div className="text-right">
+                  <span className="text-amber-400 font-medium">₹{estimatedTransportCost.toLocaleString('en-IN')}</span>
+                  <p className="text-[10px] text-muted-foreground/60">Estimate only, not in total</p>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground flex items-center gap-1">
-                <Truck className="w-3 h-3" />
-                Est. Transport
-              </span>
-              <span className="text-foreground">₹{transportCost.toLocaleString('en-IN')}</span>
+          </div>
+
+          <Separator className="bg-white/5" />
+
+          {/* Split Payment Section */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-emerald-400" />
+              Split Payment
+            </h3>
+
+            {/* Advance Payment */}
+            <div className="glass-card p-4 border border-emerald-500/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Advance Payment (50%)</p>
+                    <p className="text-[10px] text-muted-foreground">Paid now to confirm order</p>
+                  </div>
+                </div>
+                <span className="text-lg font-bold text-emerald-400">₹{advancePayment.toLocaleString('en-IN')}</span>
+              </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/60 -mt-1 ml-5">
-              Estimated at {(TRANSPORT_RATE_MIN * 100).toFixed(0)}–{(TRANSPORT_RATE_MAX * 100).toFixed(0)}% of subtotal
-            </p>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">GST (18%)</span>
-              <span className="text-foreground">₹{gstAmount.toLocaleString('en-IN')}</span>
+
+            {/* Remaining Payment */}
+            <div className="glass-card p-4 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Remaining Payment (50%)</p>
+                    <p className="text-[10px] text-muted-foreground">Due upon delivery confirmation</p>
+                  </div>
+                </div>
+                <span className="text-lg font-bold text-amber-400">₹{remainingPayment.toLocaleString('en-IN')}</span>
+              </div>
             </div>
-            <Separator className="bg-white/5" />
-            <div className="flex justify-between items-center">
-              <span className="text-base font-bold text-foreground">Total</span>
-              <span className="text-xl font-bold text-emerald-400">₹{totalBill.toLocaleString('en-IN')}</span>
+
+            {/* Note */}
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+              <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                You pay 50% advance now to confirm your order. The remaining 50% is due after you confirm delivery of the products. Transport cost is an estimate and will be arranged separately.
+              </p>
             </div>
           </div>
         </div>
@@ -306,7 +434,7 @@ function CheckoutDialog({
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                Place Order · ₹{totalBill.toLocaleString('en-IN')}
+                Pay ₹{advancePayment.toLocaleString('en-IN')} Now
               </>
             )}
           </Button>
@@ -321,12 +449,14 @@ export function CartPanel() {
   const { cart, cartOpen, setCartOpen, removeFromCart, updateCartQty, clearCart, user } = useAppStore()
   const [checkoutOpen, setCheckoutOpen] = useState(false)
 
-  // Calculate totals
+  // Calculate totals with corrected pricing
   const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.pricePerUnit, 0)
-  const transportRate = TRANSPORT_RATE_MIN + (TRANSPORT_RATE_MAX - TRANSPORT_RATE_MIN) / 2 // Use midpoint
-  const transportCost = Math.round(subtotal * transportRate)
-  const gstAmount = Math.round((subtotal + transportCost) * GST_RATE)
-  const totalBill = subtotal + transportCost + gstAmount
+  const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE)
+  const transportBookingFee = TRANSPORT_BOOKING_FEE
+  const estimatedTransportCost = Math.round(subtotal * TRANSPORT_ESTIMATE_RATE)
+  const totalPayable = subtotal + platformFee + transportBookingFee
+  const advancePayment = Math.round(totalPayable * 0.5)
+  const remainingPayment = totalPayable - advancePayment
 
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -451,6 +581,19 @@ export function CartPanel() {
                             <span className="text-sm font-bold text-foreground">{item.pricePerUnit.toLocaleString('en-IN')}</span>
                             <span className="text-[10px] text-muted-foreground">/ {item.unit}</span>
                           </div>
+                          {/* Available Quantity Display */}
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Package className="w-3 h-3 text-muted-foreground" />
+                            <span className={`text-[10px] font-medium ${item.maxQuantity < 10 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                              {item.maxQuantity} {item.unit} available
+                            </span>
+                            {item.maxQuantity < 10 && (
+                              <span className="text-[10px] text-red-400 font-semibold flex items-center gap-0.5">
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                Low stock
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -487,6 +630,16 @@ export function CartPanel() {
                           </p>
                         </div>
                       </div>
+
+                      {/* Stock Validation Warning */}
+                      {item.quantity > item.maxQuantity && (
+                        <div className="flex items-center gap-1.5 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                          <span className="text-[10px] text-red-400 font-medium">
+                            Quantity exceeds available stock ({item.maxQuantity} {item.unit})
+                          </span>
+                        </div>
+                      )}
                     </motion.div>
                   ))
                 )}
@@ -502,23 +655,40 @@ export function CartPanel() {
                       <span className="text-foreground font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Platform Fee (2%)</span>
+                      <span className="text-foreground font-medium">₹{platformFee.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Truck className="w-3 h-3" />
-                        Est. Transport
+                        Transport Booking Fee
                       </span>
-                      <span className="text-foreground font-medium">₹{transportCost.toLocaleString('en-IN')}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/50 -mt-0.5">
-                      Estimated at {(TRANSPORT_RATE_MIN * 100).toFixed(0)}–{(TRANSPORT_RATE_MAX * 100).toFixed(0)}% of subtotal
-                    </p>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">GST (18%)</span>
-                      <span className="text-foreground font-medium">₹{gstAmount.toLocaleString('en-IN')}</span>
+                      <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString('en-IN')}</span>
                     </div>
                     <Separator className="bg-white/5" />
                     <div className="flex justify-between items-center pt-1">
-                      <span className="text-base font-bold text-foreground">Total Bill</span>
-                      <span className="text-xl font-bold text-emerald-400">₹{totalBill.toLocaleString('en-IN')}</span>
+                      <span className="text-base font-bold text-foreground">Total Payable</span>
+                      <span className="text-xl font-bold text-emerald-400">₹{totalPayable.toLocaleString('en-IN')}</span>
+                    </div>
+                    {/* Estimated transport - not in total */}
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground/60 flex items-center gap-1">
+                        <Info className="w-3 h-3" />
+                        Est. Transport (not in total)
+                      </span>
+                      <span className="text-amber-400/70">₹{estimatedTransportCost.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* Split Payment Preview */}
+                  <div className="flex gap-2">
+                    <div className="flex-1 glass-card p-2 text-center border border-emerald-500/15">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Pay Now (50%)</p>
+                      <p className="text-sm font-bold text-emerald-400">₹{advancePayment.toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="flex-1 glass-card p-2 text-center border border-white/5">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">On Delivery (50%)</p>
+                      <p className="text-sm font-bold text-amber-400">₹{remainingPayment.toLocaleString('en-IN')}</p>
                     </div>
                   </div>
 
@@ -549,9 +719,12 @@ export function CartPanel() {
         onClose={() => setCheckoutOpen(false)}
         cart={cart}
         subtotal={subtotal}
-        transportCost={transportCost}
-        gstAmount={gstAmount}
-        totalBill={totalBill}
+        platformFee={platformFee}
+        transportBookingFee={transportBookingFee}
+        estimatedTransportCost={estimatedTransportCost}
+        totalPayable={totalPayable}
+        advancePayment={advancePayment}
+        remainingPayment={remainingPayment}
       />
     </>
   )
