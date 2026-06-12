@@ -1,79 +1,427 @@
 -- =============================================================
--- AgroBridge Platform - Migration V3 (SAFE VERSION)
--- Comprehensive schema for all 8 features + Revenue Model
+-- AgroBridge - COMPLETE ALL-IN-ONE MIGRATION
+-- Creates ALL base tables + ALL V3 feature columns
 -- Run this in Supabase SQL Editor
--- =============================================================
--- This version is fully idempotent and handles conflicts with
--- columns/tables that may already exist from v1/v2 migrations.
+-- Safe to run on fresh DB or on top of existing tables
 -- =============================================================
 
 -- =============================================================
--- SECTION 1: PRODUCT TABLE — Inventory Visibility (Feature 1)
+-- PART 1: BASE TABLES (if they don't exist)
 -- =============================================================
 
-DO $$ BEGIN
-  -- Add stockReserved column
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockReserved') THEN
-    ALTER TABLE "Product" ADD COLUMN "stockReserved" NUMERIC DEFAULT 0;
-  END IF;
+-- 1. USERS TABLE
+CREATE TABLE IF NOT EXISTS "User" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "role" TEXT DEFAULT 'buyer',
+  "companyName" TEXT,
+  "gstNumber" TEXT,
+  "phone" TEXT,
+  "email" TEXT UNIQUE NOT NULL,
+  "name" TEXT,
+  "password" TEXT,
+  "avatar" TEXT,
+  "state" TEXT,
+  "city" TEXT,
+  "address" TEXT,
+  "verificationStatus" TEXT DEFAULT 'pending',
+  "isOnline" BOOLEAN DEFAULT false,
+  "farmName" TEXT,
+  "farmSize" TEXT,
+  "farmLocation" TEXT,
+  "farmImages" TEXT,
+  "yearsExperience" INTEGER,
+  "certifications" TEXT,
+  "totalTransactions" INTEGER DEFAULT 0,
+  "latitude" TEXT,
+  "longitude" TEXT,
+  "avgRating" FLOAT DEFAULT 0,
+  "totalReviews" INTEGER DEFAULT 0,
+  "avatarUrl" TEXT,
+  "bannerUrl" TEXT,
+  "pickupSuccessRate" NUMERIC DEFAULT 100,
+  "deliverySuccessRate" NUMERIC DEFAULT 100,
+  "avgResponseTimeHours" NUMERIC DEFAULT 0,
+  "warningCount" INTEGER DEFAULT 0,
+  "lastWarningAt" TIMESTAMPTZ,
+  "totalCompletedShipments" INTEGER DEFAULT 0,
+  "totalFailedShipments" INTEGER DEFAULT 0,
+  "isSuspended" BOOLEAN DEFAULT FALSE,
+  "suspendedAt" TIMESTAMPTZ,
+  "suspensionReason" TEXT,
+  "lastShipmentAssignedAt" TIMESTAMPTZ,
+  "consecutiveFailures" INTEGER DEFAULT 0,
+  "subscriptionTier" TEXT DEFAULT 'free',
+  "subscriptionExpiry" TIMESTAMPTZ,
+  "subscriptionAmount" NUMERIC DEFAULT 0,
+  "subscriptionStartedAt" TIMESTAMPTZ,
+  "subscriptionAutoRenew" BOOLEAN DEFAULT FALSE,
+  "subscriptionPaymentRef" TEXT,
+  "isSponsored" BOOLEAN DEFAULT FALSE,
+  "sponsoredExpiry" TIMESTAMPTZ,
+  "sponsoredAmount" NUMERIC DEFAULT 0,
+  "sponsoredStartedAt" TIMESTAMPTZ,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
 
-  -- Add reservedUpdatedAt column
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'reservedUpdatedAt') THEN
-    ALTER TABLE "Product" ADD COLUMN "reservedUpdatedAt" TIMESTAMPTZ;
-  END IF;
+-- 2. PRODUCT TABLE
+CREATE TABLE IF NOT EXISTS "Product" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "sellerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "category" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "description" TEXT,
+  "quantity" FLOAT NOT NULL,
+  "unit" TEXT NOT NULL,
+  "pricePerUnit" FLOAT NOT NULL,
+  "minOrderQty" FLOAT,
+  "location" TEXT NOT NULL,
+  "state" TEXT,
+  "qualityGrade" TEXT,
+  "images" TEXT,
+  "imageUrl" TEXT,
+  "harvestDate" TIMESTAMPTZ,
+  "freshness" TEXT,
+  "cropVariety" TEXT,
+  "isOrganic" BOOLEAN DEFAULT false,
+  "pesticidesUsed" TEXT,
+  "moistureContent" TEXT,
+  "shelfLife" TEXT,
+  "storageCondition" TEXT,
+  "certifications" TEXT,
+  "isActive" BOOLEAN DEFAULT true,
+  "stockReserved" NUMERIC DEFAULT 0,
+  "reservedUpdatedAt" TIMESTAMPTZ,
+  "isSponsored" BOOLEAN DEFAULT FALSE,
+  "sponsoredExpiry" TIMESTAMPTZ,
+  "sponsoredPosition" INTEGER DEFAULT 0,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
 
-  -- Add isSponsored column
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'isSponsored') THEN
-    ALTER TABLE "Product" ADD COLUMN "isSponsored" BOOLEAN DEFAULT FALSE;
-  END IF;
-
-  -- Add sponsoredExpiry column
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'sponsoredExpiry') THEN
-    ALTER TABLE "Product" ADD COLUMN "sponsoredExpiry" TIMESTAMPTZ;
-  END IF;
-
-  -- Add sponsoredPosition column
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'sponsoredPosition') THEN
-    ALTER TABLE "Product" ADD COLUMN "sponsoredPosition" INTEGER DEFAULT 0;
-  END IF;
-END $$;
-
--- Add stockAvailable as a generated column (only if it doesn't exist and stockReserved exists)
+-- Add generated column (try, fallback to regular if fails)
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockAvailable') THEN
     ALTER TABLE "Product" ADD COLUMN "stockAvailable" NUMERIC GENERATED ALWAYS AS ("quantity" - "stockReserved") STORED;
   END IF;
 EXCEPTION WHEN OTHERS THEN
-  -- If generated column fails (e.g. data mismatch), add as regular column
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockAvailable') THEN
     ALTER TABLE "Product" ADD COLUMN "stockAvailable" NUMERIC DEFAULT 0;
   END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS "idx_product_stockAvailable" ON "Product"("stockAvailable") WHERE "stockAvailable" > 0;
-CREATE INDEX IF NOT EXISTS "idx_product_sponsored" ON "Product"("isSponsored") WHERE "isSponsored" = TRUE;
+-- 3. BUYER REQUIREMENT TABLE
+CREATE TABLE IF NOT EXISTS "BuyerRequirement" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "buyerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+  "productType" TEXT NOT NULL,
+  "category" TEXT NOT NULL,
+  "quantityNeeded" FLOAT NOT NULL,
+  "unit" TEXT NOT NULL,
+  "deliveryLocation" TEXT NOT NULL,
+  "deliveryState" TEXT,
+  "deadline" TIMESTAMPTZ,
+  "maxBudget" FLOAT,
+  "description" TEXT,
+  "status" TEXT DEFAULT 'open',
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Initialize stockReserved for all existing products
-UPDATE "Product" p SET
-  "stockReserved" = COALESCE((
-    SELECT SUM(o."quantity") FROM "Order" o
-    WHERE o."productId" = p."id"
-      AND o.status NOT IN ('cancelled', 'delivered', 'disputed')
-  ), 0),
-  "reservedUpdatedAt" = NOW();
+-- 4. ORDER TABLE (with ALL V3 columns included)
+CREATE TABLE IF NOT EXISTS "Order" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "buyerId" TEXT NOT NULL REFERENCES "User"("id"),
+  "sellerId" TEXT NOT NULL REFERENCES "User"("id"),
+  "productId" TEXT NOT NULL REFERENCES "Product"("id"),
+  "quantity" FLOAT NOT NULL,
+  "unitPrice" FLOAT NOT NULL,
+  "totalPrice" FLOAT NOT NULL,
+  "status" TEXT DEFAULT 'negotiating',
+  "productSubtotal" NUMERIC,
+  "transportEstimate" NUMERIC DEFAULT 0,
+  "transportBookingFee" NUMERIC DEFAULT 0,
+  "platformCommission" NUMERIC DEFAULT 0,
+  "escrowFee" NUMERIC DEFAULT 0,
+  "logisticsCommission" NUMERIC DEFAULT 0,
+  "totalWithCharges" NUMERIC,
+  "priceBreakdownJson" JSONB,
+  "paymentStatus" TEXT DEFAULT 'pending',
+  "advanceAmount" NUMERIC,
+  "remainingAmount" NUMERIC,
+  "advancePaidAt" TIMESTAMPTZ,
+  "remainingPaidAt" TIMESTAMPTZ,
+  "advancePaymentRef" TEXT,
+  "remainingPaymentRef" TEXT,
+  "advancePaymentMethod" TEXT,
+  "remainingPaymentMethod" TEXT,
+  "platformFee" NUMERIC DEFAULT 0,
+  "transportCost" NUMERIC DEFAULT 0,
+  "deliveryAddress" TEXT,
+  "deliveryCity" TEXT,
+  "deliveryState" TEXT,
+  "deliveryPincode" TEXT,
+  "deliveryLat" TEXT,
+  "deliveryLng" TEXT,
+  "deliveryFullAddress" TEXT,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
 
--- If stockAvailable is a regular column (not generated), update it
-UPDATE "Product" SET "stockAvailable" = "quantity" - "stockReserved"
-WHERE "stockAvailable" IS NULL OR "stockAvailable" != "quantity" - "stockReserved";
+-- 5. SHIPMENT TABLE (with ALL V3 columns included)
+CREATE TABLE IF NOT EXISTS "Shipment" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "orderId" TEXT UNIQUE NOT NULL REFERENCES "Order"("id"),
+  "transporterId" TEXT REFERENCES "User"("id"),
+  "origin" TEXT NOT NULL,
+  "destination" TEXT NOT NULL,
+  "distance" FLOAT,
+  "status" TEXT DEFAULT 'pending',
+  "pickupDate" TIMESTAMPTZ,
+  "deliveryDate" TIMESTAMPTZ,
+  "actualDelivery" TIMESTAMPTZ,
+  "vehicleType" TEXT,
+  "vehicleNumber" TEXT,
+  "driverName" TEXT,
+  "driverPhone" TEXT,
+  "deliveryProof" TEXT,
+  "exactPickupAddress" TEXT,
+  "exactDropAddress" TEXT,
+  "pickupLatitude" TEXT,
+  "pickupLongitude" TEXT,
+  "dropLatitude" TEXT,
+  "dropLongitude" TEXT,
+  "expectedPickupDate" TIMESTAMPTZ,
+  "currentLatitude" TEXT,
+  "currentLongitude" TEXT,
+  "lastTrackingUpdate" TIMESTAMPTZ,
+  "createdBy" TEXT,
+  "createdByRole" TEXT DEFAULT 'producer',
+  "assignedAt" TIMESTAMPTZ,
+  "pickupDeadline" TIMESTAMPTZ,
+  "autoCancelledAt" TIMESTAMPTZ,
+  "pickupConfirmedAt" TIMESTAMPTZ,
+  "reassignedFrom" TEXT,
+  "reassignmentCount" INTEGER DEFAULT 0,
+  "reassignmentReason" TEXT,
+  "producerNotes" TEXT,
+  "isExternal" BOOLEAN DEFAULT FALSE,
+  "externalTransporterName" TEXT,
+  "externalCompanyName" TEXT,
+  "externalDriverName" TEXT,
+  "externalVehicleNumber" TEXT,
+  "externalMobileNumber" TEXT,
+  "externalPickupDate" TIMESTAMPTZ,
+  "externalDeliveryDate" TIMESTAMPTZ,
+  "externalTransportCost" NUMERIC DEFAULT 0,
+  "logisticsCommissionWaived" BOOLEAN DEFAULT FALSE,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. TRANSPORT BID TABLE
+CREATE TABLE IF NOT EXISTS "TransportBid" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "shipmentId" TEXT NOT NULL REFERENCES "Shipment"("id") ON DELETE CASCADE,
+  "transporterId" TEXT NOT NULL REFERENCES "User"("id"),
+  "bidAmount" FLOAT NOT NULL,
+  "estimatedDays" INTEGER,
+  "vehicleType" TEXT,
+  "comments" TEXT,
+  "status" TEXT DEFAULT 'pending',
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. MESSAGE TABLE (with ALL V3 columns included)
+CREATE TABLE IF NOT EXISTS "Message" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "senderId" TEXT NOT NULL REFERENCES "User"("id"),
+  "receiverId" TEXT NOT NULL REFERENCES "User"("id"),
+  "content" TEXT NOT NULL,
+  "isRead" BOOLEAN DEFAULT false,
+  "orderId" TEXT,
+  "shipmentId" TEXT,
+  "messageType" TEXT DEFAULT 'text',
+  "attachmentUrl" TEXT,
+  "chatType" TEXT DEFAULT 'order',
+  "isSystemMessage" BOOLEAN DEFAULT FALSE,
+  "metadata" JSONB,
+  "conversationId" TEXT,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. REVIEW TABLE (with ALL V3 columns included)
+CREATE TABLE IF NOT EXISTS "Review" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "reviewerId" TEXT NOT NULL REFERENCES "User"("id"),
+  "targetId" TEXT NOT NULL REFERENCES "User"("id"),
+  "rating" INTEGER NOT NULL,
+  "comment" TEXT,
+  "productId" TEXT,
+  "reviewType" TEXT DEFAULT 'user',
+  "orderId" TEXT,
+  "shipmentId" TEXT,
+  "pickupRating" INTEGER,
+  "deliveryRating" INTEGER,
+  "responseTimeRating" INTEGER,
+  "overallRating" INTEGER,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. PLATFORM STATS TABLE
+CREATE TABLE IF NOT EXISTS "PlatformStats" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "totalUsers" INTEGER DEFAULT 0,
+  "totalProducts" INTEGER DEFAULT 0,
+  "totalOrders" INTEGER DEFAULT 0,
+  "totalShipments" INTEGER DEFAULT 0,
+  "totalRevenue" FLOAT DEFAULT 0,
+  "activeListings" INTEGER DEFAULT 0,
+  "verifiedUsers" INTEGER DEFAULT 0,
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- =============================================================
--- SECTION 2: ORDER TABLE — Pricing Corrections (Feature 3)
---              & Split Payment (Feature 7)
---              & Delivery Address (from v1)
+-- PART 2: V3 NEW TABLES
 -- =============================================================
 
+-- 10. TRANSPORTER WARNING TABLE
+CREATE TABLE IF NOT EXISTS "TransporterWarning" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "transporterId" TEXT NOT NULL REFERENCES "User"("id"),
+  "shipmentId" TEXT REFERENCES "Shipment"("id"),
+  "orderId" TEXT REFERENCES "Order"("id"),
+  "warningType" TEXT NOT NULL,
+  "severity" TEXT DEFAULT 'warning',
+  "message" TEXT,
+  "issuedAt" TIMESTAMPTZ DEFAULT NOW(),
+  "resolvedAt" TIMESTAMPTZ,
+  "isResolved" BOOLEAN DEFAULT FALSE
+);
+
+-- 11. PAYMENT TABLE
+CREATE TABLE IF NOT EXISTS "Payment" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "orderId" TEXT NOT NULL REFERENCES "Order"("id"),
+  "paymentType" TEXT NOT NULL,
+  "amount" NUMERIC NOT NULL,
+  "currency" TEXT DEFAULT 'INR',
+  "status" TEXT DEFAULT 'pending',
+  "paymentMethod" TEXT,
+  "paymentRef" TEXT,
+  "gatewayResponse" JSONB,
+  "paidAt" TIMESTAMPTZ,
+  "failedAt" TIMESTAMPTZ,
+  "refundedAt" TIMESTAMPTZ,
+  "refundRef" TEXT,
+  "description" TEXT,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12. SUBSCRIPTION TABLE
+CREATE TABLE IF NOT EXISTS "Subscription" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId" TEXT NOT NULL REFERENCES "User"("id"),
+  "tier" TEXT NOT NULL,
+  "roleType" TEXT NOT NULL,
+  "amount" NUMERIC NOT NULL,
+  "durationDays" INTEGER NOT NULL,
+  "startedAt" TIMESTAMPTZ DEFAULT NOW(),
+  "expiresAt" TIMESTAMPTZ NOT NULL,
+  "status" TEXT DEFAULT 'active',
+  "autoRenew" BOOLEAN DEFAULT FALSE,
+  "paymentRef" TEXT,
+  "paymentId" TEXT REFERENCES "Payment"("id"),
+  "cancelledAt" TIMESTAMPTZ,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 13. SPONSORED LISTING TABLE
+CREATE TABLE IF NOT EXISTS "SponsoredListing" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId" TEXT NOT NULL REFERENCES "User"("id"),
+  "productId" TEXT REFERENCES "Product"("id"),
+  "amount" NUMERIC NOT NULL,
+  "durationDays" INTEGER DEFAULT 7,
+  "startedAt" TIMESTAMPTZ DEFAULT NOW(),
+  "expiresAt" TIMESTAMPTZ NOT NULL,
+  "status" TEXT DEFAULT 'active',
+  "position" INTEGER DEFAULT 0,
+  "impressions" INTEGER DEFAULT 0,
+  "clicks" INTEGER DEFAULT 0,
+  "paymentRef" TEXT,
+  "paymentId" TEXT REFERENCES "Payment"("id"),
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 14. CONVERSATION TABLE
+CREATE TABLE IF NOT EXISTS "Conversation" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "type" TEXT NOT NULL,
+  "orderId" TEXT REFERENCES "Order"("id"),
+  "shipmentId" TEXT REFERENCES "Shipment"("id"),
+  "participant1Id" TEXT NOT NULL REFERENCES "User"("id"),
+  "participant2Id" TEXT NOT NULL REFERENCES "User"("id"),
+  "lastMessageAt" TIMESTAMPTZ DEFAULT NOW(),
+  "lastMessageContent" TEXT,
+  "lastMessageSenderId" TEXT,
+  "unreadCount1" INTEGER DEFAULT 0,
+  "unreadCount2" INTEGER DEFAULT 0,
+  "isActive" BOOLEAN DEFAULT TRUE,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 15. PLATFORM REVENUE TABLE
+CREATE TABLE IF NOT EXISTS "PlatformRevenue" (
+  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "type" TEXT NOT NULL,
+  "amount" NUMERIC NOT NULL,
+  "currency" TEXT DEFAULT 'INR',
+  "orderId" TEXT REFERENCES "Order"("id"),
+  "shipmentId" TEXT REFERENCES "Shipment"("id"),
+  "userId" TEXT REFERENCES "User"("id"),
+  "subscriptionId" TEXT REFERENCES "Subscription"("id"),
+  "sponsoredListingId" TEXT REFERENCES "SponsoredListing"("id"),
+  "paymentId" TEXT REFERENCES "Payment"("id"),
+  "percentage" NUMERIC,
+  "baseAmount" NUMERIC,
+  "description" TEXT,
+  "metadata" JSONB,
+  "recordedAt" TIMESTAMPTZ DEFAULT NOW(),
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================
+-- PART 3: ADD MISSING COLUMNS TO EXISTING TABLES
+-- (Safe - only adds if column doesn't exist)
+-- =============================================================
+
+-- Product: missing V3 columns
 DO $$ BEGIN
-  -- Pricing breakdown columns
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockReserved') THEN
+    ALTER TABLE "Product" ADD COLUMN "stockReserved" NUMERIC DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'reservedUpdatedAt') THEN
+    ALTER TABLE "Product" ADD COLUMN "reservedUpdatedAt" TIMESTAMPTZ;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'isSponsored') THEN
+    ALTER TABLE "Product" ADD COLUMN "isSponsored" BOOLEAN DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'sponsoredExpiry') THEN
+    ALTER TABLE "Product" ADD COLUMN "sponsoredExpiry" TIMESTAMPTZ;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'sponsoredPosition') THEN
+    ALTER TABLE "Product" ADD COLUMN "sponsoredPosition" INTEGER DEFAULT 0;
+  END IF;
+END $$;
+
+-- Order: missing V3 columns
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'productSubtotal') THEN
     ALTER TABLE "Order" ADD COLUMN "productSubtotal" NUMERIC;
   END IF;
@@ -98,8 +446,6 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'priceBreakdownJson') THEN
     ALTER TABLE "Order" ADD COLUMN "priceBreakdownJson" JSONB;
   END IF;
-
-  -- Split payment columns
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'paymentStatus') THEN
     ALTER TABLE "Order" ADD COLUMN "paymentStatus" TEXT DEFAULT 'pending';
   END IF;
@@ -133,8 +479,6 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'transportCost') THEN
     ALTER TABLE "Order" ADD COLUMN "transportCost" NUMERIC DEFAULT 0;
   END IF;
-
-  -- Delivery address columns
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryAddress') THEN
     ALTER TABLE "Order" ADD COLUMN "deliveryAddress" TEXT;
   END IF;
@@ -158,36 +502,8 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Update existing orders: set productSubtotal
-UPDATE "Order" SET "productSubtotal" = "unitPrice" * "quantity"
-WHERE "productSubtotal" IS NULL;
-
--- Update existing orders: set totalWithCharges
-UPDATE "Order" SET "totalWithCharges" = "totalPrice"
-WHERE "totalWithCharges" IS NULL;
-
--- Update existing orders: set paymentStatus
-UPDATE "Order" SET "paymentStatus" =
-  CASE
-    WHEN status = 'delivered' THEN 'full_paid'
-    WHEN status IN ('confirmed', 'shipped') THEN 'advance_paid'
-    ELSE 'pending'
-  END
-WHERE "paymentStatus" IS NULL OR "paymentStatus" = 'pending';
-
--- Update existing orders: calculate advance/remaining
-UPDATE "Order" SET
-  "advanceAmount" = FLOOR("totalPrice" * 0.5 * 100) / 100,
-  "remainingAmount" = CEIL("totalPrice" * 0.5 * 100) / 100
-WHERE "advanceAmount" IS NULL AND "totalPrice" > 0;
-
--- =============================================================
--- SECTION 3: SHIPMENT TABLE — Producer Shipment Mgmt (Feature 4)
---              & External Transporter (Feature 8)
--- =============================================================
-
+-- Shipment: missing V3 columns
 DO $$ BEGIN
-  -- Producer shipment management fields
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'createdBy') THEN
     ALTER TABLE "Shipment" ADD COLUMN "createdBy" TEXT;
   END IF;
@@ -218,8 +534,6 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'producerNotes') THEN
     ALTER TABLE "Shipment" ADD COLUMN "producerNotes" TEXT;
   END IF;
-
-  -- External transporter fields
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'isExternal') THEN
     ALTER TABLE "Shipment" ADD COLUMN "isExternal" BOOLEAN DEFAULT FALSE;
   END IF;
@@ -252,14 +566,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS "idx_shipment_createdBy" ON "Shipment"("createdBy");
-CREATE INDEX IF NOT EXISTS "idx_shipment_pickupDeadline" ON "Shipment"("pickupDeadline") WHERE "pickupDeadline" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_shipment_isExternal" ON "Shipment"("isExternal") WHERE "isExternal" = TRUE;
-
--- =============================================================
--- SECTION 4: MESSAGE TABLE — Order Communication (Feature 5)
--- =============================================================
-
+-- Message: missing V3 columns
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'orderId') THEN
     ALTER TABLE "Message" ADD COLUMN "orderId" TEXT;
@@ -287,20 +594,42 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS "idx_message_orderId" ON "Message"("orderId") WHERE "orderId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_message_shipmentId" ON "Message"("shipmentId") WHERE "shipmentId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_message_chatType" ON "Message"("chatType");
-CREATE INDEX IF NOT EXISTS "idx_message_createdAt" ON "Message"("createdAt");
-CREATE INDEX IF NOT EXISTS "idx_message_sender_receiver" ON "Message"("senderId", "receiverId");
-CREATE INDEX IF NOT EXISTS "idx_message_conversationId" ON "Message"("conversationId") WHERE "conversationId" IS NOT NULL;
-
--- =============================================================
--- SECTION 5: USER TABLE — Transporter Performance (Feature 6)
---              & Subscriptions & Avatar/Banner
--- =============================================================
-
+-- Review: missing V3 columns
 DO $$ BEGIN
-  -- Transporter performance metrics
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'productId') THEN
+    ALTER TABLE "Review" ADD COLUMN "productId" TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'reviewType') THEN
+    ALTER TABLE "Review" ADD COLUMN "reviewType" TEXT DEFAULT 'user';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'orderId') THEN
+    ALTER TABLE "Review" ADD COLUMN "orderId" TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'shipmentId') THEN
+    ALTER TABLE "Review" ADD COLUMN "shipmentId" TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'pickupRating') THEN
+    ALTER TABLE "Review" ADD COLUMN "pickupRating" INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'deliveryRating') THEN
+    ALTER TABLE "Review" ADD COLUMN "deliveryRating" INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'responseTimeRating') THEN
+    ALTER TABLE "Review" ADD COLUMN "responseTimeRating" INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'overallRating') THEN
+    ALTER TABLE "Review" ADD COLUMN "overallRating" INTEGER;
+  END IF;
+END $$;
+
+-- User: missing V3 columns
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'avatarUrl') THEN
+    ALTER TABLE "User" ADD COLUMN "avatarUrl" TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'bannerUrl') THEN
+    ALTER TABLE "User" ADD COLUMN "bannerUrl" TEXT;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'pickupSuccessRate') THEN
     ALTER TABLE "User" ADD COLUMN "pickupSuccessRate" NUMERIC DEFAULT 100;
   END IF;
@@ -337,8 +666,6 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'consecutiveFailures') THEN
     ALTER TABLE "User" ADD COLUMN "consecutiveFailures" INTEGER DEFAULT 0;
   END IF;
-
-  -- Subscription fields
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionTier') THEN
     ALTER TABLE "User" ADD COLUMN "subscriptionTier" TEXT DEFAULT 'free';
   END IF;
@@ -357,8 +684,6 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionPaymentRef') THEN
     ALTER TABLE "User" ADD COLUMN "subscriptionPaymentRef" TEXT;
   END IF;
-
-  -- Sponsored listing fields
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'isSponsored') THEN
     ALTER TABLE "User" ADD COLUMN "isSponsored" BOOLEAN DEFAULT FALSE;
   END IF;
@@ -371,333 +696,200 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'sponsoredStartedAt') THEN
     ALTER TABLE "User" ADD COLUMN "sponsoredStartedAt" TIMESTAMPTZ;
   END IF;
-
-  -- Avatar/Banner
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'avatarUrl') THEN
-    ALTER TABLE "User" ADD COLUMN "avatarUrl" TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'bannerUrl') THEN
-    ALTER TABLE "User" ADD COLUMN "bannerUrl" TEXT;
-  END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS "idx_user_sponsored" ON "User"("isSponsored") WHERE "isSponsored" = TRUE;
-CREATE INDEX IF NOT EXISTS "idx_user_subscription" ON "User"("subscriptionTier") WHERE "subscriptionTier" != 'free';
-CREATE INDEX IF NOT EXISTS "idx_user_suspended" ON "User"("isSuspended") WHERE "isSuspended" = TRUE;
-
 -- =============================================================
--- SECTION 6: REVIEW TABLE — Product & Transporter Reviews
+-- PART 4: UPDATE EXISTING DATA
 -- =============================================================
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'productId') THEN
-    ALTER TABLE "Review" ADD COLUMN "productId" TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'reviewType') THEN
-    ALTER TABLE "Review" ADD COLUMN "reviewType" TEXT DEFAULT 'user';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'orderId') THEN
-    ALTER TABLE "Review" ADD COLUMN "orderId" TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'shipmentId') THEN
-    ALTER TABLE "Review" ADD COLUMN "shipmentId" TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'pickupRating') THEN
-    ALTER TABLE "Review" ADD COLUMN "pickupRating" INTEGER;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'deliveryRating') THEN
-    ALTER TABLE "Review" ADD COLUMN "deliveryRating" INTEGER;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'responseTimeRating') THEN
-    ALTER TABLE "Review" ADD COLUMN "responseTimeRating" INTEGER;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'overallRating') THEN
-    ALTER TABLE "Review" ADD COLUMN "overallRating" INTEGER;
-  END IF;
-END $$;
+UPDATE "Order" SET "productSubtotal" = "unitPrice" * "quantity" WHERE "productSubtotal" IS NULL;
+UPDATE "Order" SET "totalWithCharges" = "totalPrice" WHERE "totalWithCharges" IS NULL;
+UPDATE "Order" SET "paymentStatus" = CASE
+    WHEN status = 'delivered' THEN 'full_paid'
+    WHEN status IN ('confirmed', 'shipped') THEN 'advance_paid'
+    ELSE 'pending'
+  END
+WHERE "paymentStatus" IS NULL OR "paymentStatus" = 'pending';
+UPDATE "Order" SET
+  "advanceAmount" = FLOOR("totalPrice" * 0.5 * 100) / 100,
+  "remainingAmount" = CEIL("totalPrice" * 0.5 * 100) / 100
+WHERE "advanceAmount" IS NULL AND "totalPrice" > 0;
 
-CREATE INDEX IF NOT EXISTS "idx_review_productId" ON "Review"("productId") WHERE "productId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_review_orderId" ON "Review"("orderId") WHERE "orderId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_review_type" ON "Review"("reviewType");
+UPDATE "Product" p SET "stockReserved" = COALESCE((
+    SELECT SUM(o."quantity") FROM "Order" o
+    WHERE o."productId" = p."id" AND o.status NOT IN ('cancelled', 'delivered', 'disputed')
+  ), 0), "reservedUpdatedAt" = NOW();
 
 -- =============================================================
--- SECTION 7: NEW TABLES
+-- PART 5: ENABLE ROW LEVEL SECURITY ON ALL TABLES
 -- =============================================================
 
--- 7a: TransporterWarning table
-CREATE TABLE IF NOT EXISTS "TransporterWarning" (
-  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "transporterId" TEXT NOT NULL REFERENCES "User"("id"),
-  "shipmentId" TEXT REFERENCES "Shipment"("id"),
-  "orderId" TEXT REFERENCES "Order"("id"),
-  "warningType" TEXT NOT NULL,
-  "severity" TEXT DEFAULT 'warning',
-  "message" TEXT,
-  "issuedAt" TIMESTAMPTZ DEFAULT NOW(),
-  "resolvedAt" TIMESTAMPTZ,
-  "isResolved" BOOLEAN DEFAULT FALSE
-);
-
-CREATE INDEX IF NOT EXISTS "idx_warning_transporter" ON "TransporterWarning"("transporterId");
-CREATE INDEX IF NOT EXISTS "idx_warning_type" ON "TransporterWarning"("warningType");
-CREATE INDEX IF NOT EXISTS "idx_warning_severity" ON "TransporterWarning"("severity");
-CREATE INDEX IF NOT EXISTS "idx_warning_resolved" ON "TransporterWarning"("isResolved") WHERE "isResolved" = FALSE;
-
+ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Product" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "BuyerRequirement" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Order" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Shipment" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "TransportBid" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Message" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Review" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "PlatformStats" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "TransporterWarning" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Payment" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Subscription" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "SponsoredListing" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Conversation" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "PlatformRevenue" ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies (idempotent)
 DO $$ BEGIN
+  -- User
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'User' AND policyname = 'Allow all on User') THEN
+    CREATE POLICY "Allow all on User" ON "User" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- Product
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Product' AND policyname = 'Allow all on Product') THEN
+    CREATE POLICY "Allow all on Product" ON "Product" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- BuyerRequirement
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'BuyerRequirement' AND policyname = 'Allow all on BuyerRequirement') THEN
+    CREATE POLICY "Allow all on BuyerRequirement" ON "BuyerRequirement" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- Order
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Order' AND policyname = 'Allow all on Order') THEN
+    CREATE POLICY "Allow all on Order" ON "Order" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- Shipment
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Shipment' AND policyname = 'Allow all on Shipment') THEN
+    CREATE POLICY "Allow all on Shipment" ON "Shipment" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- TransportBid
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'TransportBid' AND policyname = 'Allow all on TransportBid') THEN
+    CREATE POLICY "Allow all on TransportBid" ON "TransportBid" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- Message
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Message' AND policyname = 'Allow all on Message') THEN
+    CREATE POLICY "Allow all on Message" ON "Message" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- Review
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Review' AND policyname = 'Allow all on Review') THEN
+    CREATE POLICY "Allow all on Review" ON "Review" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- PlatformStats
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'PlatformStats' AND policyname = 'Allow all on PlatformStats') THEN
+    CREATE POLICY "Allow all on PlatformStats" ON "PlatformStats" FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  -- TransporterWarning
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'TransporterWarning' AND policyname = 'Allow all on TransporterWarning') THEN
     CREATE POLICY "Allow all on TransporterWarning" ON "TransporterWarning" FOR ALL USING (true) WITH CHECK (true);
   END IF;
-END $$;
-
--- 7b: Payment table
-CREATE TABLE IF NOT EXISTS "Payment" (
-  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "orderId" TEXT NOT NULL REFERENCES "Order"("id"),
-  "paymentType" TEXT NOT NULL,
-  "amount" NUMERIC NOT NULL,
-  "currency" TEXT DEFAULT 'INR',
-  "status" TEXT DEFAULT 'pending',
-  "paymentMethod" TEXT,
-  "paymentRef" TEXT,
-  "gatewayResponse" JSONB,
-  "paidAt" TIMESTAMPTZ,
-  "failedAt" TIMESTAMPTZ,
-  "refundedAt" TIMESTAMPTZ,
-  "refundRef" TEXT,
-  "description" TEXT,
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS "idx_payment_orderId" ON "Payment"("orderId");
-CREATE INDEX IF NOT EXISTS "idx_payment_status" ON "Payment"("status");
-CREATE INDEX IF NOT EXISTS "idx_payment_type" ON "Payment"("paymentType");
-CREATE INDEX IF NOT EXISTS "idx_payment_paidAt" ON "Payment"("paidAt") WHERE "paidAt" IS NOT NULL;
-
-ALTER TABLE "Payment" ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+  -- Payment
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Payment' AND policyname = 'Allow all on Payment') THEN
     CREATE POLICY "Allow all on Payment" ON "Payment" FOR ALL USING (true) WITH CHECK (true);
   END IF;
-END $$;
-
--- 7c: Subscription table
-CREATE TABLE IF NOT EXISTS "Subscription" (
-  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "userId" TEXT NOT NULL REFERENCES "User"("id"),
-  "tier" TEXT NOT NULL,
-  "roleType" TEXT NOT NULL,
-  "amount" NUMERIC NOT NULL,
-  "durationDays" INTEGER NOT NULL,
-  "startedAt" TIMESTAMPTZ DEFAULT NOW(),
-  "expiresAt" TIMESTAMPTZ NOT NULL,
-  "status" TEXT DEFAULT 'active',
-  "autoRenew" BOOLEAN DEFAULT FALSE,
-  "paymentRef" TEXT,
-  "paymentId" TEXT REFERENCES "Payment"("id"),
-  "cancelledAt" TIMESTAMPTZ,
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS "idx_subscription_userId" ON "Subscription"("userId");
-CREATE INDEX IF NOT EXISTS "idx_subscription_status" ON "Subscription"("status");
-CREATE INDEX IF NOT EXISTS "idx_subscription_expiresAt" ON "Subscription"("expiresAt");
-CREATE INDEX IF NOT EXISTS "idx_subscription_tier" ON "Subscription"("tier");
-
-ALTER TABLE "Subscription" ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+  -- Subscription
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Subscription' AND policyname = 'Allow all on Subscription') THEN
     CREATE POLICY "Allow all on Subscription" ON "Subscription" FOR ALL USING (true) WITH CHECK (true);
   END IF;
-END $$;
-
--- 7d: SponsoredListing table
-CREATE TABLE IF NOT EXISTS "SponsoredListing" (
-  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "userId" TEXT NOT NULL REFERENCES "User"("id"),
-  "productId" TEXT REFERENCES "Product"("id"),
-  "amount" NUMERIC NOT NULL,
-  "durationDays" INTEGER DEFAULT 7,
-  "startedAt" TIMESTAMPTZ DEFAULT NOW(),
-  "expiresAt" TIMESTAMPTZ NOT NULL,
-  "status" TEXT DEFAULT 'active',
-  "position" INTEGER DEFAULT 0,
-  "impressions" INTEGER DEFAULT 0,
-  "clicks" INTEGER DEFAULT 0,
-  "paymentRef" TEXT,
-  "paymentId" TEXT REFERENCES "Payment"("id"),
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS "idx_sponsored_userId" ON "SponsoredListing"("userId");
-CREATE INDEX IF NOT EXISTS "idx_sponsored_productId" ON "SponsoredListing"("productId") WHERE "productId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_sponsored_status" ON "SponsoredListing"("status");
-CREATE INDEX IF NOT EXISTS "idx_sponsored_expiresAt" ON "SponsoredListing"("expiresAt");
-CREATE INDEX IF NOT EXISTS "idx_sponsored_position" ON "SponsoredListing"("position");
-
-ALTER TABLE "SponsoredListing" ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+  -- SponsoredListing
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'SponsoredListing' AND policyname = 'Allow all on SponsoredListing') THEN
     CREATE POLICY "Allow all on SponsoredListing" ON "SponsoredListing" FOR ALL USING (true) WITH CHECK (true);
   END IF;
-END $$;
-
--- 7e: Conversation table
-CREATE TABLE IF NOT EXISTS "Conversation" (
-  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "type" TEXT NOT NULL,
-  "orderId" TEXT REFERENCES "Order"("id"),
-  "shipmentId" TEXT REFERENCES "Shipment"("id"),
-  "participant1Id" TEXT NOT NULL REFERENCES "User"("id"),
-  "participant2Id" TEXT NOT NULL REFERENCES "User"("id"),
-  "lastMessageAt" TIMESTAMPTZ DEFAULT NOW(),
-  "lastMessageContent" TEXT,
-  "lastMessageSenderId" TEXT,
-  "unreadCount1" INTEGER DEFAULT 0,
-  "unreadCount2" INTEGER DEFAULT 0,
-  "isActive" BOOLEAN DEFAULT TRUE,
-  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS "idx_conversation_participants" ON "Conversation"("participant1Id", "participant2Id");
-CREATE INDEX IF NOT EXISTS "idx_conversation_orderId" ON "Conversation"("orderId") WHERE "orderId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_conversation_shipmentId" ON "Conversation"("shipmentId") WHERE "shipmentId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_conversation_lastMessage" ON "Conversation"("lastMessageAt");
-
-ALTER TABLE "Conversation" ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+  -- Conversation
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Conversation' AND policyname = 'Allow all on Conversation') THEN
     CREATE POLICY "Allow all on Conversation" ON "Conversation" FOR ALL USING (true) WITH CHECK (true);
   END IF;
-END $$;
-
--- 7f: PlatformRevenue table (drop and recreate if exists from v1/v2 to add new columns)
--- Check if PlatformRevenue exists but is missing new columns
-DO $$ BEGIN
-  -- If table already exists from v1/v2, add missing columns
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'PlatformRevenue') THEN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'currency') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "currency" TEXT DEFAULT 'INR';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'subscriptionId') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "subscriptionId" TEXT;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'sponsoredListingId') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "sponsoredListingId" TEXT;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'paymentId') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "paymentId" TEXT;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'percentage') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "percentage" NUMERIC;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'baseAmount') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "baseAmount" NUMERIC;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'metadata') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "metadata" JSONB;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'PlatformRevenue' AND column_name = 'recordedAt') THEN
-      ALTER TABLE "PlatformRevenue" ADD COLUMN "recordedAt" TIMESTAMPTZ DEFAULT NOW();
-    END IF;
-  END IF;
-END $$;
-
--- Create PlatformRevenue if it doesn't exist
-CREATE TABLE IF NOT EXISTS "PlatformRevenue" (
-  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "type" TEXT NOT NULL,
-  "amount" NUMERIC NOT NULL,
-  "currency" TEXT DEFAULT 'INR',
-  "orderId" TEXT REFERENCES "Order"("id"),
-  "shipmentId" TEXT REFERENCES "Shipment"("id"),
-  "userId" TEXT REFERENCES "User"("id"),
-  "subscriptionId" TEXT,
-  "sponsoredListingId" TEXT,
-  "paymentId" TEXT,
-  "percentage" NUMERIC,
-  "baseAmount" NUMERIC,
-  "description" TEXT,
-  "metadata" JSONB,
-  "recordedAt" TIMESTAMPTZ DEFAULT NOW(),
-  "createdAt" TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS "idx_revenue_type" ON "PlatformRevenue"("type");
-CREATE INDEX IF NOT EXISTS "idx_revenue_userId" ON "PlatformRevenue"("userId");
-CREATE INDEX IF NOT EXISTS "idx_revenue_orderId" ON "PlatformRevenue"("orderId") WHERE "orderId" IS NOT NULL;
-CREATE INDEX IF NOT EXISTS "idx_revenue_recordedAt" ON "PlatformRevenue"("recordedAt");
-
-ALTER TABLE "PlatformRevenue" ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
+  -- PlatformRevenue
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'PlatformRevenue' AND policyname = 'Allow all on PlatformRevenue') THEN
     CREATE POLICY "Allow all on PlatformRevenue" ON "PlatformRevenue" FOR ALL USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
 -- =============================================================
--- SECTION 8: TRIGGERS & FUNCTIONS
+-- PART 6: INDEXES
 -- =============================================================
 
--- 8a: Inventory trigger - auto-update stockReserved
+CREATE INDEX IF NOT EXISTS "idx_product_seller" ON "Product"("sellerId");
+CREATE INDEX IF NOT EXISTS "idx_product_category" ON "Product"("category");
+CREATE INDEX IF NOT EXISTS "idx_product_state" ON "Product"("state");
+CREATE INDEX IF NOT EXISTS "idx_product_stockAvailable" ON "Product"("stockAvailable") WHERE "stockAvailable" > 0;
+CREATE INDEX IF NOT EXISTS "idx_product_sponsored" ON "Product"("isSponsored") WHERE "isSponsored" = TRUE;
+CREATE INDEX IF NOT EXISTS "idx_order_buyer" ON "Order"("buyerId");
+CREATE INDEX IF NOT EXISTS "idx_order_seller" ON "Order"("sellerId");
+CREATE INDEX IF NOT EXISTS "idx_shipment_transporter" ON "Shipment"("transporterId");
+CREATE INDEX IF NOT EXISTS "idx_shipment_status" ON "Shipment"("status");
+CREATE INDEX IF NOT EXISTS "idx_shipment_createdBy" ON "Shipment"("createdBy");
+CREATE INDEX IF NOT EXISTS "idx_shipment_pickupDeadline" ON "Shipment"("pickupDeadline") WHERE "pickupDeadline" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_shipment_isExternal" ON "Shipment"("isExternal") WHERE "isExternal" = TRUE;
+CREATE INDEX IF NOT EXISTS "idx_message_sender" ON "Message"("senderId");
+CREATE INDEX IF NOT EXISTS "idx_message_receiver" ON "Message"("receiverId");
+CREATE INDEX IF NOT EXISTS "idx_message_orderId" ON "Message"("orderId") WHERE "orderId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_message_shipmentId" ON "Message"("shipmentId") WHERE "shipmentId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_message_chatType" ON "Message"("chatType");
+CREATE INDEX IF NOT EXISTS "idx_message_conversationId" ON "Message"("conversationId") WHERE "conversationId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_review_target" ON "Review"("targetId");
+CREATE INDEX IF NOT EXISTS "idx_review_productId" ON "Review"("productId") WHERE "productId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_review_orderId" ON "Review"("orderId") WHERE "orderId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_review_type" ON "Review"("reviewType");
+CREATE INDEX IF NOT EXISTS "idx_user_role" ON "User"("role");
+CREATE INDEX IF NOT EXISTS "idx_user_email" ON "User"("email");
+CREATE INDEX IF NOT EXISTS "idx_user_sponsored" ON "User"("isSponsored") WHERE "isSponsored" = TRUE;
+CREATE INDEX IF NOT EXISTS "idx_user_subscription" ON "User"("subscriptionTier") WHERE "subscriptionTier" != 'free';
+CREATE INDEX IF NOT EXISTS "idx_user_suspended" ON "User"("isSuspended") WHERE "isSuspended" = TRUE;
+CREATE INDEX IF NOT EXISTS "idx_warning_transporter" ON "TransporterWarning"("transporterId");
+CREATE INDEX IF NOT EXISTS "idx_warning_type" ON "TransporterWarning"("warningType");
+CREATE INDEX IF NOT EXISTS "idx_warning_severity" ON "TransporterWarning"("severity");
+CREATE INDEX IF NOT EXISTS "idx_warning_resolved" ON "TransporterWarning"("isResolved") WHERE "isResolved" = FALSE;
+CREATE INDEX IF NOT EXISTS "idx_payment_orderId" ON "Payment"("orderId");
+CREATE INDEX IF NOT EXISTS "idx_payment_status" ON "Payment"("status");
+CREATE INDEX IF NOT EXISTS "idx_payment_type" ON "Payment"("paymentType");
+CREATE INDEX IF NOT EXISTS "idx_subscription_userId" ON "Subscription"("userId");
+CREATE INDEX IF NOT EXISTS "idx_subscription_status" ON "Subscription"("status");
+CREATE INDEX IF NOT EXISTS "idx_subscription_expiresAt" ON "Subscription"("expiresAt");
+CREATE INDEX IF NOT EXISTS "idx_sponsored_userId" ON "SponsoredListing"("userId");
+CREATE INDEX IF NOT EXISTS "idx_sponsored_productId" ON "SponsoredListing"("productId") WHERE "productId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_sponsored_status" ON "SponsoredListing"("status");
+CREATE INDEX IF NOT EXISTS "idx_conversation_participants" ON "Conversation"("participant1Id", "participant2Id");
+CREATE INDEX IF NOT EXISTS "idx_conversation_orderId" ON "Conversation"("orderId") WHERE "orderId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_conversation_shipmentId" ON "Conversation"("shipmentId") WHERE "shipmentId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_conversation_lastMessage" ON "Conversation"("lastMessageAt");
+CREATE INDEX IF NOT EXISTS "idx_revenue_type" ON "PlatformRevenue"("type");
+CREATE INDEX IF NOT EXISTS "idx_revenue_userId" ON "PlatformRevenue"("userId");
+CREATE INDEX IF NOT EXISTS "idx_revenue_recordedAt" ON "PlatformRevenue"("recordedAt");
+
+-- =============================================================
+-- PART 7: TRIGGERS & FUNCTIONS
+-- =============================================================
+
+-- Inventory trigger
 CREATE OR REPLACE FUNCTION update_product_stock_reserved()
 RETURNS TRIGGER AS $$
-DECLARE
-  v_product_id TEXT;
+DECLARE v_product_id TEXT;
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    v_product_id := NEW."productId";
+  IF TG_OP = 'INSERT' THEN v_product_id := NEW."productId";
   ELSIF TG_OP = 'UPDATE' THEN
     v_product_id := NEW."productId";
     IF OLD."productId" IS DISTINCT FROM NEW."productId" THEN
-      UPDATE "Product" SET
-        "stockReserved" = COALESCE((
-          SELECT SUM("quantity") FROM "Order"
-          WHERE "productId" = OLD."productId"
-            AND status NOT IN ('cancelled', 'delivered', 'disputed')
-        ), 0),
-        "reservedUpdatedAt" = NOW()
-      WHERE "id" = OLD."productId";
+      UPDATE "Product" SET "stockReserved" = COALESCE((SELECT SUM("quantity") FROM "Order" WHERE "productId" = OLD."productId" AND status NOT IN ('cancelled','delivered','disputed')),0), "reservedUpdatedAt" = NOW() WHERE "id" = OLD."productId";
     END IF;
-  ELSIF TG_OP = 'DELETE' THEN
-    v_product_id := OLD."productId";
+  ELSIF TG_OP = 'DELETE' THEN v_product_id := OLD."productId";
   END IF;
-
-  UPDATE "Product" SET
-    "stockReserved" = COALESCE((
-      SELECT SUM("quantity") FROM "Order"
-      WHERE "productId" = v_product_id
-        AND status NOT IN ('cancelled', 'delivered', 'disputed')
-    ), 0),
-    "reservedUpdatedAt" = NOW()
-  WHERE "id" = v_product_id;
-
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
-  END IF;
+  UPDATE "Product" SET "stockReserved" = COALESCE((SELECT SUM("quantity") FROM "Order" WHERE "productId" = v_product_id AND status NOT IN ('cancelled','delivered','disputed')),0), "reservedUpdatedAt" = NOW() WHERE "id" = v_product_id;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_order_stock_update ON "Order";
-CREATE TRIGGER trigger_order_stock_update
-  AFTER INSERT OR UPDATE OF "productId", "quantity", "status" OR DELETE ON "Order"
-  FOR EACH ROW
-  EXECUTE FUNCTION update_product_stock_reserved();
+CREATE TRIGGER trigger_order_stock_update AFTER INSERT OR UPDATE OF "productId","quantity","status" OR DELETE ON "Order" FOR EACH ROW EXECUTE FUNCTION update_product_stock_reserved();
 
--- 8b: Pickup deadline trigger - auto-set 24hr deadline
+-- Pickup deadline trigger
 CREATE OR REPLACE FUNCTION set_pickup_deadline()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW."transporterId" IS NOT NULL AND (OLD."transporterId" IS NULL OR TG_OP = 'INSERT') THEN
     NEW."assignedAt" := NOW();
     NEW."pickupDeadline" := NOW() + INTERVAL '24 hours';
-    UPDATE "User" SET "lastShipmentAssignedAt" = NOW()
-    WHERE "id" = NEW."transporterId";
+    UPDATE "User" SET "lastShipmentAssignedAt" = NOW() WHERE "id" = NEW."transporterId";
   END IF;
   IF NEW."status" = 'picked_up' AND (OLD."status" IS NULL OR OLD."status" != 'picked_up') THEN
     NEW."pickupConfirmedAt" := NOW();
@@ -707,229 +899,109 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_set_pickup_deadline ON "Shipment";
-CREATE TRIGGER trigger_set_pickup_deadline
-  BEFORE INSERT OR UPDATE OF "transporterId", "status" ON "Shipment"
-  FOR EACH ROW
-  EXECUTE FUNCTION set_pickup_deadline();
+CREATE TRIGGER trigger_set_pickup_deadline BEFORE INSERT OR UPDATE OF "transporterId","status" ON "Shipment" FOR EACH ROW EXECUTE FUNCTION set_pickup_deadline();
 
--- 8c: Auto-cancel expired shipments function
+-- Auto-cancel expired shipments
 CREATE OR REPLACE FUNCTION auto_cancel_expired_shipments()
 RETURNS INTEGER AS $$
-DECLARE
-  cancelled_count INTEGER := 0;
-  rec RECORD;
+DECLARE cancelled_count INTEGER := 0; rec RECORD;
 BEGIN
-  FOR rec IN
-    SELECT s."id", s."transporterId", s."orderId"
-    FROM "Shipment" s
-    WHERE s."pickupDeadline" IS NOT NULL
-      AND s."pickupDeadline" < NOW()
-      AND s."status" IN ('assigned', 'pending')
-      AND s."autoCancelledAt" IS NULL
-  LOOP
-    UPDATE "Shipment" SET "status" = 'cancelled', "autoCancelledAt" = NOW()
-    WHERE "id" = rec."id";
-
-    INSERT INTO "TransporterWarning" ("transporterId", "shipmentId", "orderId", "warningType", "severity", "message")
-    VALUES (rec."transporterId", rec."id", rec."orderId", 'pickup_missed', 'critical', 'Shipment auto-cancelled: 24-hour pickup deadline exceeded');
-
-    UPDATE "User" SET
-      "warningCount" = "warningCount" + 1,
-      "lastWarningAt" = NOW(),
-      "totalFailedShipments" = "totalFailedShipments" + 1,
-      "consecutiveFailures" = "consecutiveFailures" + 1,
-      "pickupSuccessRate" = CASE
-        WHEN ("totalCompletedShipments" + "totalFailedShipments") = 0 THEN 0
-        ELSE ROUND(("totalCompletedShipments"::NUMERIC / ("totalCompletedShipments" + "totalFailedShipments")) * 100, 2)
-      END
-    WHERE "id" = rec."transporterId";
-
-    UPDATE "User" SET
-      "isSuspended" = TRUE,
-      "suspendedAt" = NOW(),
-      "suspensionReason" = 'Auto-suspended: 3+ consecutive pickup failures'
-    WHERE "id" = rec."transporterId" AND "consecutiveFailures" >= 3;
-
+  FOR rec IN SELECT s."id", s."transporterId", s."orderId" FROM "Shipment" s WHERE s."pickupDeadline" IS NOT NULL AND s."pickupDeadline" < NOW() AND s."status" IN ('assigned','pending') AND s."autoCancelledAt" IS NULL LOOP
+    UPDATE "Shipment" SET "status"='cancelled',"autoCancelledAt"=NOW() WHERE "id"=rec."id";
+    INSERT INTO "TransporterWarning" ("transporterId","shipmentId","orderId","warningType","severity","message") VALUES (rec."transporterId",rec."id",rec."orderId",'pickup_missed','critical','24-hour pickup deadline exceeded');
+    UPDATE "User" SET "warningCount"="warningCount"+1,"lastWarningAt"=NOW(),"totalFailedShipments"="totalFailedShipments"+1,"consecutiveFailures"="consecutiveFailures"+1 WHERE "id"=rec."transporterId";
+    UPDATE "User" SET "isSuspended"=TRUE,"suspendedAt"=NOW(),"suspensionReason"='3+ consecutive failures' WHERE "id"=rec."transporterId" AND "consecutiveFailures">=3;
     cancelled_count := cancelled_count + 1;
   END LOOP;
   RETURN cancelled_count;
 END;
 $$ LANGUAGE plpgsql;
 
--- 8d: Update transporter stats on delivery
+-- Transporter stats on delivery
 CREATE OR REPLACE FUNCTION update_transporter_stats_on_delivery()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW."status" = 'delivered' AND (OLD."status" IS NULL OR OLD."status" != 'delivered') THEN
-    UPDATE "User" SET
-      "totalCompletedShipments" = "totalCompletedShipments" + 1,
-      "consecutiveFailures" = 0,
-      "pickupSuccessRate" = CASE
-        WHEN ("totalCompletedShipments" + "totalFailedShipments" + 1) = 0 THEN 100
-        ELSE ROUND(("totalCompletedShipments" + 1)::NUMERIC / ("totalCompletedShipments" + "totalFailedShipments" + 1) * 100, 2)
-      END,
-      "deliverySuccessRate" = CASE
-        WHEN ("totalCompletedShipments" + "totalFailedShipments" + 1) = 0 THEN 100
-        ELSE ROUND(("totalCompletedShipments" + 1)::NUMERIC / ("totalCompletedShipments" + "totalFailedShipments" + 1) * 100, 2)
-      END
-    WHERE "id" = NEW."transporterId";
+  IF NEW."status"='delivered' AND (OLD."status" IS NULL OR OLD."status"!='delivered') THEN
+    UPDATE "User" SET "totalCompletedShipments"="totalCompletedShipments"+1,"consecutiveFailures"=0,"pickupSuccessRate"=CASE WHEN ("totalCompletedShipments"+"totalFailedShipments"+1)=0 THEN 100 ELSE ROUND(("totalCompletedShipments"+1)::NUMERIC/("totalCompletedShipments"+"totalFailedShipments"+1)*100,2) END,"deliverySuccessRate"=CASE WHEN ("totalCompletedShipments"+"totalFailedShipments"+1)=0 THEN 100 ELSE ROUND(("totalCompletedShipments"+1)::NUMERIC/("totalCompletedShipments"+"totalFailedShipments"+1)*100,2) END WHERE "id"=NEW."transporterId";
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_update_transporter_stats ON "Shipment";
-CREATE TRIGGER trigger_update_transporter_stats
-  AFTER UPDATE OF "status" ON "Shipment"
-  FOR EACH ROW
-  EXECUTE FUNCTION update_transporter_stats_on_delivery();
+CREATE TRIGGER trigger_update_transporter_stats AFTER UPDATE OF "status" ON "Shipment" FOR EACH ROW EXECUTE FUNCTION update_transporter_stats_on_delivery();
 
--- 8e: Conversation upsert helper
-CREATE OR REPLACE FUNCTION get_or_create_conversation(
-  p_participant1_id TEXT,
-  p_participant2_id TEXT,
-  p_type TEXT,
-  p_order_id TEXT DEFAULT NULL,
-  p_shipment_id TEXT DEFAULT NULL
-)
+-- Conversation upsert
+CREATE OR REPLACE FUNCTION get_or_create_conversation(p1 TEXT, p2 TEXT, p_type TEXT, p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL)
 RETURNS TEXT AS $$
-DECLARE
-  v_conversation_id TEXT;
+DECLARE v_id TEXT;
 BEGIN
-  SELECT "id" INTO v_conversation_id
-  FROM "Conversation"
-  WHERE ("participant1Id" = p_participant1_id AND "participant2Id" = p_participant2_id
-         OR "participant1Id" = p_participant2_id AND "participant2Id" = p_participant1_id)
-    AND ("orderId" = p_order_id OR (p_order_id IS NULL AND "orderId" IS NULL))
-    AND ("shipmentId" = p_shipment_id OR (p_shipment_id IS NULL AND "shipmentId" IS NULL))
-    AND "isActive" = TRUE
-  LIMIT 1;
-
-  IF v_conversation_id IS NULL THEN
-    INSERT INTO "Conversation" ("participant1Id", "participant2Id", "type", "orderId", "shipmentId")
-    VALUES (p_participant1_id, p_participant2_id, p_type, p_order_id, p_shipment_id)
-    RETURNING "id" INTO v_conversation_id;
-  END IF;
-
-  RETURN v_conversation_id;
+  SELECT "id" INTO v_id FROM "Conversation" WHERE ("participant1Id"=p1 AND "participant2Id"=p2 OR "participant1Id"=p2 AND "participant2Id"=p1) AND ("orderId"=p_order_id OR (p_order_id IS NULL AND "orderId" IS NULL)) AND ("shipmentId"=p_shipment_id OR (p_shipment_id IS NULL AND "shipmentId" IS NULL)) AND "isActive"=TRUE LIMIT 1;
+  IF v_id IS NULL THEN INSERT INTO "Conversation" ("participant1Id","participant2Id","type","orderId","shipmentId") VALUES (p1,p2,p_type,p_order_id,p_shipment_id) RETURNING "id" INTO v_id; END IF;
+  RETURN v_id;
 END;
 $$ LANGUAGE plpgsql;
 
--- 8f: Update conversation on new message
+-- Update conversation on message
 CREATE OR REPLACE FUNCTION update_conversation_on_message()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW."conversationId" IS NOT NULL THEN
-    UPDATE "Conversation" SET
-      "lastMessageAt" = NEW."createdAt",
-      "lastMessageContent" = NEW."content",
-      "lastMessageSenderId" = NEW."senderId",
-      "unreadCount1" = CASE WHEN "participant1Id" = NEW."receiverId" THEN "unreadCount1" + 1 ELSE "unreadCount1" END,
-      "unreadCount2" = CASE WHEN "participant2Id" = NEW."receiverId" THEN "unreadCount2" + 1 ELSE "unreadCount2" END,
-      "updatedAt" = NOW()
-    WHERE "id" = NEW."conversationId";
+    UPDATE "Conversation" SET "lastMessageAt"=NEW."createdAt","lastMessageContent"=NEW."content","lastMessageSenderId"=NEW."senderId","unreadCount1"=CASE WHEN "participant1Id"=NEW."receiverId" THEN "unreadCount1"+1 ELSE "unreadCount1" END,"unreadCount2"=CASE WHEN "participant2Id"=NEW."receiverId" THEN "unreadCount2"+1 ELSE "unreadCount2" END,"updatedAt"=NOW() WHERE "id"=NEW."conversationId";
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_update_conversation_on_message ON "Message";
-CREATE TRIGGER trigger_update_conversation_on_message
-  AFTER INSERT ON "Message"
-  FOR EACH ROW
-  EXECUTE FUNCTION update_conversation_on_message();
+CREATE TRIGGER trigger_update_conversation_on_message AFTER INSERT ON "Message" FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
 
--- 8g: Record platform revenue helper
-CREATE OR REPLACE FUNCTION record_platform_revenue(
-  p_type TEXT, p_amount NUMERIC,
-  p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL,
-  p_user_id TEXT DEFAULT NULL, p_description TEXT DEFAULT NULL,
-  p_percentage NUMERIC DEFAULT NULL, p_base_amount NUMERIC DEFAULT NULL
-)
+-- Record platform revenue helper
+CREATE OR REPLACE FUNCTION record_platform_revenue(p_type TEXT, p_amount NUMERIC, p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL, p_user_id TEXT DEFAULT NULL, p_description TEXT DEFAULT NULL, p_percentage NUMERIC DEFAULT NULL, p_base_amount NUMERIC DEFAULT NULL)
 RETURNS TEXT AS $$
-DECLARE
-  v_revenue_id TEXT;
+DECLARE v_id TEXT;
 BEGIN
-  INSERT INTO "PlatformRevenue" ("type", "amount", "orderId", "shipmentId", "userId", "description", "percentage", "baseAmount")
-  VALUES (p_type, p_amount, p_order_id, p_shipment_id, p_user_id, p_description, p_percentage, p_base_amount)
-  RETURNING "id" INTO v_revenue_id;
-  RETURN v_revenue_id;
+  INSERT INTO "PlatformRevenue" ("type","amount","orderId","shipmentId","userId","description","percentage","baseAmount") VALUES (p_type,p_amount,p_order_id,p_shipment_id,p_user_id,p_description,p_percentage,p_base_amount) RETURNING "id" INTO v_id;
+  RETURN v_id;
 END;
 $$ LANGUAGE plpgsql;
 
--- 8h: Expire old subscriptions and listings
+-- Expire subscriptions/listings
 CREATE OR REPLACE FUNCTION expire_subscriptions_and_listings()
 RETURNS INTEGER AS $$
-DECLARE
-  v_count INTEGER := 0;
+DECLARE v_count INTEGER := 0;
 BEGIN
-  UPDATE "Subscription" SET "status" = 'expired', "updatedAt" = NOW()
-  WHERE "status" = 'active' AND "expiresAt" < NOW();
+  UPDATE "Subscription" SET "status"='expired',"updatedAt"=NOW() WHERE "status"='active' AND "expiresAt"<NOW();
   GET DIAGNOSTICS v_count = ROW_COUNT;
-
-  UPDATE "User" u SET "subscriptionTier" = 'free', "subscriptionExpiry" = NULL, "subscriptionAmount" = 0
-  WHERE u."subscriptionTier" != 'free'
-    AND NOT EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id" AND s."status" = 'active' AND s."expiresAt" >= NOW());
-
-  UPDATE "SponsoredListing" SET "status" = 'expired', "updatedAt" = NOW()
-  WHERE "status" = 'active' AND "expiresAt" < NOW();
-
-  UPDATE "Product" SET "isSponsored" = FALSE, "sponsoredExpiry" = NULL
-  WHERE "isSponsored" = TRUE AND "sponsoredExpiry" < NOW();
-
-  UPDATE "User" SET "isSponsored" = FALSE, "sponsoredExpiry" = NULL
-  WHERE "isSponsored" = TRUE AND "sponsoredExpiry" < NOW();
-
+  UPDATE "User" u SET "subscriptionTier"='free',"subscriptionExpiry"=NULL,"subscriptionAmount"=0 WHERE u."subscriptionTier"!='free' AND NOT EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId"=u."id" AND s."status"='active' AND s."expiresAt">=NOW());
+  UPDATE "SponsoredListing" SET "status"='expired',"updatedAt"=NOW() WHERE "status"='active' AND "expiresAt"<NOW();
+  UPDATE "Product" SET "isSponsored"=FALSE,"sponsoredExpiry"=NULL WHERE "isSponsored"=TRUE AND "sponsoredExpiry"<NOW();
+  UPDATE "User" SET "isSponsored"=FALSE,"sponsoredExpiry"=NULL WHERE "isSponsored"=TRUE AND "sponsoredExpiry"<NOW();
   RETURN v_count;
 END;
 $$ LANGUAGE plpgsql;
 
 -- =============================================================
--- SECTION 9: VIEWS
+-- PART 8: VIEWS
 -- =============================================================
 
 CREATE OR REPLACE VIEW "OrderBreakdown" AS
-SELECT
-  o."id" AS order_id, o."buyerId", o."sellerId", o."productId",
-  o."quantity", o."unitPrice", o."productSubtotal",
-  o."transportEstimate", o."transportBookingFee", o."platformCommission",
-  o."escrowFee", o."totalWithCharges", o."advanceAmount", o."remainingAmount",
-  o."paymentStatus", o."status" AS order_status,
-  p."name" AS product_name, p."unit" AS product_unit,
-  ub."name" AS buyer_name, us."name" AS seller_name
-FROM "Order" o
-LEFT JOIN "Product" p ON p."id" = o."productId"
-LEFT JOIN "User" ub ON ub."id" = o."buyerId"
-LEFT JOIN "User" us ON us."id" = o."sellerId";
+SELECT o."id" AS order_id, o."buyerId", o."sellerId", o."productId", o."quantity", o."unitPrice", o."productSubtotal", o."transportEstimate", o."transportBookingFee", o."platformCommission", o."escrowFee", o."totalWithCharges", o."advanceAmount", o."remainingAmount", o."paymentStatus", o."status" AS order_status, p."name" AS product_name, p."unit" AS product_unit, ub."name" AS buyer_name, us."name" AS seller_name
+FROM "Order" o LEFT JOIN "Product" p ON p."id"=o."productId" LEFT JOIN "User" ub ON ub."id"=o."buyerId" LEFT JOIN "User" us ON us."id"=o."sellerId";
 
 CREATE OR REPLACE VIEW "TransporterPerformance" AS
-SELECT
-  u."id" AS transporter_id, u."name", u."companyName", u."phone",
-  u."pickupSuccessRate", u."deliverySuccessRate", u."avgResponseTimeHours",
-  u."warningCount", u."totalCompletedShipments", u."totalFailedShipments",
-  u."consecutiveFailures", u."isSuspended", u."avgRating", u."totalReviews", u."subscriptionTier"
-FROM "User" u WHERE u."role" = 'transporter';
+SELECT u."id" AS transporter_id, u."name", u."companyName", u."phone", u."pickupSuccessRate", u."deliverySuccessRate", u."avgResponseTimeHours", u."warningCount", u."totalCompletedShipments", u."totalFailedShipments", u."consecutiveFailures", u."isSuspended", u."avgRating", u."totalReviews", u."subscriptionTier"
+FROM "User" u WHERE u."role"='transporter';
 
 CREATE OR REPLACE VIEW "RevenueSummary" AS
-SELECT
-  "type" AS revenue_type, COUNT(*) AS transaction_count,
-  SUM("amount") AS total_amount, AVG("amount") AS avg_amount,
-  MIN("amount") AS min_amount, MAX("amount") AS max_amount,
-  DATE_TRUNC('day', "recordedAt") AS revenue_date
-FROM "PlatformRevenue" GROUP BY "type", DATE_TRUNC('day', "recordedAt");
+SELECT "type" AS revenue_type, COUNT(*) AS transaction_count, SUM("amount") AS total_amount, AVG("amount") AS avg_amount, MIN("amount") AS min_amount, MAX("amount") AS max_amount, DATE_TRUNC('day',"recordedAt") AS revenue_date FROM "PlatformRevenue" GROUP BY "type", DATE_TRUNC('day',"recordedAt");
 
 CREATE OR REPLACE VIEW "ProductWithStock" AS
-SELECT
-  p.*, (p."quantity" - p."stockReserved") AS "calculatedAvailable",
-  u."name" AS seller_name, u."companyName" AS seller_company,
-  u."farmName" AS seller_farm, u."avgRating" AS seller_rating,
-  u."subscriptionTier" AS seller_tier, u."isSponsored" AS seller_sponsored
-FROM "Product" p
-LEFT JOIN "User" u ON u."id" = p."sellerId"
-WHERE p."isActive" = TRUE;
+SELECT p.*, (p."quantity"-p."stockReserved") AS "calculatedAvailable", u."name" AS seller_name, u."companyName" AS seller_company, u."farmName" AS seller_farm, u."avgRating" AS seller_rating, u."subscriptionTier" AS seller_tier, u."isSponsored" AS seller_sponsored
+FROM "Product" p LEFT JOIN "User" u ON u."id"=p."sellerId" WHERE p."isActive"=TRUE;
 
 -- =============================================================
--- SECTION 10: GRANT PERMISSIONS
+-- PART 9: GRANT PERMISSIONS
 -- =============================================================
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
@@ -940,5 +1012,29 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 
 -- =============================================================
--- DONE! AgroBridge V3 migration complete.
+-- PART 10: STORAGE BUCKET
+-- =============================================================
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('agrilink-images', 'agrilink-images', true, 5242880)
+ON CONFLICT (id) DO NOTHING;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Public read agrilink-images') THEN
+    CREATE POLICY "Public read agrilink-images" ON storage.objects FOR SELECT USING (bucket_id = 'agrilink-images');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Anon upload agrilink-images') THEN
+    CREATE POLICY "Anon upload agrilink-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'agrilink-images');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Allow updates agrilink-images') THEN
+    CREATE POLICY "Allow updates agrilink-images" ON storage.objects FOR UPDATE USING (bucket_id = 'agrilink-images');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Allow deletes agrilink-images') THEN
+    CREATE POLICY "Allow deletes agrilink-images" ON storage.objects FOR DELETE USING (bucket_id = 'agrilink-images');
+  END IF;
+END $$;
+
+-- =============================================================
+-- DONE! AgroBridge complete database is ready.
+-- 15 tables, 6 triggers, 7 functions, 4 views, storage bucket.
 -- =============================================================
