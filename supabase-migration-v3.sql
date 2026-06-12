@@ -858,11 +858,13 @@ CREATE INDEX IF NOT EXISTS "idx_revenue_recordedAt" ON "PlatformRevenue"("record
 
 -- =============================================================
 -- PART 7: TRIGGERS & FUNCTIONS
+-- Note: Using unique dollar-quote tags ($fn1$, $fn2$, etc.)
+-- instead of $$ to avoid delimiter confusion in Supabase SQL Editor
 -- =============================================================
 
 -- Inventory trigger
 CREATE OR REPLACE FUNCTION update_product_stock_reserved()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $fn1$
 DECLARE v_product_id TEXT;
 BEGIN
   IF TG_OP = 'INSERT' THEN v_product_id := NEW."productId";
@@ -877,14 +879,14 @@ BEGIN
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$fn1$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_order_stock_update ON "Order";
 CREATE TRIGGER trigger_order_stock_update AFTER INSERT OR UPDATE OF "productId","quantity","status" OR DELETE ON "Order" FOR EACH ROW EXECUTE FUNCTION update_product_stock_reserved();
 
 -- Pickup deadline trigger
 CREATE OR REPLACE FUNCTION set_pickup_deadline()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $fn2$
 BEGIN
   IF NEW."transporterId" IS NOT NULL AND (OLD."transporterId" IS NULL OR TG_OP = 'INSERT') THEN
     NEW."assignedAt" := NOW();
@@ -896,14 +898,14 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$fn2$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_set_pickup_deadline ON "Shipment";
 CREATE TRIGGER trigger_set_pickup_deadline BEFORE INSERT OR UPDATE OF "transporterId","status" ON "Shipment" FOR EACH ROW EXECUTE FUNCTION set_pickup_deadline();
 
 -- Auto-cancel expired shipments
 CREATE OR REPLACE FUNCTION auto_cancel_expired_shipments()
-RETURNS INTEGER AS $$
+RETURNS INTEGER AS $fn3$
 DECLARE cancelled_count INTEGER := 0; rec RECORD;
 BEGIN
   FOR rec IN SELECT s."id", s."transporterId", s."orderId" FROM "Shipment" s WHERE s."pickupDeadline" IS NOT NULL AND s."pickupDeadline" < NOW() AND s."status" IN ('assigned','pending') AND s."autoCancelledAt" IS NULL LOOP
@@ -915,60 +917,60 @@ BEGIN
   END LOOP;
   RETURN cancelled_count;
 END;
-$$ LANGUAGE plpgsql;
+$fn3$ LANGUAGE plpgsql;
 
 -- Transporter stats on delivery
 CREATE OR REPLACE FUNCTION update_transporter_stats_on_delivery()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $fn4$
 BEGIN
   IF NEW."status"='delivered' AND (OLD."status" IS NULL OR OLD."status"!='delivered') THEN
     UPDATE "User" SET "totalCompletedShipments"="totalCompletedShipments"+1,"consecutiveFailures"=0,"pickupSuccessRate"=CASE WHEN ("totalCompletedShipments"+"totalFailedShipments"+1)=0 THEN 100 ELSE ROUND(("totalCompletedShipments"+1)::NUMERIC/("totalCompletedShipments"+"totalFailedShipments"+1)*100,2) END,"deliverySuccessRate"=CASE WHEN ("totalCompletedShipments"+"totalFailedShipments"+1)=0 THEN 100 ELSE ROUND(("totalCompletedShipments"+1)::NUMERIC/("totalCompletedShipments"+"totalFailedShipments"+1)*100,2) END WHERE "id"=NEW."transporterId";
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$fn4$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_update_transporter_stats ON "Shipment";
 CREATE TRIGGER trigger_update_transporter_stats AFTER UPDATE OF "status" ON "Shipment" FOR EACH ROW EXECUTE FUNCTION update_transporter_stats_on_delivery();
 
 -- Conversation upsert
 CREATE OR REPLACE FUNCTION get_or_create_conversation(p1 TEXT, p2 TEXT, p_type TEXT, p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL)
-RETURNS TEXT AS $$
-DECLARE v_id TEXT;
+RETURNS TEXT AS $fn5$
+DECLARE v_conversation_id TEXT;
 BEGIN
-  SELECT "id" INTO v_id FROM "Conversation" WHERE ("participant1Id"=p1 AND "participant2Id"=p2 OR "participant1Id"=p2 AND "participant2Id"=p1) AND ("orderId"=p_order_id OR (p_order_id IS NULL AND "orderId" IS NULL)) AND ("shipmentId"=p_shipment_id OR (p_shipment_id IS NULL AND "shipmentId" IS NULL)) AND "isActive"=TRUE LIMIT 1;
-  IF v_id IS NULL THEN INSERT INTO "Conversation" ("participant1Id","participant2Id","type","orderId","shipmentId") VALUES (p1,p2,p_type,p_order_id,p_shipment_id) RETURNING "id" INTO v_id; END IF;
-  RETURN v_id;
+  SELECT "id" INTO v_conversation_id FROM "Conversation" WHERE ("participant1Id"=p1 AND "participant2Id"=p2 OR "participant1Id"=p2 AND "participant2Id"=p1) AND ("orderId"=p_order_id OR (p_order_id IS NULL AND "orderId" IS NULL)) AND ("shipmentId"=p_shipment_id OR (p_shipment_id IS NULL AND "shipmentId" IS NULL)) AND "isActive"=TRUE LIMIT 1;
+  IF v_conversation_id IS NULL THEN INSERT INTO "Conversation" ("participant1Id","participant2Id","type","orderId","shipmentId") VALUES (p1,p2,p_type,p_order_id,p_shipment_id) RETURNING "id" INTO v_conversation_id; END IF;
+  RETURN v_conversation_id;
 END;
-$$ LANGUAGE plpgsql;
+$fn5$ LANGUAGE plpgsql;
 
 -- Update conversation on message
 CREATE OR REPLACE FUNCTION update_conversation_on_message()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $fn6$
 BEGIN
   IF NEW."conversationId" IS NOT NULL THEN
     UPDATE "Conversation" SET "lastMessageAt"=NEW."createdAt","lastMessageContent"=NEW."content","lastMessageSenderId"=NEW."senderId","unreadCount1"=CASE WHEN "participant1Id"=NEW."receiverId" THEN "unreadCount1"+1 ELSE "unreadCount1" END,"unreadCount2"=CASE WHEN "participant2Id"=NEW."receiverId" THEN "unreadCount2"+1 ELSE "unreadCount2" END,"updatedAt"=NOW() WHERE "id"=NEW."conversationId";
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$fn6$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_update_conversation_on_message ON "Message";
 CREATE TRIGGER trigger_update_conversation_on_message AFTER INSERT ON "Message" FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
 
 -- Record platform revenue helper
 CREATE OR REPLACE FUNCTION record_platform_revenue(p_type TEXT, p_amount NUMERIC, p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL, p_user_id TEXT DEFAULT NULL, p_description TEXT DEFAULT NULL, p_percentage NUMERIC DEFAULT NULL, p_base_amount NUMERIC DEFAULT NULL)
-RETURNS TEXT AS $$
-DECLARE v_id TEXT;
+RETURNS TEXT AS $fn7$
+DECLARE v_revenue_id TEXT;
 BEGIN
-  INSERT INTO "PlatformRevenue" ("type","amount","orderId","shipmentId","userId","description","percentage","baseAmount") VALUES (p_type,p_amount,p_order_id,p_shipment_id,p_user_id,p_description,p_percentage,p_base_amount) RETURNING "id" INTO v_id;
-  RETURN v_id;
+  INSERT INTO "PlatformRevenue" ("type","amount","orderId","shipmentId","userId","description","percentage","baseAmount") VALUES (p_type,p_amount,p_order_id,p_shipment_id,p_user_id,p_description,p_percentage,p_base_amount) RETURNING "id" INTO v_revenue_id;
+  RETURN v_revenue_id;
 END;
-$$ LANGUAGE plpgsql;
+$fn7$ LANGUAGE plpgsql;
 
 -- Expire subscriptions/listings
 CREATE OR REPLACE FUNCTION expire_subscriptions_and_listings()
-RETURNS INTEGER AS $$
+RETURNS INTEGER AS $fn8$
 DECLARE v_count INTEGER := 0;
 BEGIN
   UPDATE "Subscription" SET "status"='expired',"updatedAt"=NOW() WHERE "status"='active' AND "expiresAt"<NOW();
@@ -979,7 +981,7 @@ BEGIN
   UPDATE "User" SET "isSponsored"=FALSE,"sponsoredExpiry"=NULL WHERE "isSponsored"=TRUE AND "sponsoredExpiry"<NOW();
   RETURN v_count;
 END;
-$$ LANGUAGE plpgsql;
+$fn8$ LANGUAGE plpgsql;
 
 -- =============================================================
 -- PART 8: VIEWS
