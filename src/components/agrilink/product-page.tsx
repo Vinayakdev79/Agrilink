@@ -31,6 +31,8 @@ import {
   Info,
   User,
   BadgeCheck,
+  Eye,
+  TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -171,6 +173,23 @@ const staggerContainer = {
   },
 }
 
+// ─── Stock Bar Component ──────────────────────────────────────────────────────
+function StockBar({ quantity, maxRef = 500 }: { quantity: number; maxRef?: number }) {
+  const pct = Math.min(100, (quantity / maxRef) * 100)
+  const barColor = quantity < 10 ? 'bg-red-400' : quantity < 50 ? 'bg-amber-400' : 'bg-emerald-400'
+  const glowColor = quantity < 10 ? 'shadow-red-400/40' : quantity < 50 ? 'shadow-amber-400/40' : 'shadow-emerald-400/40'
+  return (
+    <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: `${pct}%` }}
+        transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+        className={`h-full rounded-full ${barColor} shadow-sm ${glowColor}`}
+      />
+    </div>
+  )
+}
+
 // ─── Star Rating Display ──────────────────────────────────────────────────────
 function StarRating({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' | 'lg' }) {
   const sizeClass = size === 'lg' ? 'w-5 h-5' : size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5'
@@ -243,7 +262,7 @@ function ProductPageSkeleton() {
         <div className="space-y-4">
           <Skeleton className="h-8 w-3/4 rounded-lg" />
           <Skeleton className="h-10 w-40 rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-xl" />
+          <Skeleton className="h-140 w-full rounded-xl" />
           <Skeleton className="h-32 w-full rounded-xl" />
           <Skeleton className="h-24 w-full rounded-xl" />
         </div>
@@ -252,80 +271,139 @@ function ProductPageSkeleton() {
   )
 }
 
-// ─── Similar Product Card (Grid Layout) ───────────────────────────────────────
+// ─── Similar Product Card (Redesigned) ────────────────────────────────────────
 function SimilarProductCard({ product, onClick, onAddToCart }: { product: Product; onClick: () => void; onAddToCart: () => void }) {
   const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
   const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
   const emoji = CATEGORY_ICONS[product.category] || '📦'
   const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+  const isLowStock = product.quantity < 10
+  const isVerified = product.seller.verificationStatus === 'verified'
 
   return (
     <motion.div
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="glass-card overflow-hidden cursor-pointer hover:bg-white/[0.07] transition-all group"
+      whileHover={{ y: -6, scale: 1.02 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer group relative"
     >
-      {/* Image */}
+      {/* Hover glow effect */}
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-emerald-500/[0.07] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+      {/* Image Area */}
       <div className="aspect-[4/3] relative overflow-hidden" onClick={onClick}>
         {productImage ? (
           <img
             src={productImage}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none'
+              const parent = (e.target as HTMLImageElement).parentElement
+              if (parent) {
+                const fallback = parent.querySelector('.img-fallback') as HTMLElement
+                if (fallback) fallback.style.display = 'flex'
+              }
             }}
           />
-        ) : (
-          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-            <span className="text-4xl">{emoji}</span>
-          </div>
-        )}
+        ) : null}
+        <div className={`img-fallback w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center ${productImage ? 'hidden' : ''}`}>
+          <span className="text-5xl drop-shadow-lg">{emoji}</span>
+        </div>
+
+        {/* Overlay gradient at bottom */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+
         {/* Category Badge */}
-        <span className={`absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
+        <span className={`absolute top-2.5 left-2.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg border backdrop-blur-md ${catColor}`}>
           {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
         </span>
+
         {/* Quality Grade */}
         {product.qualityGrade && (
-          <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${GRADE_COLORS[product.qualityGrade] || ''}`}>
-            {product.qualityGrade}
+          <span className={`absolute top-2.5 right-2.5 text-[10px] font-bold px-2 py-0.5 rounded-lg border backdrop-blur-md ${GRADE_COLORS[product.qualityGrade] || ''}`}>
+            Grade {product.qualityGrade}
           </span>
         )}
+
+        {/* Low Stock Warning */}
+        {isLowStock && (
+          <span className="absolute bottom-2.5 left-2.5 text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/80 text-white backdrop-blur-sm flex items-center gap-1">
+            <AlertTriangle className="w-2.5 h-2.5" />
+            Low Stock
+          </span>
+        )}
+
+        {/* Quick View Button on hover */}
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          whileHover={{ scale: 1.1 }}
+          className="absolute top-2.5 right-2.5 w-8 h-8 rounded-xl bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 z-10"
+          style={product.qualityGrade ? { top: '2.5rem' } : {}}
+          onClick={(e) => {
+            e.stopPropagation()
+            onClick()
+          }}
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </motion.button>
       </div>
 
       {/* Content */}
-      <div className="p-3 space-y-2">
-        <h4 className="text-sm font-semibold text-foreground truncate">{product.name}</h4>
+      <div className="p-3.5 space-y-2.5 relative">
+        {/* Product Name */}
+        <h4 className="text-sm font-semibold text-foreground truncate leading-tight">{product.name}</h4>
 
-        {/* Price */}
-        <div className="flex items-center gap-1">
-          <IndianRupee className="w-3 h-3 text-emerald-400" />
-          <span className="text-sm font-bold text-foreground">{product.pricePerUnit.toLocaleString('en-IN')}</span>
-          <span className="text-[10px] text-muted-foreground">/ {product.unit}</span>
+        {/* Price with ₹ symbol */}
+        <div className="flex items-baseline gap-1">
+          <span className="text-amber-400 font-bold text-base">₹{product.pricePerUnit.toLocaleString('en-IN')}</span>
+          <span className="text-[10px] text-muted-foreground font-medium">/ {product.unit}</span>
         </div>
 
-        {/* Available quantity */}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Package className="w-3 h-3" />
-          <span>{product.quantity} {product.unit} available</span>
+        {/* Available Quantity with Stock Indicator */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Package className={`w-3 h-3 ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`} />
+              <span className={`text-[11px] font-semibold ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`}>
+                {product.quantity.toLocaleString('en-IN')} {product.unit}
+              </span>
+            </div>
+            {isLowStock && (
+              <span className="text-[9px] font-bold text-red-400 flex items-center gap-0.5">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                Hurry!
+              </span>
+            )}
+          </div>
+          <StockBar quantity={product.quantity} />
         </div>
 
-        {/* Producer name */}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
-          <User className="w-3 h-3 shrink-0" />
-          <span className="truncate">{product.seller.companyName || product.seller.name}</span>
+        {/* Producer Name with Avatar */}
+        <div className="flex items-center gap-2 pt-0.5">
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-500/30 to-emerald-700/30 border border-emerald-500/20 flex items-center justify-center shrink-0">
+            <span className="text-[8px] font-bold text-emerald-400">
+              {(product.seller.companyName || product.seller.name).charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground truncate flex-1">
+            {product.seller.companyName || product.seller.name}
+          </span>
+          {isVerified && (
+            <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          )}
         </div>
 
-        {/* Quick Add to Cart */}
+        {/* Add to Cart Button */}
         <Button
           size="sm"
-          className="w-full h-8 text-xs bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/25"
+          className="w-full h-8 text-xs font-semibold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 hover:border-emerald-500/40 transition-all backdrop-blur-sm"
           variant="outline"
           onClick={(e) => {
             e.stopPropagation()
             onAddToCart()
           }}
         >
-          <ShoppingCart className="w-3 h-3 mr-1" />
+          <ShoppingCart className="w-3 h-3 mr-1.5" />
           Add to Cart
         </Button>
       </div>
@@ -333,74 +411,133 @@ function SimilarProductCard({ product, onClick, onAddToCart }: { product: Produc
   )
 }
 
-// ─── Producer Product Card (Grid Layout) ──────────────────────────────────────
-function ProducerProductCard({ product, onClick, onAddToCart }: { product: Product; onClick: () => void; onAddToCart: () => void }) {
+// ─── Producer Product Card (Redesigned) ───────────────────────────────────────
+function ProducerProductCard({ product, onClick, onAddToCart, producerName, isVerified }: { product: Product; onClick: () => void; onAddToCart: () => void; producerName: string; isVerified: boolean }) {
   const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
   const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
   const emoji = CATEGORY_ICONS[product.category] || '📦'
   const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+  const isLowStock = product.quantity < 10
 
   return (
     <motion.div
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="glass-card overflow-hidden cursor-pointer hover:bg-white/[0.07] transition-all group"
+      whileHover={{ y: -6, scale: 1.02 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer group relative"
     >
-      {/* Image */}
+      {/* Hover glow effect */}
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-amber-500/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+      {/* Image Area */}
       <div className="aspect-[4/3] relative overflow-hidden" onClick={onClick}>
         {productImage ? (
           <img
             src={productImage}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none'
+              const parent = (e.target as HTMLImageElement).parentElement
+              if (parent) {
+                const fallback = parent.querySelector('.img-fallback') as HTMLElement
+                if (fallback) fallback.style.display = 'flex'
+              }
             }}
           />
-        ) : (
-          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-            <span className="text-4xl">{emoji}</span>
-          </div>
-        )}
+        ) : null}
+        <div className={`img-fallback w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center ${productImage ? 'hidden' : ''}`}>
+          <span className="text-5xl drop-shadow-lg">{emoji}</span>
+        </div>
+
+        {/* Overlay gradient at bottom */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+
         {/* Category Badge */}
-        <span className={`absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
+        <span className={`absolute top-2.5 left-2.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg border backdrop-blur-md ${catColor}`}>
           {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
         </span>
+
+        {/* Same Producer Badge */}
+        <span className="absolute top-2.5 right-2.5 text-[9px] font-bold px-2 py-0.5 rounded-lg border backdrop-blur-md bg-emerald-500/20 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
+          <BadgeCheck className="w-2.5 h-2.5" />
+          Same Producer
+        </span>
+
+        {/* Low Stock Warning */}
+        {isLowStock && (
+          <span className="absolute bottom-2.5 left-2.5 text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/80 text-white backdrop-blur-sm flex items-center gap-1">
+            <AlertTriangle className="w-2.5 h-2.5" />
+            Low Stock
+          </span>
+        )}
+
+        {/* Quick View Button on hover */}
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          whileHover={{ scale: 1.1 }}
+          className="absolute bottom-2.5 right-2.5 w-8 h-8 rounded-xl bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 z-10"
+          onClick={(e) => {
+            e.stopPropagation()
+            onClick()
+          }}
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </motion.button>
       </div>
 
       {/* Content */}
-      <div className="p-3 space-y-2">
-        <h4 className="text-sm font-semibold text-foreground truncate">{product.name}</h4>
+      <div className="p-3.5 space-y-2.5 relative">
+        {/* Product Name */}
+        <h4 className="text-sm font-semibold text-foreground truncate leading-tight">{product.name}</h4>
 
-        {/* Price */}
-        <div className="flex items-center gap-1">
-          <IndianRupee className="w-3 h-3 text-emerald-400" />
-          <span className="text-sm font-bold text-foreground">{product.pricePerUnit.toLocaleString('en-IN')}</span>
-          <span className="text-[10px] text-muted-foreground">/ {product.unit}</span>
+        {/* Price per unit */}
+        <div className="flex items-baseline gap-1">
+          <span className="text-amber-400 font-bold text-base">₹{product.pricePerUnit.toLocaleString('en-IN')}</span>
+          <span className="text-[10px] text-muted-foreground font-medium">/ {product.unit}</span>
         </div>
 
-        {/* Available quantity */}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Package className="w-3 h-3" />
-          <span>{product.quantity} {product.unit} available</span>
+        {/* Available Quantity with Stock Bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Package className={`w-3 h-3 ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`} />
+              <span className={`text-[11px] font-semibold ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`}>
+                {product.quantity.toLocaleString('en-IN')} {product.unit} available
+              </span>
+            </div>
+          </div>
+          <StockBar quantity={product.quantity} />
         </div>
 
-        {/* Producer info - same producer */}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <BadgeCheck className="w-3 h-3 text-emerald-400" />
-          <span className="truncate">Same Producer</span>
+        {/* Producer Info with Verified Badge */}
+        <div className="flex items-center gap-2 pt-0.5">
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-500/30 to-emerald-700/30 border border-emerald-500/20 flex items-center justify-center shrink-0">
+            <span className="text-[8px] font-bold text-emerald-400">
+              {producerName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground truncate flex-1">
+            {producerName}
+          </span>
+          {isVerified && (
+            <div className="flex items-center gap-0.5 shrink-0">
+              <BadgeCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[9px] font-semibold text-emerald-400">Verified</span>
+            </div>
+          )}
         </div>
 
-        {/* Quick Add to Cart */}
+        {/* Add to Cart Button */}
         <Button
           size="sm"
-          className="w-full h-8 text-xs bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/25"
+          className="w-full h-8 text-xs font-semibold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 hover:border-emerald-500/40 transition-all backdrop-blur-sm"
           variant="outline"
           onClick={(e) => {
             e.stopPropagation()
             onAddToCart()
           }}
         >
-          <ShoppingCart className="w-3 h-3 mr-1" />
+          <ShoppingCart className="w-3 h-3 mr-1.5" />
           Add to Cart
         </Button>
       </div>
@@ -1272,72 +1409,109 @@ export function ProductPage() {
           </motion.div>
         </motion.div>
 
-        {/* ─── Similar Products Section - Grid Layout ──────────────────────────── */}
+        {/* ─── Similar Products Section ─────────────────────────────────────────── */}
         {similarProducts.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="px-4 sm:px-6 mt-8"
+            className="px-4 sm:px-6 mt-10"
           >
-            <div className="glass-card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <Package className="w-5 h-5 text-emerald-400" />
-                  Similar Products
-                </h3>
+            <div className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl p-5 sm:p-6">
+              {/* Section Header */}
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                    <Package className="w-4.5 h-4.5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-foreground">Similar Products</h3>
+                    <p className="text-xs text-muted-foreground">From other producers in the same category</p>
+                  </div>
+                </div>
                 <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground">
-                  {similarProducts.length} products
+                  {similarProducts.length} product{similarProducts.length !== 1 ? 's' : ''}
                 </Badge>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {similarProducts.map((sp) => (
-                  <SimilarProductCard
+
+              {/* Mobile: Horizontal scroll | Desktop: Grid */}
+              <div className="flex gap-4 overflow-x-auto pb-2 sm:pb-0 lg:grid lg:grid-cols-4 sm:grid-cols-3 sm:overflow-visible scrollbar-thin">
+                {similarProducts.map((sp, idx) => (
+                  <motion.div
                     key={sp.id}
-                    product={sp}
-                    onClick={() => {
-                      setSelectedProductId(sp.id)
-                      setSelectedImageIdx(0)
-                      window.scrollTo({ top: 0, behavior: 'smooth' })
-                    }}
-                    onAddToCart={() => handleQuickAddToCart(sp)}
-                  />
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: idx * 0.05 }}
+                    className="min-w-[220px] sm:min-w-0 flex-shrink-0 lg:flex-shrink"
+                  >
+                    <SimilarProductCard
+                      product={sp}
+                      onClick={() => {
+                        setSelectedProductId(sp.id)
+                        setSelectedImageIdx(0)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                      onAddToCart={() => handleQuickAddToCart(sp)}
+                    />
+                  </motion.div>
                 ))}
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* ─── Other Products From This Producer - Grid Layout ──────────────── */}
+        {/* ─── Other Products From This Producer ─────────────────────────────── */}
         {sellerProducts.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
-            className="px-4 sm:px-6 mt-6 mb-8"
+            className="px-4 sm:px-6 mt-6 mb-10"
           >
-            <div className="glass-card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <Award className="w-5 h-5 text-emerald-400" />
-                  More from {producer?.companyName || product.seller.companyName || product.seller.name}
-                </h3>
+            <div className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl p-5 sm:p-6">
+              {/* Section Header */}
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+                    <Award className="w-4.5 h-4.5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-foreground">Other Products From This Producer</h3>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      {producer?.companyName || product.seller.companyName || product.seller.name}
+                      {(producer?.verificationStatus === 'verified' || product.seller.verificationStatus === 'verified') && (
+                        <BadgeCheck className="w-3 h-3 text-emerald-400" />
+                      )}
+                    </p>
+                  </div>
+                </div>
                 <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground">
-                  {sellerProducts.length} products
+                  {sellerProducts.length} product{sellerProducts.length !== 1 ? 's' : ''}
                 </Badge>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {sellerProducts.map((sp) => (
-                  <ProducerProductCard
+
+              {/* Mobile: Horizontal scroll | Desktop: Grid */}
+              <div className="flex gap-4 overflow-x-auto pb-2 sm:pb-0 lg:grid lg:grid-cols-4 sm:grid-cols-3 sm:overflow-visible scrollbar-thin">
+                {sellerProducts.map((sp, idx) => (
+                  <motion.div
                     key={sp.id}
-                    product={sp}
-                    onClick={() => {
-                      setSelectedProductId(sp.id)
-                      setSelectedImageIdx(0)
-                      window.scrollTo({ top: 0, behavior: 'smooth' })
-                    }}
-                    onAddToCart={() => handleQuickAddToCart(sp)}
-                  />
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: idx * 0.05 }}
+                    className="min-w-[220px] sm:min-w-0 flex-shrink-0 lg:flex-shrink"
+                  >
+                    <ProducerProductCard
+                      product={sp}
+                      onClick={() => {
+                        setSelectedProductId(sp.id)
+                        setSelectedImageIdx(0)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                      onAddToCart={() => handleQuickAddToCart(sp)}
+                      producerName={producer?.companyName || product.seller.companyName || product.seller.name}
+                      isVerified={producer?.verificationStatus === 'verified' || product.seller.verificationStatus === 'verified'}
+                    />
+                  </motion.div>
                 ))}
               </div>
             </div>

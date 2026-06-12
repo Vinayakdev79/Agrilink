@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Leaf, LayoutDashboard, Package, ShoppingCart, MessageSquare, User,
   Store, ClipboardList, Truck, Gavel, Users, ShieldCheck, BarChart3,
-  Bell, Menu, X, LogOut, ChevronRight, Sprout
+  Bell, Menu, X, LogOut, ChevronRight, Sprout, CreditCard
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +51,8 @@ const navItemsByRole: Record<UserRole, NavItem[]> = {
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-5 w-5" /> },
     { id: 'users', label: 'Users', icon: <Users className="h-5 w-5" /> },
     { id: 'verification', label: 'Verification', icon: <ShieldCheck className="h-5 w-5" /> },
+    { id: 'revenue', label: 'Revenue', icon: <BarChart3 className="h-5 w-5" /> },
+    { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard className="h-5 w-5" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingCart className="h-5 w-5" /> },
     { id: 'shipments', label: 'Shipments', icon: <Truck className="h-5 w-5" /> },
     { id: 'messages', label: 'Messages', icon: <MessageSquare className="h-5 w-5" /> },

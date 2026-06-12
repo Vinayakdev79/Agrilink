@@ -13,15 +13,25 @@ export async function GET(request: Request) {
 
     // Single product lookup by ID
     if (id) {
-      const { data: product, error } = await supabase
+      // Try with sponsored fields first, fallback without
+      let { data: product, error } = await supabase
         .from('Product')
         .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry)')
         .eq('id', id)
         .maybeSingle()
 
       if (error) {
-        console.error('Product fetch error:', error)
-        return NextResponse.json({ error: 'Failed to fetch product' }, { status: 500 })
+        // Retry without sponsored columns
+        const fallback = await supabase
+          .from('Product')
+          .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
+          .eq('id', id)
+          .maybeSingle()
+        if (fallback.error) {
+          console.error('Product fetch error:', fallback.error)
+          return NextResponse.json({ error: 'Failed to fetch product' }, { status: 500 })
+        }
+        product = fallback.data
       }
       if (!product) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
@@ -56,8 +66,27 @@ export async function GET(request: Request) {
     const { data: products, error } = await query
 
     if (error) {
-      console.error('Products fetch error:', error)
-      return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+      // Fallback: try without sponsored columns (they may not exist yet)
+      let fallbackQuery = supabase
+        .from('Product')
+        .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
+        .eq('isActive', true)
+        .order('createdAt', { ascending: false })
+        .limit(50)
+
+      if (category && category !== 'all') fallbackQuery = fallbackQuery.eq('category', category)
+      if (search) fallbackQuery = fallbackQuery.ilike('name', '%' + search + '%')
+      if (state) fallbackQuery = fallbackQuery.eq('state', state)
+      if (grade) fallbackQuery = fallbackQuery.eq('qualityGrade', grade)
+      if (sellerId) fallbackQuery = fallbackQuery.eq('sellerId', sellerId)
+
+      const fallbackResult = await fallbackQuery
+      if (fallbackResult.error) {
+        console.error('Products fetch error:', fallbackResult.error)
+        return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+      }
+
+      return NextResponse.json({ products: fallbackResult.data || [] })
     }
 
     // Sort products so that sponsored sellers (with valid isSponsored and non-expired sponsoredExpiry) appear first

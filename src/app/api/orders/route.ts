@@ -232,10 +232,52 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()
-    const { orderId, status } = body
+    const { orderId, status, paymentStatus, remainingPaidAt } = body
 
-    if (!orderId || !status) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    if (!orderId) {
+      return NextResponse.json({ error: 'Missing orderId' }, { status: 400 })
+    }
+
+    // Support payment-only updates (e.g. "Pay Remaining" from buyer)
+    if (paymentStatus && !status) {
+      const paymentUpdateData: Record<string, unknown> = {
+        paymentStatus,
+        updatedAt: new Date().toISOString(),
+      }
+      if (remainingPaidAt) paymentUpdateData.remainingPaidAt = remainingPaidAt
+
+      let { data: order, error } = await supabase
+        .from('Order')
+        .update(paymentUpdateData)
+        .eq('id', orderId)
+        .select()
+        .single()
+
+      if (error) {
+        // Retry without remainingPaidAt if column doesn't exist
+        const fallbackData: Record<string, unknown> = {
+          paymentStatus,
+          updatedAt: new Date().toISOString(),
+        }
+        const fallbackResult = await supabase
+          .from('Order')
+          .update(fallbackData)
+          .eq('id', orderId)
+          .select()
+          .single()
+
+        if (fallbackResult.error) {
+          console.error('Payment update error:', fallbackResult.error)
+          return NextResponse.json({ error: 'Failed to update payment status' }, { status: 500 })
+        }
+        order = fallbackResult.data
+      }
+
+      return NextResponse.json({ order })
+    }
+
+    if (!status) {
+      return NextResponse.json({ error: 'Missing status field' }, { status: 400 })
     }
 
     // Fetch the current order to get context

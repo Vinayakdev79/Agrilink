@@ -89,6 +89,14 @@ CREATE POLICY "Allow updates" ON storage.objects
 CREATE POLICY "Allow deletes" ON storage.objects
   FOR DELETE USING (bucket_id = 'agrilink-images');
 
+-- 10. Add subscription and sponsored fields to User table
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "subscriptionTier" TEXT DEFAULT 'free';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "subscriptionExpiry" TIMESTAMPTZ;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "subscriptionAmount" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isSponsored" BOOLEAN DEFAULT false;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "sponsoredExpiry" TIMESTAMPTZ;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "sponsoredAmount" FLOAT;
+
 -- =====================================================
 -- DONE! Your AgriLink database is fully updated.
 -- =====================================================

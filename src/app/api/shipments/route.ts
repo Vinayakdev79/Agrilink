@@ -162,6 +162,24 @@ export async function POST(request: Request) {
       console.error('Order update error:', orderError)
     }
 
+    // Create transport booking fee revenue entry (₹30 for platform transporters, none for external)
+    if (!isExt && shipment) {
+      try {
+        const bookingFee = 30 // ₹30 transport booking fee
+        await supabase
+          .from('PlatformRevenue')
+          .insert({
+            shipmentId: shipment.id,
+            orderId,
+            type: 'transport_booking_fee',
+            amount: bookingFee,
+            description: `₹${bookingFee} transport booking fee for shipment ${shipment.id.slice(-8)}`,
+          })
+      } catch (revenueErr) {
+        console.warn('Could not create transport booking fee entry:', revenueErr)
+      }
+    }
+
     return NextResponse.json({ shipment })
   } catch (error) {
     console.error('Shipment create error:', error)
@@ -253,7 +271,37 @@ export async function PATCH(request: Request) {
 
       if (hoursSinceAssigned > 24 && status !== 'picked_up' && status !== 'delivered' && status !== 'cancelled') {
         console.warn(`[SHIPMENT WARNING] Shipment ${shipmentId} status changed to '${status}' after ${hoursSinceAssigned.toFixed(1)} hours since assignment (>24hrs without pickup)`)
-        // Frontend will handle auto-cancel logic
+      }
+    }
+
+    // Auto-cancel: If status is 'auto_cancelled', handle the 24hr deadline breach
+    if (status === 'auto_cancelled' && currentShipment?.transporterId) {
+      updateData.autoCancelledAt = new Date().toISOString()
+      
+      // Increment transporter's warning count and failed shipments
+      const { data: transporter } = await supabase
+        .from('User')
+        .select('warningCount, totalFailedShipments, pickupSuccessRate')
+        .eq('id', currentShipment.transporterId)
+        .single()
+
+      if (transporter) {
+        const newWarningCount = (transporter.warningCount || 0) + 1
+        const newFailedShipments = (transporter.totalFailedShipments || 0) + 1
+        // Decrease pickup success rate
+        const currentRate = transporter.pickupSuccessRate || 100
+        const newRate = Math.max(0, currentRate - 5) // Decrease by 5% per failure
+        
+        await supabase
+          .from('User')
+          .update({
+            warningCount: newWarningCount,
+            totalFailedShipments: newFailedShipments,
+            pickupSuccessRate: newRate,
+            lastWarningAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', currentShipment.transporterId)
       }
     }
 
@@ -340,6 +388,82 @@ export async function PATCH(request: Request) {
         .from('Order')
         .update({ status: 'delivered' })
         .eq('id', shipment.orderId)
+      
+      // Create logistics commission revenue entry (5% of transport cost) for platform transporters only
+      if (currentShipment && !currentShipment.isExternal && currentShipment.transporterId) {
+        try {
+          // Get the accepted bid amount as transport cost
+          const { data: acceptedBid } = await supabase
+            .from('TransportBid')
+            .select('bidAmount')
+            .eq('shipmentId', shipmentId)
+            .eq('status', 'accepted')
+            .single()
+          
+          const transportCost = acceptedBid?.bidAmount || 0
+          if (transportCost > 0) {
+            const logisticsCommission = Math.round(transportCost * 0.05 * 100) / 100 // 5% commission
+            await supabase
+              .from('PlatformRevenue')
+              .insert({
+                shipmentId: shipment.id,
+                orderId: shipment.orderId,
+                userId: currentShipment.transporterId,
+                type: 'logistics_commission',
+                amount: logisticsCommission,
+                description: `5% logistics commission on transport charge ₹${transportCost} for shipment ${shipment.id.slice(-8)}`,
+              })
+          }
+          
+          // Update transporter delivery success rate
+          const { data: transporter } = await supabase
+            .from('User')
+            .select('totalCompletedShipments, deliverySuccessRate')
+            .eq('id', currentShipment.transporterId)
+            .single()
+          
+          if (transporter) {
+            const newCompleted = (transporter.totalCompletedShipments || 0) + 1
+            // Increase delivery success rate slightly
+            const currentRate = transporter.deliverySuccessRate || 100
+            const newRate = Math.min(100, currentRate + 1)
+            await supabase
+              .from('User')
+              .update({
+                totalCompletedShipments: newCompleted,
+                deliverySuccessRate: newRate,
+                updatedAt: new Date().toISOString(),
+              })
+              .eq('id', currentShipment.transporterId)
+          }
+        } catch (revenueErr) {
+          console.warn('Could not create logistics commission entry:', revenueErr)
+        }
+      }
+      
+      // Create escrow fee revenue entry (0.75% of order total)
+      try {
+        const { data: order } = await supabase
+          .from('Order')
+          .select('totalPrice')
+          .eq('id', shipment.orderId)
+          .single()
+        
+        if (order?.totalPrice) {
+          const escrowFee = Math.round(order.totalPrice * 0.0075 * 100) / 100
+          await supabase
+            .from('PlatformRevenue')
+            .insert({
+              orderId: shipment.orderId,
+              shipmentId: shipment.id,
+              type: 'escrow_fee',
+              amount: escrowFee,
+              description: `0.75% escrow management fee on order ₹${order.totalPrice}`,
+            })
+        }
+      } catch (escrowErr) {
+        console.warn('Could not create escrow fee entry:', escrowErr)
+      }
     } else if (status === 'in_transit' && shipment) {
       await supabase
         .from('Order')

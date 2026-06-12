@@ -1,13 +1,14 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   ClipboardList, ShoppingCart, IndianRupee, Users, Store, Plus,
   MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
-  ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield, ChevronRight,
-  Eye, Gavel, Phone, Crosshair, CalendarDays, Image as ImageIcon, Upload, User, Leaf
+  ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield,
+  Eye, Gavel, Phone, Crosshair, CalendarDays, User, Leaf,
+  Wallet, CreditCard, ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +51,12 @@ const statusColors: Record<string, string> = {
   delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
   cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
   disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+}
+
+const paymentStatusColors: Record<string, string> = {
+  advance_paid: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  unpaid: 'bg-red-500/20 text-red-400 border-red-500/30',
 }
 
 const bidStatusColors: Record<string, string> = {
@@ -97,6 +104,67 @@ function StatCard({ icon, value, label, trend, trendUp }: {
   )
 }
 
+// Payment Breakdown Component
+function PaymentBreakdown({ order }: { order: any }) {
+  const quantity = order.quantity || 0
+  const unitPrice = order.unitPrice || order.product?.pricePerUnit || 0
+  const productCost = quantity * unitPrice
+  const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
+  const transportBookingFee = order.transportBookingFee || 30
+  const total = order.totalPayable || (productCost + platformFee + transportBookingFee)
+  const advancePaid = order.advanceAmount || Math.round(total * 0.5 * 100) / 100
+  const remaining = order.remainingAmount || Math.round(total * 0.5 * 100) / 100
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      className="glass-card p-4 border border-amber-500/15 bg-amber-500/[0.03]"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <CreditCard className="h-4 w-4 text-amber-400" />
+        <h5 className="text-sm font-semibold text-foreground">Payment Breakdown</h5>
+        {order.paymentStatus && (
+          <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px] ml-auto`}>
+            {order.paymentStatus === 'advance_paid' ? '50% Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus.replace('_', ' ')}
+          </Badge>
+        )}
+      </div>
+      <div className="space-y-1.5 text-xs">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Product Cost ({quantity} × ₹{unitPrice.toLocaleString()})</span>
+          <span className="text-foreground font-medium">₹{productCost.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Platform Fee (2%)</span>
+          <span className="text-foreground font-medium">₹{platformFee.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Transport Booking Fee</span>
+          <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between pt-1.5 border-t border-glass-border">
+          <span className="text-foreground font-semibold">Total</span>
+          <span className="text-amber-400 font-bold">₹{total.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between pt-1 border-t border-dashed border-glass-border">
+          <span className="text-emerald-400">Advance Paid (50%)</span>
+          <span className="text-emerald-400 font-medium">₹{advancePaid.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className={order.paymentStatus === 'full_paid' ? 'text-emerald-400' : 'text-orange-400'}>
+            {order.paymentStatus === 'full_paid' ? 'Remaining (Paid)' : 'Remaining (50%)'}
+          </span>
+          <span className={order.paymentStatus === 'full_paid' ? 'text-emerald-400 font-medium' : 'text-orange-400 font-bold'}>
+            ₹{remaining.toLocaleString()}
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 export function BuyerDashboard({ tab }: BuyerDashboardProps) {
   const { user, setChatOpen, setActiveChatUser, setView, setMarketplaceCategory, setSelectedProducerId } = useAppStore()
   const [orders, setOrders] = useState<any[]>([])
@@ -133,6 +201,12 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
 
   // Shipments for this buyer
   const [myShipments, setMyShipments] = useState<any[]>([])
+
+  // Pay remaining state
+  const [payingRemaining, setPayingRemaining] = useState<string | null>(null)
+
+  // Expanded orders for payment breakdown
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
 
   const fetchData = useCallback(async () => {
     if (!user) return
@@ -268,6 +342,46 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
   // Find shipment for a given order
   const getShipmentForOrder = (orderId: string) => {
     return myShipments.find((s: any) => s.orderId === orderId)
+  }
+
+  // Pay remaining amount
+  const handlePayRemaining = async (orderId: string) => {
+    setPayingRemaining(orderId)
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          paymentStatus: 'full_paid',
+          remainingPaidAt: new Date().toISOString()
+        })
+      })
+      if (res.ok) {
+        toast.success('Remaining payment completed successfully!')
+        fetchData()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to process payment')
+      }
+    } catch {
+      toast.error('Failed to process payment')
+    } finally {
+      setPayingRemaining(null)
+    }
+  }
+
+  // Toggle payment breakdown
+  const togglePaymentBreakdown = (orderId: string) => {
+    setExpandedOrders(prev => {
+      const next = new Set(prev)
+      if (next.has(orderId)) {
+        next.delete(orderId)
+      } else {
+        next.add(orderId)
+      }
+      return next
+    })
   }
 
   const activeProcurements = requirements.filter(r => r.status === 'open').length
@@ -566,6 +680,10 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
               const hasShipment = !!shipment
               const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
               const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
+              const isExternalTransport = shipment?.isExternal || shipment?.isExternalTransporter
+              const canPayRemaining = order.paymentStatus === 'advance_paid' && order.status === 'delivered'
+              const remainingAmount = order.remainingAmount || Math.round((order.totalPayable || order.totalPrice || 0) * 0.5 * 100) / 100
+              const isExpanded = expandedOrders.has(order.id)
 
               return (
                 <motion.div
@@ -605,9 +723,16 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                             )}
                           </div>
                         </div>
-                        <Badge className={`${statusColors[order.status] || ''} border text-xs shrink-0`}>
-                          {order.status}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge className={`${statusColors[order.status] || ''} border text-xs`}>
+                            {order.status}
+                          </Badge>
+                          {order.paymentStatus && (
+                            <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px]`}>
+                              {order.paymentStatus === 'advance_paid' ? '50% Paid' : order.paymentStatus === 'full_paid' ? 'Paid' : order.paymentStatus}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {/* Price details */}
@@ -646,7 +771,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                     </div>
                   )}
 
-                  {/* Seller info */}
+                  {/* Seller info with Chat button */}
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-glass-border">
                     <Avatar className="h-8 w-8 border border-glass-border shrink-0">
                       {order.seller?.avatarUrl ? (
@@ -668,7 +793,22 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1 text-xs"
+                        onClick={() => {
+                          if (order.seller?.id) {
+                            setActiveChatUser(order.seller.id)
+                            setChatOpen(true)
+                          }
+                        }}
+                      >
+                        <MessageSquare className="h-3 w-3" /> Chat
+                      </Button>
+                      <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    </div>
                   </div>
 
                   {/* Expected Pickup Date - prominent display */}
@@ -688,67 +828,148 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                     </div>
                   )}
 
-                  {/* Shipment Transport Details */}
+                  {/* Shipment Transport Details - Enhanced with transporter info */}
                   {hasTransport && (
                     <div className="glass-card p-4 border border-teal-500/20">
                       <div className="flex items-center gap-2 mb-3">
                         <Truck className="h-4 w-4 text-teal-400" />
                         <h5 className="text-sm font-semibold text-foreground">Transport Details</h5>
-                        <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px] ml-auto`}>
+                        <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px]`}>
                           {shipment.status.replace('_', ' ')}
                         </Badge>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                        <div>
-                          <p className="text-muted-foreground text-[10px]">Company</p>
-                          <p className="text-foreground font-medium text-xs">
-                            {shipment.transporter?.companyName || shipment.transporter?.name || 'N/A'}
-                          </p>
-                        </div>
-                        {shipment.driverName && (
-                          <div>
-                            <p className="text-muted-foreground text-[10px]">Driver</p>
-                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                              <User className="h-3 w-3 text-emerald-400" />
-                              {shipment.driverName}
-                            </p>
-                            {shipment.driverPhone && (
-                              <p className="text-muted-foreground text-[10px] flex items-center gap-1 mt-0.5">
-                                <Phone className="h-2.5 w-2.5" />
-                                {shipment.driverPhone}
-                              </p>
-                            )}
-                          </div>
+                        {isExternalTransport && (
+                          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px] gap-1">
+                            <ExternalLink className="h-2.5 w-2.5" /> External
+                          </Badge>
                         )}
-                        {(shipment.vehicleType || shipment.vehicleNumber) && (
-                          <div>
-                            <p className="text-muted-foreground text-[10px]">Vehicle</p>
-                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                              <Truck className="h-3 w-3 text-emerald-400" />
-                              {shipment.vehicleType || 'N/A'}
-                              {shipment.vehicleNumber && ` (${shipment.vehicleNumber})`}
-                            </p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-muted-foreground text-[10px]">Pickup</p>
-                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-emerald-400" />
-                            {shipment.exactPickupAddress || shipment.origin}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-[10px]">Drop-off</p>
-                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-red-400" />
-                            {shipment.exactDropAddress || shipment.destination}
-                          </p>
-                        </div>
                       </div>
 
-                      {/* Track Shipment Button */}
-                      {isShippedOrInTransit && (
-                        <div className="mt-3 pt-3 border-t border-glass-border">
+                      {isExternalTransport ? (
+                        /* External Transporter Info */
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                          {(shipment.externalTransporterName || shipment.externalCompanyName) && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Transporter</p>
+                              <p className="text-foreground font-medium text-xs">
+                                {shipment.externalTransporterName || shipment.externalCompanyName || 'N/A'}
+                              </p>
+                            </div>
+                          )}
+                          {shipment.driverName && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Driver</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <User className="h-3 w-3 text-teal-400" />
+                                {shipment.driverName}
+                              </p>
+                            </div>
+                          )}
+                          {(shipment.driverPhone || shipment.externalMobileNumber) && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Driver Phone</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <Phone className="h-2.5 w-2.5 text-teal-400" />
+                                {shipment.driverPhone || shipment.externalMobileNumber}
+                              </p>
+                            </div>
+                          )}
+                          {shipment.vehicleNumber && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Vehicle Number</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <Truck className="h-3 w-3 text-teal-400" />
+                                {shipment.vehicleNumber}
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Pickup</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-emerald-400" />
+                              {shipment.exactPickupAddress || shipment.origin}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Drop-off</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-red-400" />
+                              {shipment.exactDropAddress || shipment.destination}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Internal (AgroBridge) Transporter Info */
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Transporter Company</p>
+                            <p className="text-foreground font-medium text-xs">
+                              {shipment.transporter?.companyName || shipment.transporter?.name || 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Transporter Contact</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <Phone className="h-2.5 w-2.5 text-teal-400" />
+                              {shipment.transporter?.phone || 'N/A'}
+                            </p>
+                          </div>
+                          {shipment.driverName && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Driver Name</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <User className="h-3 w-3 text-teal-400" />
+                                {shipment.driverName}
+                              </p>
+                            </div>
+                          )}
+                          {shipment.driverPhone && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Driver Phone</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <Phone className="h-2.5 w-2.5 text-teal-400" />
+                                {shipment.driverPhone}
+                              </p>
+                            </div>
+                          )}
+                          {shipment.vehicleNumber && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Vehicle Number</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <Truck className="h-3 w-3 text-teal-400" />
+                                {shipment.vehicleNumber}
+                              </p>
+                            </div>
+                          )}
+                          {(shipment.vehicleType && !shipment.vehicleNumber) && (
+                            <div>
+                              <p className="text-muted-foreground text-[10px]">Vehicle Type</p>
+                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                                <Truck className="h-3 w-3 text-teal-400" />
+                                {shipment.vehicleType}
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Pickup</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-emerald-400" />
+                              {shipment.exactPickupAddress || shipment.origin}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Drop-off</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-red-400" />
+                              {shipment.exactDropAddress || shipment.destination}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Transporter Action Buttons */}
+                      <div className="mt-3 pt-3 border-t border-glass-border flex items-center gap-2 flex-wrap">
+                        {/* Track Shipment Button */}
+                        {isShippedOrInTransit && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -757,9 +978,79 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                           >
                             <Crosshair className="h-3.5 w-3.5" /> Track Shipment
                           </Button>
-                        </div>
-                      )}
+                        )}
+
+                        {/* Chat with Transporter - only for internal transporters */}
+                        {!isExternalTransport && shipment.transporterId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1.5 text-xs"
+                            onClick={() => {
+                              setActiveChatUser(shipment.transporterId)
+                              setChatOpen(true)
+                            }}
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" /> Chat with Transporter
+                          </Button>
+                        )}
+                      </div>
                     </div>
+                  )}
+
+                  {/* Pay Remaining Banner */}
+                  {canPayRemaining && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="glass-card p-4 border border-orange-500/30 bg-orange-500/[0.05]"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
+                            <Wallet className="h-5 w-5 text-orange-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">Payment Due</p>
+                            <p className="text-xs text-muted-foreground">Remaining 50% payment pending for this delivered order</p>
+                          </div>
+                        </div>
+                        <Button
+                          className="bg-orange-600 hover:bg-orange-500 gap-2 text-sm shadow-lg shadow-orange-600/20"
+                          disabled={payingRemaining === order.id}
+                          onClick={() => handlePayRemaining(order.id)}
+                        >
+                          {payingRemaining === order.id ? (
+                            <>
+                              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <IndianRupee className="h-4 w-4" /> Pay Remaining ₹{remainingAmount.toLocaleString()}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Payment Breakdown Toggle */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1.5 text-xs h-7 px-2"
+                      onClick={() => togglePaymentBreakdown(order.id)}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" />
+                      {isExpanded ? 'Hide' : 'Show'} Payment Breakdown
+                    </Button>
+                  </div>
+
+                  {/* Payment Breakdown */}
+                  {isExpanded && (
+                    <PaymentBreakdown order={order} />
                   )}
 
                   {/* Actions */}
@@ -820,6 +1111,21 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                       <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
                         <CheckCircle className="h-3 w-3 mr-1" /> Delivered
                       </Badge>
+                    )}
+
+                    {/* Chat with Producer - always available for orders with a seller */}
+                    {order.seller?.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1 text-xs ml-auto"
+                        onClick={() => {
+                          setActiveChatUser(order.seller.id)
+                          setChatOpen(true)
+                        }}
+                      >
+                        <MessageSquare className="h-3 w-3" /> Chat with Producer
+                      </Button>
                     )}
                   </div>
                 </motion.div>

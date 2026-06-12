@@ -8,7 +8,8 @@ import {
   TrendingUp, TrendingDown, MapPin, Eye, Check, X, User,
   Truck, Phone, Clock, Crosshair, CalendarDays,
   Upload, Image as ImageIcon, Leaf, FileText, Shield,
-  AlertTriangle, Pencil, CheckCircle, Building2
+  AlertTriangle, Pencil, CheckCircle, Building2, Mail,
+  ArrowRightLeft, Receipt
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger
@@ -55,6 +56,13 @@ const statusColors: Record<string, string> = {
   delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
   cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
   disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+}
+
+const paymentStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  advance_paid: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  refunded: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
 }
 
 const shipmentStatusColors: Record<string, string> = {
@@ -892,6 +900,288 @@ function CreateShipmentDialogContent({
   )
 }
 
+// ─── Reassign Transporter Dialog Content ──────────────────────────────────────
+function ReassignTransporterDialogContent({
+  shipment,
+  onClose,
+  onSubmit,
+  submitting,
+}: {
+  shipment: any
+  onClose: () => void
+  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+  submitting: boolean
+}) {
+  const [transporterOption, setTransporterOption] = useState<'platform' | 'external'>('platform')
+  const [transporters, setTransporters] = useState<any[]>([])
+  const [selectedTransporterId, setSelectedTransporterId] = useState<string>('')
+  const [externalForm, setExternalForm] = useState({
+    transporterName: '',
+    companyName: '',
+    driverName: '',
+    vehicleNumber: '',
+    mobileNumber: '',
+  })
+
+  // Fetch transporters on mount
+  useEffect(() => {
+    fetch('/api/users?role=transporter')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.users) {
+          // Filter out the current transporter if it's a platform transporter
+          const currentTransporterId = shipment.transporterId
+          const filtered = currentTransporterId
+            ? data.users.filter((t: any) => t.id !== currentTransporterId)
+            : data.users
+          setTransporters(filtered)
+        }
+      })
+      .catch(() => toast.error('Failed to load transporters'))
+  }, [shipment.transporterId])
+
+  const handleSubmit = async () => {
+    if (transporterOption === 'platform' && !selectedTransporterId) {
+      toast.error('Please select a new transporter')
+      return
+    }
+    if (transporterOption === 'external') {
+      if (!externalForm.transporterName || !externalForm.driverName || !externalForm.vehicleNumber || !externalForm.mobileNumber) {
+        toast.error('Please fill all required external transporter fields')
+        return
+      }
+    }
+
+    const reassignData: Record<string, unknown> = {
+      shipmentId: shipment.id,
+    }
+
+    if (transporterOption === 'platform') {
+      reassignData.transporterId = selectedTransporterId
+    } else {
+      reassignData.isExternal = true
+      reassignData.externalTransporterName = externalForm.transporterName
+      reassignData.externalCompanyName = externalForm.companyName || null
+      reassignData.externalDriverName = externalForm.driverName
+      reassignData.externalVehicleNumber = externalForm.vehicleNumber
+      reassignData.externalMobileNumber = externalForm.mobileNumber
+      reassignData.driverName = externalForm.driverName
+      reassignData.vehicleNumber = externalForm.vehicleNumber
+      reassignData.driverPhone = externalForm.mobileNumber
+    }
+
+    await onSubmit(reassignData)
+    onClose()
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="text-foreground flex items-center gap-2">
+          <ArrowRightLeft className="h-5 w-5 text-amber-400" />
+          Reassign Transporter
+        </DialogTitle>
+        <DialogDescription className="text-muted-foreground">
+          {shipment && (
+            <>
+              Shipment for {shipment.order?.product?.name || 'N/A'} — Current status:{' '}
+              <span className="text-amber-400 font-medium">{(shipment.status || '').replace('_', ' ')}</span>
+              {shipment.transporter?.name && (
+                <span className="text-muted-foreground"> (was: {shipment.transporter.name})</span>
+              )}
+            </>
+          )}
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="grid gap-5 py-4">
+        {/* Current transporter info */}
+        {(shipment.transporterId || shipment.isExternal || shipment.isExternalTransporter) && (
+          <div className="glass-card p-3 border border-red-500/20 bg-red-500/5">
+            <p className="text-[10px] text-red-400 font-semibold mb-1">Current Transporter (to be replaced)</p>
+            <p className="text-xs text-foreground font-medium">
+              {shipment.isExternal || shipment.isExternalTransporter
+                ? shipment.externalCompanyName || shipment.externalTransporterName || 'External Transporter'
+                : shipment.transporter?.companyName || shipment.transporter?.name || 'Platform Transporter'}
+            </p>
+          </div>
+        )}
+
+        <div className="border-t border-glass-border" />
+
+        {/* Transporter Option Toggle */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+            <Truck className="h-4 w-4" /> Select New Transporter
+          </h4>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+                transporterOption === 'platform'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+              }`}
+              onClick={() => setTransporterOption('platform')}
+            >
+              <Building2 className="h-4 w-4 mx-auto mb-1" />
+              AgroBridge Transporters
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+                transporterOption === 'external'
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+              }`}
+              onClick={() => setTransporterOption('external')}
+            >
+              <User className="h-4 w-4 mx-auto mb-1" />
+              External Transporter
+            </button>
+          </div>
+
+          {/* Platform Transporters List */}
+          {transporterOption === 'platform' && (
+            <div className="space-y-3 max-h-60 overflow-y-auto">
+              {transporters.length === 0 ? (
+                <div className="glass-card p-4 text-center">
+                  <p className="text-xs text-muted-foreground">No other transporters available</p>
+                </div>
+              ) : (
+                transporters.map((t: any) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`w-full glass-card p-3 text-left transition-all ${
+                      selectedTransporterId === t.id
+                        ? 'border-emerald-500/40 bg-emerald-500/5'
+                        : 'hover:border-white/20'
+                    }`}
+                    onClick={() => setSelectedTransporterId(t.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8 border border-glass-border">
+                        <AvatarFallback className="bg-teal-500/20 text-teal-400 text-[10px] font-semibold">
+                          {(t.name || t.companyName || 'T').slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {t.companyName || t.name}
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          {t.city && <span>{t.city}</span>}
+                          {t.avgRating && (
+                            <span className="flex items-center gap-0.5">
+                              <Star className="h-2.5 w-2.5 text-amber-400" /> {t.avgRating.toFixed(1)}
+                            </span>
+                          )}
+                          <span>{t._count?.shipmentsAsTransporter || 0} shipments</span>
+                        </div>
+                      </div>
+                      {selectedTransporterId === t.id && (
+                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* External Transporter Form */}
+          {transporterOption === 'external' && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground bg-purple-500/10 p-2 rounded-lg border border-purple-500/20">
+                No logistics commission is charged for external transporters. The shipment will
+                still be tracked within AgroBridge.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label className="text-foreground text-xs">Transporter Name *</Label>
+                  <Input
+                    className="glass-input text-foreground"
+                    placeholder="e.g. Sharma Logistics"
+                    value={externalForm.transporterName}
+                    onChange={(e) =>
+                      setExternalForm((p) => ({ ...p, transporterName: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-foreground text-xs">Company Name</Label>
+                  <Input
+                    className="glass-input text-foreground"
+                    placeholder="Optional"
+                    value={externalForm.companyName}
+                    onChange={(e) =>
+                      setExternalForm((p) => ({ ...p, companyName: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label className="text-foreground text-xs">Driver Name *</Label>
+                  <Input
+                    className="glass-input text-foreground"
+                    placeholder="e.g. Raj Kumar"
+                    value={externalForm.driverName}
+                    onChange={(e) =>
+                      setExternalForm((p) => ({ ...p, driverName: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-foreground text-xs">Vehicle Number *</Label>
+                  <Input
+                    className="glass-input text-foreground"
+                    placeholder="e.g. MH12AB1234"
+                    value={externalForm.vehicleNumber}
+                    onChange={(e) =>
+                      setExternalForm((p) => ({ ...p, vehicleNumber: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-foreground text-xs">Mobile Number *</Label>
+                <Input
+                  className="glass-input text-foreground"
+                  placeholder="e.g. 9876543210"
+                  value={externalForm.mobileNumber}
+                  onChange={(e) =>
+                    setExternalForm((p) => ({ ...p, mobileNumber: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleSubmit} disabled={submitting}>
+          {submitting ? (
+            <>
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+              Reassigning...
+            </>
+          ) : (
+            <>
+              <ArrowRightLeft className="h-4 w-4 mr-1" /> Reassign Transporter
+            </>
+          )}
+        </Button>
+      </DialogFooter>
+    </>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── Main Producer Dashboard Component ────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -942,6 +1232,11 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
   const [createShipmentOpen, setCreateShipmentOpen] = useState(false)
   const [selectedOrderForShipment, setSelectedOrderForShipment] = useState<any>(null)
   const [shipmentSubmitting, setShipmentSubmitting] = useState(false)
+
+  // Reassign transporter dialog state
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [reassignShipment, setReassignShipment] = useState<any>(null)
+  const [reassignSubmitting, setReassignSubmitting] = useState(false)
 
   // ─── Data Fetching ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -1111,6 +1406,44 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     }
   }
 
+  // Reassign transporter
+  const openReassignTransporter = (shipment: any) => {
+    setReassignShipment(shipment)
+    setReassignOpen(true)
+  }
+
+  const handleReassignTransporter = async (reassignData: Record<string, unknown>) => {
+    setReassignSubmitting(true)
+    try {
+      const res = await fetch('/api/shipments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reassignData),
+      })
+      if (res.ok) {
+        toast.success('Transporter reassigned successfully!')
+        setReassignOpen(false)
+        setReassignShipment(null)
+        fetchData()
+      } else {
+        toast.error('Failed to reassign transporter')
+      }
+    } catch {
+      toast.error('Failed to reassign transporter')
+    } finally {
+      setReassignSubmitting(false)
+    }
+  }
+
+  // Check if shipment deadline has passed
+  const isDeadlinePassed = (shipment: any) => {
+    if (!shipment.assignedAt && !shipment.pickupDeadline) return false
+    const deadline = shipment.pickupDeadline
+      ? new Date(shipment.pickupDeadline)
+      : new Date(new Date(shipment.assignedAt).getTime() + 24 * 60 * 60 * 1000)
+    return new Date() > deadline
+  }
+
   // ─── Computed Values ────────────────────────────────────────────────────────
   const activeListings = products.filter((p) => p.isActive).length
   const totalOrders = orders.length
@@ -1133,6 +1466,25 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
             }}
             onSubmit={handleCreateShipment}
             submitting={shipmentSubmitting}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+
+  // ─── Shared Reassign Transporter Dialog ─────────────────────────────────────
+  const renderReassignDialog = () => (
+    <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+        {reassignShipment && (
+          <ReassignTransporterDialogContent
+            shipment={reassignShipment}
+            onClose={() => {
+              setReassignOpen(false)
+              setReassignShipment(null)
+            }}
+            onSubmit={handleReassignTransporter}
+            submitting={reassignSubmitting}
           />
         )}
       </DialogContent>
@@ -1588,6 +1940,13 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                 ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
               const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
 
+              // Payment breakdown calculation
+              const productCost = (order.quantity || 0) * (order.unitPrice || order.product?.pricePerUnit || 0)
+              const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
+              const totalPrice = order.totalPrice || productCost
+              const advancePaid = order.advanceAmount || order.advancePayment || Math.round(totalPrice * 0.5 * 100) / 100
+              const remaining = order.remainingAmount || order.remainingPayment || Math.round((totalPrice - advancePaid) * 100) / 100
+
               return (
                 <motion.div
                   key={order.id}
@@ -1615,6 +1974,13 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                       >
                         {order.status}
                       </Badge>
+                      {order.paymentStatus && (
+                        <Badge
+                          className={`${paymentStatusColors[order.paymentStatus] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'} border text-[10px]`}
+                        >
+                          {order.paymentStatus.replace('_', ' ')}
+                        </Badge>
+                      )}
                       {order.status === 'negotiating' && (
                         <div className="flex gap-1">
                           <Button
@@ -1638,27 +2004,38 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                     </div>
                   </div>
 
-                  {/* Buyer Information Card */}
+                  {/* ─── Buyer Information Card (Enhanced) ──────────────────── */}
                   <div className="glass-card p-4 border border-emerald-500/15">
                     <div className="flex items-center gap-2 mb-3">
                       <User className="h-4 w-4 text-emerald-400" />
                       <h5 className="text-sm font-semibold text-foreground">Buyer Information</h5>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Avatar className="h-10 w-10 border border-glass-border shrink-0">
-                        <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                      <Avatar className="h-12 w-12 border border-glass-border shrink-0">
+                        <AvatarImage src={order.buyer?.avatarUrl || order.buyer?.avatar} alt={order.buyer?.name || 'Buyer'} />
+                        <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-sm font-semibold">
                           {(order.buyer?.name || order.buyer?.companyName || 'B')
                             .slice(0, 2)
                             .toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 space-y-1">
-                        <p className="text-sm font-medium text-foreground">
+                      <div className="flex-1 space-y-1.5">
+                        <p className="text-sm font-semibold text-foreground">
                           {order.buyer?.name || order.buyer?.companyName || 'Unknown Buyer'}
                         </p>
+                        {order.buyer?.companyName && order.buyer?.name && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Building2 className="h-3 w-3" /> {order.buyer.companyName}
+                          </p>
+                        )}
                         {order.buyer?.phone && (
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Phone className="h-3 w-3" /> {order.buyer.phone}
+                            <Phone className="h-3 w-3 text-emerald-400" /> {order.buyer.phone}
+                          </p>
+                        )}
+                        {order.buyer?.email && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Mail className="h-3 w-3 text-emerald-400" /> {order.buyer.email}
                           </p>
                         )}
                         {(order.deliveryFullAddress ||
@@ -1666,7 +2043,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                           order.deliveryCity ||
                           order.buyer?.city) && (
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
+                            <MapPin className="h-3 w-3 text-teal-400" />
                             {order.deliveryFullAddress ||
                               [order.deliveryAddress, order.deliveryCity, order.deliveryState]
                                 .filter(Boolean)
@@ -1674,51 +2051,107 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                               [order.buyer?.city, order.buyer?.state].filter(Boolean).join(', ')}
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                          Order: {order.quantity} {order.product?.unit || ''} of{' '}
-                          {order.product?.name || 'N/A'} • ₹{order.totalPrice?.toLocaleString()}
-                        </p>
                       </div>
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 text-xs shrink-0"
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs shrink-0"
                         onClick={() => {
                           setActiveChatUser(order.buyer?.id)
                           setChatOpen(true)
                         }}
                       >
-                        <MessageSquare className="h-3 w-3 mr-1" /> Chat
+                        <MessageSquare className="h-3.5 w-3.5" /> Chat with Buyer
                       </Button>
                     </div>
                   </div>
 
-                  {/* Expected Pickup Date */}
-                  {hasTransport && shipment.expectedPickupDate && (
-                    <div className="glass-card p-3 border border-amber-500/20 bg-amber-500/5">
-                      <div className="flex items-center gap-2">
-                        <CalendarDays className="h-5 w-5 text-amber-400" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Expected Pickup Date</p>
-                          <p className="text-sm font-bold text-amber-400">
-                            {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', {
-                              weekday: 'short',
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </p>
+                  {/* ─── Order Details & Payment Breakdown ──────────────────── */}
+                  <div className="glass-card p-4 border border-amber-500/15">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Receipt className="h-4 w-4 text-amber-400" />
+                      <h5 className="text-sm font-semibold text-foreground">Order & Payment Details</h5>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Order details */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Order Details</p>
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Product</span>
+                            <span className="text-foreground font-medium">{order.product?.name || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Quantity</span>
+                            <span className="text-foreground font-medium">{order.quantity} {order.product?.unit || ''}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Unit Price</span>
+                            <span className="text-foreground font-medium">₹{order.unitPrice || order.product?.pricePerUnit || 0}/{order.product?.unit || ''}</span>
+                          </div>
+                          {order.product?.qualityGrade && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Quality Grade</span>
+                              <span className="text-amber-400 font-medium">{order.product.qualityGrade}</span>
+                            </div>
+                          )}
+                          {order.product?.isOrganic && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Organic</span>
+                              <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px]">
+                                <Leaf className="h-2.5 w-2.5 mr-0.5" /> Yes
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Payment breakdown */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Payment Breakdown</p>
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Product Cost</span>
+                            <span className="text-amber-400 font-medium">₹{productCost.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Platform Fee (2%)</span>
+                            <span className="text-amber-400 font-medium">₹{platformFee.toLocaleString('en-IN')}</span>
+                          </div>
+                          {order.transportBookingFee && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Transport Booking Fee</span>
+                              <span className="text-amber-400 font-medium">₹{order.transportBookingFee}</span>
+                            </div>
+                          )}
+                          <div className="border-t border-glass-border my-1" />
+                          <div className="flex justify-between font-semibold">
+                            <span className="text-foreground">Total</span>
+                            <span className="text-amber-400">₹{totalPrice.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="border-t border-glass-border my-1" />
+                          <div className="flex justify-between">
+                            <span className="text-emerald-400 flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" /> Advance Paid
+                            </span>
+                            <span className="text-emerald-400 font-medium">₹{advancePaid.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-orange-400 flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Remaining
+                            </span>
+                            <span className="text-orange-400 font-medium">₹{remaining.toLocaleString('en-IN')}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
 
-                  {/* Transport Details Card */}
-                  {hasTransport && (
+                  {/* ─── Shipment Tracking Section (in Orders) ─────────────── */}
+                  {shipment && (
                     <div className="glass-card p-4 border border-teal-500/20">
                       <div className="flex items-center gap-2 mb-3">
                         <Truck className="h-4 w-4 text-teal-400" />
-                        <h5 className="text-sm font-semibold text-foreground">Transport Details</h5>
+                        <h5 className="text-sm font-semibold text-foreground">Shipment Tracking</h5>
                         <Badge
                           className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px] ml-auto`}
                         >
@@ -1730,6 +2163,8 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                           </Badge>
                         )}
                       </div>
+
+                      {/* Transporter details */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                         <div>
                           <p className="text-muted-foreground text-[10px]">Company</p>
@@ -1743,7 +2178,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                           <div>
                             <p className="text-muted-foreground text-[10px]">Driver</p>
                             <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                              <User className="h-3 w-3 text-emerald-400" />
+                              <User className="h-3 w-3 text-teal-400" />
                               {shipment.driverName || 'N/A'}
                             </p>
                             {shipment.driverPhone && (
@@ -1757,7 +2192,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                           <div>
                             <p className="text-muted-foreground text-[10px]">Vehicle</p>
                             <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                              <Truck className="h-3 w-3 text-emerald-400" />
+                              <Truck className="h-3 w-3 text-teal-400" />
                               {shipment.vehicleType || 'N/A'}
                               {shipment.vehicleNumber ? ` (${shipment.vehicleNumber})` : ''}
                             </p>
@@ -1777,11 +2212,24 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                             {shipment.exactDropAddress || shipment.destination}
                           </p>
                         </div>
+                        {shipment.expectedPickupDate && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Expected Pickup</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <CalendarDays className="h-3 w-3 text-amber-400" />
+                              {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Track Shipment Button */}
-                      {isShippedOrInTransit && (
-                        <div className="mt-3 pt-3 border-t border-glass-border">
+                      {/* Action buttons */}
+                      <div className="mt-3 pt-3 border-t border-glass-border flex flex-wrap gap-2">
+                        {isShippedOrInTransit && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1790,8 +2238,41 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                           >
                             <Crosshair className="h-3.5 w-3.5" /> Track Shipment
                           </Button>
+                        )}
+                        {shipment.transporterId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1.5 text-xs"
+                            onClick={() => {
+                              setActiveChatUser(shipment.transporterId)
+                              setChatOpen(true)
+                            }}
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" /> Chat with Transporter
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expected Pickup Date */}
+                  {hasTransport && shipment.expectedPickupDate && (
+                    <div className="glass-card p-3 border border-amber-500/20 bg-amber-500/5">
+                      <div className="flex items-center gap-2">
+                        <CalendarDays className="h-5 w-5 text-amber-400" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Expected Pickup Date</p>
+                          <p className="text-sm font-bold text-amber-400">
+                            {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', {
+                              weekday: 'short',
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </p>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
 
@@ -1815,6 +2296,8 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
         {renderShipmentTracker()}
         {/* Create Shipment Dialog */}
         {renderCreateShipmentDialog()}
+        {/* Reassign Transporter Dialog */}
+        {renderReassignDialog()}
       </div>
     )
   }
@@ -1863,6 +2346,9 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
           <div className="space-y-4">
             {shipments.map((shipment: any) => {
               const isShippedOrInTransit = ['picked_up', 'in_transit'].includes(shipment.status)
+              const deadlinePassed = isDeadlinePassed(shipment)
+              const canReassign = ['assigned', 'pending'].includes(shipment.status) && deadlinePassed
+
               return (
                 <motion.div
                   key={shipment.id}
@@ -1881,7 +2367,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                         {shipment.order?.product?.quantity || 0} {shipment.order?.product?.unit || ''}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
                       <Badge
                         className={`${shipmentStatusColors[shipment.status] || ''} border text-xs`}
                       >
@@ -1890,6 +2376,12 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                       {(shipment.isExternalTransporter || shipment.isExternal) && (
                         <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 border text-[9px]">
                           External
+                        </Badge>
+                      )}
+                      {/* 24hr Deadline Warning */}
+                      {deadlinePassed && ['assigned', 'pending'].includes(shipment.status) && (
+                        <Badge className="bg-red-500/20 text-red-400 border-red-500/30 border text-[9px] animate-pulse">
+                          <AlertTriangle className="h-3 w-3 mr-0.5" /> 24hr deadline passed
                         </Badge>
                       )}
                     </div>
@@ -1909,7 +2401,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                       <div>
                         <p className="text-muted-foreground text-[10px]">Driver</p>
                         <p className="text-foreground font-medium text-xs flex items-center gap-1">
-                          <User className="h-3 w-3 text-emerald-400" />
+                          <User className="h-3 w-3 text-teal-400" />
                           {shipment.driverName}
                         </p>
                         {shipment.driverPhone && (
@@ -1955,11 +2447,37 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                         </p>
                       </div>
                     )}
+                    {shipment.assignedAt && (
+                      <div>
+                        <p className="text-muted-foreground text-[10px]">Assigned At</p>
+                        <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-blue-400" />
+                          {new Date(shipment.assignedAt).toLocaleDateString('en-IN', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    )}
+                    {shipment.pickupDeadline && (
+                      <div>
+                        <p className="text-muted-foreground text-[10px]">Pickup Deadline</p>
+                        <p className={`font-medium text-xs flex items-center gap-1 ${deadlinePassed ? 'text-red-400' : 'text-foreground'}`}>
+                          <AlertTriangle className={`h-3 w-3 ${deadlinePassed ? 'text-red-400' : 'text-amber-400'}`} />
+                          {new Date(shipment.pickupDeadline).toLocaleDateString('en-IN', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Track button */}
-                  {isShippedOrInTransit && (
-                    <div className="pt-3 border-t border-glass-border">
+                  {/* Action buttons */}
+                  <div className="pt-3 border-t border-glass-border flex flex-wrap gap-2">
+                    {isShippedOrInTransit && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -1968,8 +2486,31 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                       >
                         <Crosshair className="h-3.5 w-3.5" /> Track Shipment
                       </Button>
-                    </div>
-                  )}
+                    )}
+                    {shipment.transporterId && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1.5 text-xs"
+                        onClick={() => {
+                          setActiveChatUser(shipment.transporterId)
+                          setChatOpen(true)
+                        }}
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" /> Chat with Transporter
+                      </Button>
+                    )}
+                    {canReassign && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1.5 text-xs"
+                        onClick={() => openReassignTransporter(shipment)}
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5" /> Reassign Transporter
+                      </Button>
+                    )}
+                  </div>
                 </motion.div>
               )
             })}
@@ -1980,6 +2521,8 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
         {renderShipmentTracker()}
         {/* Create Shipment Dialog */}
         {renderCreateShipmentDialog()}
+        {/* Reassign Transporter Dialog */}
+        {renderReassignDialog()}
       </div>
     )
   }
@@ -1994,25 +2537,45 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
         acc.push({
           id: buyerId,
           name: order.buyer?.name || order.buyer?.companyName || 'Unknown',
+          avatarUrl: order.buyer?.avatarUrl || order.buyer?.avatar,
+          phone: order.buyer?.phone,
           lastOrder: order.product?.name,
         })
       }
       return acc
     }, [])
 
+    // Also include transporter conversations from shipments
+    const transporterConversations = shipments.reduce((acc: any[], shipment: any) => {
+      const transporterId = shipment.transporterId
+      if (transporterId && !acc.find((c: any) => c.id === transporterId) && !conversations.find((c: any) => c.id === transporterId)) {
+        acc.push({
+          id: transporterId,
+          name: shipment.transporter?.companyName || shipment.transporter?.name || 'Transporter',
+          avatarUrl: shipment.transporter?.avatarUrl || shipment.transporter?.avatar,
+          phone: shipment.transporter?.phone,
+          lastOrder: shipment.order?.product?.name,
+          isTransporter: true,
+        })
+      }
+      return acc
+    }, [] as any[])
+
+    const allConversations = [...conversations, ...transporterConversations]
+
     return (
       <div className="space-y-6">
         <h3 className="text-xl font-semibold text-foreground">Messages</h3>
-        {conversations.length === 0 ? (
+        {allConversations.length === 0 ? (
           <div className="glass-card p-12 text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              No conversations yet. Start trading to connect with buyers!
+              No conversations yet. Start trading to connect with buyers and transporters!
             </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {conversations.map((conv: any, i: number) => (
+            {allConversations.map((conv: any, i: number) => (
               <motion.button
                 key={conv.id}
                 initial={{ opacity: 0, x: -20 }}
@@ -2024,12 +2587,27 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                   setChatOpen(true)
                 }}
               >
-                <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-semibold text-sm">
-                  {conv.name.slice(0, 2).toUpperCase()}
-                </div>
+                <Avatar className="h-10 w-10 border border-glass-border">
+                  <AvatarImage src={conv.avatarUrl} alt={conv.name} />
+                  <AvatarFallback className={`text-sm font-semibold ${conv.isTransporter ? 'bg-teal-500/20 text-teal-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                    {conv.name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground truncate">{conv.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-foreground truncate">{conv.name}</p>
+                    {conv.isTransporter && (
+                      <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30 border text-[8px]">
+                        <Truck className="h-2.5 w-2.5 mr-0.5" /> Transporter
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">Last order: {conv.lastOrder}</p>
+                  {conv.phone && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Phone className="h-2.5 w-2.5" /> {conv.phone}
+                    </p>
+                  )}
                 </div>
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
               </motion.button>

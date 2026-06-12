@@ -1,6 +1,14 @@
 import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
+// Base columns that always exist in the User table
+const userSelectBase = 'id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt'
+
+// Extended columns from migration V3 (may not exist yet)
+const userSelectExtended = 'pickupSuccessRate, deliverySuccessRate, avgResponseTimeHours, warningCount, totalCompletedShipments, totalFailedShipments, lastWarningAt, subscriptionTier, subscriptionExpiry, subscriptionAmount, isSponsored, sponsoredExpiry, sponsoredAmount'
+
+const userSelectFull = `${userSelectBase}, ${userSelectExtended}`
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -8,16 +16,25 @@ export async function GET(request: Request) {
     const verificationStatus = searchParams.get('verificationStatus')
     const id = searchParams.get('id')
 
-    // Columns that exist in the User table (including new avatarUrl/bannerUrl)
-    const userSelect = 'id, name, email, role, companyName, phone, state, city, verificationStatus, isOnline, gstNumber, avatar, avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation, farmImages, yearsExperience, certifications, totalTransactions, latitude, longitude, avgRating, totalReviews, createdAt'
-
     // Single user lookup by ID
     if (id) {
-      const { data: user, error: userError } = await supabase
+      // Try with extended columns first, fallback to base columns
+      let { data: user, error: userError } = await supabase
         .from('User')
-        .select(userSelect)
+        .select(userSelectFull)
         .eq('id', id)
         .maybeSingle()
+
+      if (userError) {
+        // Fallback: try without extended columns
+        const fallback = await supabase
+          .from('User')
+          .select(userSelectBase)
+          .eq('id', id)
+          .maybeSingle()
+        user = fallback.data
+        userError = fallback.error
+      }
 
       if (userError) {
         console.error('User fetch error:', userError)
@@ -28,10 +45,17 @@ export async function GET(request: Request) {
       }
 
       // Use avatarUrl/bannerUrl columns directly, fallback to avatar for legacy data
+      // Provide defaults for extended columns in case they don't exist
       const mappedUser = {
         ...user,
         avatarUrl: user.avatarUrl || user.avatar || null,
         bannerUrl: user.bannerUrl || null,
+        pickupSuccessRate: user.pickupSuccessRate ?? 100,
+        deliverySuccessRate: user.deliverySuccessRate ?? 100,
+        avgResponseTimeHours: user.avgResponseTimeHours ?? 0,
+        warningCount: user.warningCount ?? 0,
+        totalCompletedShipments: user.totalCompletedShipments ?? 0,
+        totalFailedShipments: user.totalFailedShipments ?? 0,
       }
 
       // Fetch counts separately
@@ -56,9 +80,10 @@ export async function GET(request: Request) {
     }
 
     // List users with filters
+    // Try with extended columns first, fallback to base columns
     let query = supabase
       .from('User')
-      .select(userSelect)
+      .select(userSelectFull)
       .order('createdAt', { ascending: false })
 
     if (role) {
@@ -68,7 +93,22 @@ export async function GET(request: Request) {
       query = query.eq('verificationStatus', verificationStatus)
     }
 
-    const { data: users, error: usersError } = await query
+    let { data: users, error: usersError } = await query
+
+    if (usersError) {
+      // Fallback: try without extended columns
+      let fallbackQuery = supabase
+        .from('User')
+        .select(userSelectBase)
+        .order('createdAt', { ascending: false })
+
+      if (role) fallbackQuery = fallbackQuery.eq('role', role)
+      if (verificationStatus) fallbackQuery = fallbackQuery.eq('verificationStatus', verificationStatus)
+
+      const fallback = await fallbackQuery
+      users = fallback.data
+      usersError = fallback.error
+    }
 
     if (usersError) {
       console.error('Users fetch error:', usersError)
@@ -79,11 +119,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ users: [] })
     }
 
-    // Map avatar -> avatarUrl for each user
+    // Map avatar -> avatarUrl for each user + add defaults for extended columns
     const mappedUsers = users.map(u => ({
       ...u,
       avatarUrl: u.avatarUrl || u.avatar || null,
       bannerUrl: u.bannerUrl || null,
+      pickupSuccessRate: (u as any).pickupSuccessRate ?? 100,
+      deliverySuccessRate: (u as any).deliverySuccessRate ?? 100,
+      avgResponseTimeHours: (u as any).avgResponseTimeHours ?? 0,
+      warningCount: (u as any).warningCount ?? 0,
+      totalCompletedShipments: (u as any).totalCompletedShipments ?? 0,
+      totalFailedShipments: (u as any).totalFailedShipments ?? 0,
     }))
 
     // Fetch all related FK values and compute counts in JS
@@ -142,6 +188,8 @@ export async function PATCH(request: Request) {
       userId, verificationStatus, name, phone, companyName, state, city, gstNumber,
       avatarUrl, bannerUrl, address, farmName, farmSize, farmLocation,
       yearsExperience, certifications, latitude, longitude, farmImages,
+      subscriptionTier, subscriptionExpiry, subscriptionAmount,
+      isSponsored, sponsoredExpiry, sponsoredAmount,
     } = body
 
     if (!userId) {
@@ -168,6 +216,12 @@ export async function PATCH(request: Request) {
     if (latitude !== undefined) updateData.latitude = latitude || null
     if (longitude !== undefined) updateData.longitude = longitude || null
     if (farmImages !== undefined) updateData.farmImages = farmImages || null
+    if (subscriptionTier !== undefined) updateData.subscriptionTier = subscriptionTier || 'free'
+    if (subscriptionExpiry !== undefined) updateData.subscriptionExpiry = subscriptionExpiry || null
+    if (subscriptionAmount !== undefined) updateData.subscriptionAmount = subscriptionAmount || null
+    if (isSponsored !== undefined) updateData.isSponsored = isSponsored
+    if (sponsoredExpiry !== undefined) updateData.sponsoredExpiry = sponsoredExpiry || null
+    if (sponsoredAmount !== undefined) updateData.sponsoredAmount = sponsoredAmount || null
 
     const { data: user, error } = await supabase
       .from('User')

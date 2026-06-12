@@ -8,12 +8,14 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const limit = parseInt(searchParams.get('limit') || '100')
 
     // Build base query for PlatformRevenue
     let query = supabase
       .from('PlatformRevenue')
       .select('*')
       .order('createdAt', { ascending: false })
+      .limit(limit)
 
     if (type) query = query.eq('type', type)
     if (userId) query = query.eq('userId', userId)
@@ -29,6 +31,7 @@ export async function GET(request: Request) {
         records: [],
         summary: {
           totalRevenue: 0,
+          monthlyRevenue: 0,
           totalRecords: 0,
           totalByType: {},
           monthlyBreakdown: {},
@@ -43,6 +46,16 @@ export async function GET(request: Request) {
     for (const record of records) {
       const recordType = record.type || 'other'
       totalByType[recordType] = (totalByType[recordType] || 0) + (record.amount || 0)
+    }
+
+    // Calculate current month revenue
+    const now = new Date()
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    let monthlyRevenue = 0
+    for (const record of records) {
+      if (record.createdAt && record.createdAt >= currentMonthStart) {
+        monthlyRevenue += record.amount || 0
+      }
     }
 
     // Calculate monthly breakdown
@@ -83,10 +96,41 @@ export async function GET(request: Request) {
     // Calculate overall totals
     const totalRevenue = records.reduce((sum, r) => sum + (r.amount || 0), 0)
 
+    // Fetch associated user info for records that have userId
+    const userIds = [...new Set(records.filter((r: any) => r.userId).map((r: any) => r.userId))]
+    const orderIds = [...new Set(records.filter((r: any) => r.orderId).map((r: any) => r.orderId))]
+
+    let userMap: Record<string, any> = {}
+    let orderMap: Record<string, any> = {}
+
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('User')
+        .select('id, name, email, role, companyName')
+        .in('id', userIds)
+      users?.forEach((u: any) => { userMap[u.id] = u })
+    }
+
+    if (orderIds.length > 0) {
+      const { data: orders } = await supabase
+        .from('Order')
+        .select('id, totalPrice, status, buyerId, sellerId')
+        .in('id', orderIds)
+      orders?.forEach((o: any) => { orderMap[o.id] = o })
+    }
+
+    // Enrich records with user and order info
+    const enrichedRecords = records.map((record: any) => ({
+      ...record,
+      user: record.userId ? userMap[record.userId] || null : null,
+      order: record.orderId ? orderMap[record.orderId] || null : null,
+    }))
+
     return NextResponse.json({
-      records,
+      records: enrichedRecords,
       summary: {
         totalRevenue: Math.round(totalRevenue * 100) / 100,
+        monthlyRevenue: Math.round(monthlyRevenue * 100) / 100,
         totalRecords: records.length,
         totalByType: totalByTypeRounded,
         monthlyBreakdown: monthlyBreakdownRounded,
