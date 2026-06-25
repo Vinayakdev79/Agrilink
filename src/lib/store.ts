@@ -55,6 +55,10 @@ export interface CartItem {
   maxQuantity: number
   location: string
   state?: string
+  // V4: delivery handling info (set by marketplace/product page when adding to cart)
+  deliveryHandledByProducer?: boolean
+  deliveryFee?: number
+  freeDelivery?: boolean
 }
 
 interface AppState {

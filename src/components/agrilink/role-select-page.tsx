@@ -10,7 +10,6 @@ import {
   Sprout,
   ShoppingBag,
   Truck,
-  Shield,
   ArrowLeft,
   Loader2,
   CheckCircle2,
@@ -61,20 +60,11 @@ const roles = [
     selectedBorder: 'border-teal-500/50',
     glowClass: 'group-hover:shadow-[0_0_30px_rgba(20,184,166,0.15)]',
   },
-  {
-    id: 'admin' as UserRole,
-    title: 'Administrator',
-    description: 'Manage platform operations and verification',
-    icon: Shield,
-    accentColor: 'purple',
-    bgClass: 'bg-purple-500/15',
-    borderClass: 'border-purple-500/20',
-    iconColor: 'text-purple-400',
-    hoverGlow: 'hover:shadow-purple-500/20',
-    selectedBg: 'bg-purple-500/20',
-    selectedBorder: 'border-purple-500/50',
-    glowClass: 'group-hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]',
-  },
+  // Note: Admin role is intentionally NOT shown here. Only one admin account
+  // is allowed on the platform and it must be provisioned separately (e.g.
+  // via direct database seeding or by signing in with the admin email that
+  // already exists). The single-admin rule is enforced server-side in
+  // /api/auth POST handler.
 ]
 
 // ─── Animation Variants ──────────────────────────────────────────────────────

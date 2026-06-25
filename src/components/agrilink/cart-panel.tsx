@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, CartItem } from '@/lib/store'
+import { computePlatformFee } from '@/lib/razorpay'
 import { toast } from 'sonner'
 import {
   X,
@@ -37,8 +38,9 @@ import {
 } from '@/components/ui/dialog'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const PLATFORM_FEE_RATE = 0.02 // 2% of subtotal
-const TRANSPORT_BOOKING_FEE = 30 // ₹30 flat
+// Platform fee is now computed via computePlatformFee() from @/lib/razorpay
+//   (₹1000 flat if subtotal > ₹10,000 else ₹0)
+const TRANSPORT_BOOKING_FEE = 30 // ₹30 flat — only when platform arranges transport
 const TRANSPORT_ESTIMATE_RATE = 0.035 // 3.5% for estimate display
 
 // ─── Checkout Dialog ──────────────────────────────────────────────────────────
@@ -49,6 +51,8 @@ function CheckoutDialog({
   subtotal,
   platformFee,
   transportBookingFee,
+  deliveryFeeTotal,
+  allFreeDelivery,
   estimatedTransportCost,
   totalPayable,
   advancePayment,
@@ -60,6 +64,8 @@ function CheckoutDialog({
   subtotal: number
   platformFee: number
   transportBookingFee: number
+  deliveryFeeTotal: number
+  allFreeDelivery: boolean
   estimatedTransportCost: number
   totalPayable: number
   advancePayment: number
@@ -123,8 +129,12 @@ function CheckoutDialog({
       const results = await Promise.allSettled(
         cart.map((item) => {
           const itemSubtotal = item.quantity * item.pricePerUnit
-          const itemPlatformFee = Math.round(itemSubtotal * PLATFORM_FEE_RATE)
-          const itemTotal = itemSubtotal + itemPlatformFee + TRANSPORT_BOOKING_FEE
+          const itemPlatformFee = computePlatformFee(itemSubtotal)
+          // Transport booking fee only applies when the platform arranges transport
+          const itemTransportBookingFee = item.deliveryHandledByProducer ? 0 : TRANSPORT_BOOKING_FEE
+          // Producer-handled delivery may charge a delivery fee (waived if free)
+          const itemDeliveryFee = item.deliveryHandledByProducer && !item.freeDelivery ? (item.deliveryFee || 0) : 0
+          const itemTotal = itemSubtotal + itemPlatformFee + itemTransportBookingFee + itemDeliveryFee
           const itemAdvance = Math.round(itemTotal * 0.5)
           const itemRemaining = itemTotal - itemAdvance
 
@@ -146,13 +156,16 @@ function CheckoutDialog({
               deliveryFullAddress: mapAddress || undefined,
               // Payment breakdown
               platformFee: itemPlatformFee,
-              transportBookingFee: TRANSPORT_BOOKING_FEE,
+              transportBookingFee: itemTransportBookingFee,
               totalPayable: itemTotal,
               advancePayment: itemAdvance,
               remainingPayment: itemRemaining,
               estimatedTransportCost: Math.round(itemSubtotal * TRANSPORT_ESTIMATE_RATE),
               paymentStatus: 'advance_paid',
               status: 'confirmed',
+              // V4 delivery handling
+              deliveryType: item.deliveryHandledByProducer ? 'producer' : 'platform',
+              deliveryFee: itemDeliveryFee,
             }),
           })
         })
@@ -335,18 +348,34 @@ function CheckoutDialog({
               {/* Platform Fee */}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-1">
-                  Platform Fee (2%)
+                  Platform Fee {platformFee === 0 ? '(FREE)' : ''}
                 </span>
-                <span className="text-foreground font-medium">₹{platformFee.toLocaleString('en-IN')}</span>
+                <span className={`font-medium ${platformFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+                  {platformFee === 0 ? 'FREE' : `₹${platformFee.toLocaleString('en-IN')}`}
+                </span>
               </div>
 
-              {/* Transport Booking Fee */}
+              {/* Transport Booking Fee — only when platform arranges transport */}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground flex items-center gap-1">
                   <Truck className="w-3 h-3" />
                   Transport Booking Fee
+                  {transportBookingFee === 0 && <span className="text-[10px] text-emerald-400/70">(producer handles)</span>}
                 </span>
-                <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString('en-IN')}</span>
+                <span className={`font-medium ${transportBookingFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+                  {transportBookingFee === 0 ? 'FREE' : `₹${transportBookingFee.toLocaleString('en-IN')}`}
+                </span>
+              </div>
+
+              {/* Delivery Fee — producer-handled deliveries */}
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Truck className="w-3 h-3" />
+                  Delivery Fee
+                </span>
+                <span className={`font-medium ${deliveryFeeTotal === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+                  {deliveryFeeTotal === 0 ? 'FREE' : `₹${deliveryFeeTotal.toLocaleString('en-IN')}`}
+                </span>
               </div>
 
               <Separator className="bg-white/5" />
@@ -449,14 +478,23 @@ export function CartPanel() {
   const { cart, cartOpen, setCartOpen, removeFromCart, updateCartQty, clearCart, user } = useAppStore()
   const [checkoutOpen, setCheckoutOpen] = useState(false)
 
-  // Calculate totals with corrected pricing
+  // Calculate totals with the V4 revenue model:
+  //  - Platform fee: ₹1000 flat if subtotal > ₹10,000 else ₹0
+  //  - Transport booking fee: ₹30 flat, but only when at least one item is platform-delivered
+  //  - Delivery fee: sum of producer-set delivery fees (waived when freeDelivery), only for producer-handled items
   const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.pricePerUnit, 0)
-  const platformFee = Math.round(subtotal * PLATFORM_FEE_RATE)
-  const transportBookingFee = TRANSPORT_BOOKING_FEE
+  const platformFee = computePlatformFee(subtotal)
+  const deliveryFeeTotal = cart.reduce((sum, item) => {
+    if (!item.deliveryHandledByProducer) return sum
+    if (item.freeDelivery) return sum
+    return sum + (item.deliveryFee || 0)
+  }, 0)
+  const transportBookingFee = cart.some((item) => !item.deliveryHandledByProducer) ? TRANSPORT_BOOKING_FEE : 0
   const estimatedTransportCost = Math.round(subtotal * TRANSPORT_ESTIMATE_RATE)
-  const totalPayable = subtotal + platformFee + transportBookingFee
+  const totalPayable = subtotal + platformFee + transportBookingFee + deliveryFeeTotal
   const advancePayment = Math.round(totalPayable * 0.5)
   const remainingPayment = totalPayable - advancePayment
+  const allFreeDelivery = cart.length > 0 && cart.every((item) => !item.deliveryHandledByProducer || item.freeDelivery)
 
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -594,6 +632,30 @@ export function CartPanel() {
                               </span>
                             )}
                           </div>
+                          {/* Delivery badge */}
+                          {item.deliveryHandledByProducer ? (
+                            item.freeDelivery ? (
+                              <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-500/15 text-amber-400 border-amber-500/25">
+                                <Truck className="w-2.5 h-2.5" />
+                                FREE DELIVERY
+                              </span>
+                            ) : (item.deliveryFee || 0) > 0 ? (
+                              <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/15 text-emerald-400 border-emerald-500/25">
+                                <Truck className="w-2.5 h-2.5" />
+                                Delivery: ₹{(item.deliveryFee || 0).toLocaleString('en-IN')}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/15 text-emerald-400 border-emerald-500/25">
+                                <Truck className="w-2.5 h-2.5" />
+                                Producer Delivery
+                              </span>
+                            )
+                          ) : (
+                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border bg-sky-500/10 text-sky-400/80 border-sky-500/20">
+                              <Truck className="w-2.5 h-2.5" />
+                              Platform Transport
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -655,15 +717,29 @@ export function CartPanel() {
                       <span className="text-foreground font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Platform Fee (2%)</span>
-                      <span className="text-foreground font-medium">₹{platformFee.toLocaleString('en-IN')}</span>
+                      <span className="text-muted-foreground">Platform Fee {platformFee === 0 ? '(FREE)' : ''}</span>
+                      <span className={`font-medium ${platformFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+                        {platformFee === 0 ? 'FREE' : `₹${platformFee.toLocaleString('en-IN')}`}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Truck className="w-3 h-3" />
                         Transport Booking Fee
+                        {transportBookingFee === 0 && <span className="text-[10px] text-emerald-400/70">(producer handles)</span>}
                       </span>
-                      <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString('en-IN')}</span>
+                      <span className={`font-medium ${transportBookingFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+                        {transportBookingFee === 0 ? 'FREE' : `₹${transportBookingFee.toLocaleString('en-IN')}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Truck className="w-3 h-3" />
+                        Delivery Fee
+                      </span>
+                      <span className={`font-medium ${deliveryFeeTotal === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+                        {deliveryFeeTotal === 0 ? (allFreeDelivery ? 'FREE' : '—') : `₹${deliveryFeeTotal.toLocaleString('en-IN')}`}
+                      </span>
                     </div>
                     <Separator className="bg-white/5" />
                     <div className="flex justify-between items-center pt-1">
@@ -721,6 +797,8 @@ export function CartPanel() {
         subtotal={subtotal}
         platformFee={platformFee}
         transportBookingFee={transportBookingFee}
+        deliveryFeeTotal={deliveryFeeTotal}
+        allFreeDelivery={allFreeDelivery}
         estimatedTransportCost={estimatedTransportCost}
         totalPayable={totalPayable}
         advancePayment={advancePayment}

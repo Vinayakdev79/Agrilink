@@ -1,0 +1,700 @@
+     1→'use client'
+     2→
+     3→import { useState } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { useAppStore } from '@/lib/store'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Input } from '@/components/ui/input'
+     8→import { Label } from '@/components/ui/label'
+     9→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    10→import { toast } from 'sonner'
+    11→import {
+    12→  Leaf,
+    13→  Mail,
+    14→  Lock,
+    15→  User,
+    16→  Phone,
+    17→  Building2,
+    18→  ArrowLeft,
+    19→  Loader2,
+    20→  Sparkles,
+    21→  Sprout,
+    22→  ShoppingBag,
+    23→  Truck,
+    24→  Shield,
+    25→} from 'lucide-react'
+    26→import type { AppUser, UserRole } from '@/lib/store'
+    27→
+    28→// ─── Animation Variants ──────────────────────────────────────────────────────
+    29→const containerVariants = {
+    30→  hidden: { opacity: 0 },
+    31→  visible: {
+    32→    opacity: 1,
+    33→    transition: {
+    34→      staggerChildren: 0.08,
+    35→      delayChildren: 0.1,
+    36→    },
+    37→  },
+    38→}
+    39→
+    40→const itemVariants = {
+    41→  hidden: { opacity: 0, y: 20 },
+    42→  visible: {
+    43→    opacity: 1,
+    44→    y: 0,
+    45→    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+    46→  },
+    47→}
+    48→
+    49→const cardVariants = {
+    50→  hidden: { opacity: 0, scale: 0.95, y: 20 },
+    51→  visible: {
+    52→    opacity: 1,
+    53→    scale: 1,
+    54→    y: 0,
+    55→    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+    56→  },
+    57→}
+    58→
+    59→// ─── Auth Page ───────────────────────────────────────────────────────────────
+    60→export function AuthPage() {
+    61→  const { setView, setUser } = useAppStore()
+    62→  const [activeTab, setActiveTab] = useState<'signin' | 'register'>('signin')
+    63→  const [isLoading, setIsLoading] = useState(false)
+    64→
+    65→  // Sign In form state
+    66→  const [signInEmail, setSignInEmail] = useState('')
+    67→  const [signInPassword, setSignInPassword] = useState('')
+    68→
+    69→  // Register form state
+    70→  const [registerName, setRegisterName] = useState('')
+    71→  const [registerEmail, setRegisterEmail] = useState('')
+    72→  const [registerPhone, setRegisterPhone] = useState('')
+    73→  const [registerPassword, setRegisterPassword] = useState('')
+    74→  const [registerCompany, setRegisterCompany] = useState('')
+    75→
+    76→  const handleSignIn = async () => {
+    77→    if (!signInEmail.trim()) {
+    78→      toast.error('Please enter your email address')
+    79→      return
+    80→    }
+    81→
+    82→    setIsLoading(true)
+    83→    try {
+    84→      const res = await fetch(`/api/auth?email=${encodeURIComponent(signInEmail.trim())}`)
+    85→      const data = await res.json()
+    86→
+    87→      if (!res.ok) {
+    88→        toast.error(data.error || 'Account not found. Please register first.')
+    89→        return
+    90→      }
+    91→
+    92→      const user: AppUser = {
+    93→        id: data.user.id,
+    94→        name: data.user.name || '',
+    95→        email: data.user.email,
+    96→        role: data.user.role as UserRole,
+    97→        companyName: data.user.companyName || undefined,
+    98→        phone: data.user.phone || undefined,
+    99→        state: data.user.state || undefined,
+   100→        city: data.user.city || undefined,
+   101→        verificationStatus: data.user.verificationStatus,
+   102→        avatar: data.user.avatar || undefined,
+   103→      }
+   104→
+   105→      setUser(user)
+   106→      toast.success(`Welcome back, ${user.name || user.email}!`)
+   107→      setView('dashboard')
+   108→    } catch {
+   109→      toast.error('Something went wrong. Please try again.')
+   110→    } finally {
+   111→      setIsLoading(false)
+   112→    }
+   113→  }
+   114→
+   115→  const handleRegister = async () => {
+   116→    if (!registerName.trim()) {
+   117→      toast.error('Please enter your name')
+   118→      return
+   119→    }
+   120→    if (!registerEmail.trim()) {
+   121→      toast.error('Please enter your email address')
+   122→      return
+   123→    }
+   124→
+   125→    setIsLoading(true)
+   126→    try {
+   127→      const res = await fetch('/api/auth', {
+   128→        method: 'POST',
+   129→        headers: { 'Content-Type': 'application/json' },
+   130→        body: JSON.stringify({
+   131→          email: registerEmail.trim(),
+   132→          name: registerName.trim(),
+   133→          role: 'buyer', // Default role, can be changed in role-select
+   134→          phone: registerPhone.trim() || undefined,
+   135→          companyName: registerCompany.trim() || undefined,
+   136→        }),
+   137→      })
+   138→
+   139→      const data = await res.json()
+   140→
+   141→      if (!res.ok) {
+   142→        toast.error(data.error || 'Registration failed. Please try again.')
+   143→        return
+   144→      }
+   145→
+   146→      const user: AppUser = {
+   147→        id: data.user.id,
+   148→        name: data.user.name || '',
+   149→        email: data.user.email,
+   150→        role: data.user.role as UserRole,
+   151→        companyName: data.user.companyName || undefined,
+   152→        phone: data.user.phone || undefined,
+   153→        state: data.user.state || undefined,
+   154→        city: data.user.city || undefined,
+   155→        verificationStatus: data.user.verificationStatus,
+   156→        avatar: data.user.avatar || undefined,
+   157→      }
+   158→
+   159→      setUser(user)
+   160→      toast.success('Account created successfully! Choose your role to get started.')
+   161→      setView('role-select')
+   162→    } catch {
+   163→      toast.error('Something went wrong. Please try again.')
+   164→    } finally {
+   165→      setIsLoading(false)
+   166→    }
+   167→  }
+   168→
+   169→  const handleRoleDemo = async (email: string, roleName: string) => {
+   170→    setIsLoading(true)
+   171→    try {
+   172→      const roleToType: Record<string, string> = {
+   173→        'producer1@agrilink.in': 'producer',
+   174→        'buyer1@agrilink.in': 'buyer',
+   175→        'transport1@agrilink.in': 'transporter',
+   176→        'admin@agrilink.in': 'admin',
+   177→      }
+   178→      const desiredRole = (roleToType[email] || roleName.toLowerCase()) as UserRole
+   179→
+   180→      // Try to get existing user and update their role if needed
+   181→      const getRes = await fetch(`/api/auth?email=${encodeURIComponent(email)}`)
+   182→      if (getRes.ok) {
+   183→        const data = await getRes.json()
+   184→        let userData = data.user
+   185→
+   186→        // If role doesn't match, update it via POST
+   187→        if (userData.role !== desiredRole) {
+   188→          const roleMap: Record<string, { name: string; company: string; phone: string; state: string; city: string }> = {
+   189→            'producer1@agrilink.in': { name: 'Rajesh Farmer', company: 'Green Harvest Farms', phone: '+91-9876500001', state: 'Punjab', city: 'Ludhiana' },
+   190→            'buyer1@agrilink.in': { name: 'Priya Buyer', company: 'Spice Route Trading', phone: '+91-9876500002', state: 'Maharashtra', city: 'Mumbai' },
+   191→            'transport1@agrilink.in': { name: 'Amit Transporter', company: 'Swift Cargo Movers', phone: '+91-9876500003', state: 'Gujarat', city: 'Ahmedabad' },
+   192→            'admin@agrilink.in': { name: 'Admin User', company: 'AgriLink Platform', phone: '+91-9876500000', state: 'Delhi', city: 'New Delhi' },
+   193→          }
+   194→          const info = roleMap[email] || { name: userData.name, company: userData.companyName, phone: userData.phone, state: userData.state, city: userData.city }
+   195→          const updateRes = await fetch('/api/auth', {
+   196→            method: 'POST',
+   197→            headers: { 'Content-Type': 'application/json' },
+   198→            body: JSON.stringify({
+   199→              email,
+   200→              name: info.name,
+   201→              role: desiredRole,
+   202→              companyName: info.company,
+   203→              phone: info.phone,
+   204→              state: info.state,
+   205→              city: info.city,
+   206→            }),
+   207→          })
+   208→          if (updateRes.ok) {
+   209→            const updateData = await updateRes.json()
+   210→            userData = updateData.user
+   211→          }
+   212→        }
+   213→
+   214→        const user: AppUser = {
+   215→          id: userData.id,
+   216→          name: userData.name || '',
+   217→          email: userData.email,
+   218→          role: (userData.role || desiredRole) as UserRole,
+   219→          companyName: userData.companyName || undefined,
+   220→          phone: userData.phone || undefined,
+   221→          state: userData.state || undefined,
+   222→          city: userData.city || undefined,
+   223→          verificationStatus: userData.verificationStatus,
+   224→          avatar: userData.avatar || undefined,
+   225→        }
+   226→        setUser(user)
+   227→        toast.success(`Welcome! You're now signed in as a ${roleName}.`)
+   228→        setView('dashboard')
+   229→        return
+   230→      }
+   231→
+   232→      // If not found, create user (use already-defined roleMap from the if block above)
+   233→      const createRes = await fetch('/api/auth', {
+   234→        method: 'POST',
+   235→        headers: { 'Content-Type': 'application/json' },
+   236→        body: JSON.stringify({
+   237→          email,
+   238→          name: roleName,
+   239→          role: desiredRole,
+   240→          companyName: '',
+   241→          phone: '',
+   242→          state: '',
+   243→          city: '',
+   244→        }),
+   245→      })
+   246→
+   247→      const data = await createRes.json()
+   248→
+   249→      if (!createRes.ok) {
+   250→        toast.error(data.error || `Failed to sign in as ${roleName}`)
+   251→        return
+   252→      }
+   253→
+   254→      const user: AppUser = {
+   255→        id: data.user.id,
+   256→        name: data.user.name || '',
+   257→        email: data.user.email,
+   258→        role: data.user.role as UserRole,
+   259→        companyName: data.user.companyName || undefined,
+   260→        phone: data.user.phone || undefined,
+   261→        state: data.user.state || undefined,
+   262→        city: data.user.city || undefined,
+   263→        verificationStatus: data.user.verificationStatus,
+   264→        avatar: data.user.avatar || undefined,
+   265→      }
+   266→
+   267→      setUser(user)
+   268→      toast.success(`Welcome! You're now signed in as a ${roleName}.`)
+   269→      setView('dashboard')
+   270→    } catch {
+   271→      toast.error(`Failed to sign in as ${roleName}. Please try again.`)
+   272→    } finally {
+   273→      setIsLoading(false)
+   274→    }
+   275→  }
+   276→
+   277→  const handleDemoLogin = async () => {
+   278→    setIsLoading(true)
+   279→    try {
+   280→      // First try to get existing demo user
+   281→      const getRes = await fetch(`/api/auth?email=${encodeURIComponent('demo@agrilink.in')}`)
+   282→      if (getRes.ok) {
+   283→        const data = await getRes.json()
+   284→        const user: AppUser = {
+   285→          id: data.user.id,
+   286→          name: data.user.name || '',
+   287→          email: data.user.email,
+   288→          role: data.user.role as UserRole,
+   289→          companyName: data.user.companyName || undefined,
+   290→          phone: data.user.phone || undefined,
+   291→          state: data.user.state || undefined,
+   292→          city: data.user.city || undefined,
+   293→          verificationStatus: data.user.verificationStatus,
+   294→          avatar: data.user.avatar || undefined,
+   295→        }
+   296→        setUser(user)
+   297→        toast.success('Welcome to the AgriLink Demo!')
+   298→        setView('dashboard')
+   299→        return
+   300→      }
+   301→
+   302→      // If not found, create demo user
+   303→      const createRes = await fetch('/api/auth', {
+   304→        method: 'POST',
+   305→        headers: { 'Content-Type': 'application/json' },
+   306→        body: JSON.stringify({
+   307→          email: 'demo@agrilink.in',
+   308→          name: 'Demo User',
+   309→          role: 'buyer',
+   310→          companyName: 'AgriLink Demo Corp',
+   311→          phone: '+91-9876543210',
+   312→          state: 'Maharashtra',
+   313→          city: 'Mumbai',
+   314→        }),
+   315→      })
+   316→
+   317→      const data = await createRes.json()
+   318→
+   319→      if (!createRes.ok) {
+   320→        toast.error(data.error || 'Demo login failed')
+   321→        return
+   322→      }
+   323→
+   324→      const user: AppUser = {
+   325→        id: data.user.id,
+   326→        name: data.user.name || '',
+   327→        email: data.user.email,
+   328→        role: data.user.role as UserRole,
+   329→        companyName: data.user.companyName || undefined,
+   330→        phone: data.user.phone || undefined,
+   331→        state: data.user.state || undefined,
+   332→        city: data.user.city || undefined,
+   333→        verificationStatus: data.user.verificationStatus,
+   334→        avatar: data.user.avatar || undefined,
+   335→      }
+   336→
+   337→      setUser(user)
+   338→      toast.success('Welcome to the AgriLink Demo!')
+   339→      setView('dashboard')
+   340→    } catch {
+   341→      toast.error('Demo login failed. Please try again.')
+   342→    } finally {
+   343→      setIsLoading(false)
+   344→    }
+   345→  }
+   346→
+   347→  const handleKeyDown = (e: React.KeyboardEvent, action: 'signin' | 'register') => {
+   348→    if (e.key === 'Enter' && !isLoading) {
+   349→      if (action === 'signin') handleSignIn()
+   350→      else handleRegister()
+   351→    }
+   352→  }
+   353→
+   354→  return (
+   355→    <div className="min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden px-4 py-8">
+   356→      {/* Background Effects */}
+   357→      <div className="absolute inset-0 bg-grid-pattern opacity-40" />
+   358→      <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] animate-float" />
+   359→      <div
+   360→        className="absolute bottom-1/4 -left-20 w-72 h-72 bg-amber-500/8 rounded-full blur-[100px]"
+   361→        style={{ animationDelay: '1s', animation: 'float 4s ease-in-out infinite' }}
+   362→      />
+   363→      <div
+   364→        className="absolute top-1/3 right-1/4 w-64 h-64 bg-emerald-400/5 rounded-full blur-[80px]"
+   365→        style={{ animationDelay: '2s', animation: 'float 3.5s ease-in-out infinite' }}
+   366→      />
+   367→
+   368→      {/* Back Button */}
+   369→      <motion.button
+   370→        initial={{ opacity: 0, x: -20 }}
+   371→        animate={{ opacity: 1, x: 0 }}
+   372→        transition={{ duration: 0.4, delay: 0.1 }}
+   373→        onClick={() => setView('landing')}
+   374→        className="absolute top-6 left-6 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group z-10"
+   375→      >
+   376→        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+   377→        <span>Back to Home</span>
+   378→      </motion.button>
+   379→
+   380→      {/* Auth Card */}
+   381→      <motion.div
+   382→        variants={cardVariants}
+   383→        initial="hidden"
+   384→        animate="visible"
+   385→        className="relative z-10 w-full max-w-md"
+   386→      >
+   387→        <div className="glass-card-strong p-8 sm:p-10">
+   388→          {/* Logo */}
+   389→          <motion.div
+   390→            variants={containerVariants}
+   391→            initial="hidden"
+   392→            animate="visible"
+   393→            className="flex flex-col items-center mb-8"
+   394→          >
+   395→            <motion.div variants={itemVariants} className="flex items-center gap-3 mb-4">
+   396→              <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/30">
+   397→                <Leaf className="w-6 h-6 text-emerald-400" />
+   398→              </div>
+   399→              <span className="text-2xl font-bold tracking-tight">
+   400→                <span className="text-emerald-400">Agri</span>
+   401→                <span className="text-foreground">Link</span>
+   402→              </span>
+   403→            </motion.div>
+   404→            <motion.p variants={itemVariants} className="text-sm text-muted-foreground text-center">
+   405→              Sign in to your account or create a new one
+   406→            </motion.p>
+   407→          </motion.div>
+   408→
+   409→          {/* Tabs */}
+   410→          <Tabs
+   411→            value={activeTab}
+   412→            onValueChange={(v) => setActiveTab(v as 'signin' | 'register')}
+   413→            className="w-full"
+   414→          >
+   415→            <TabsList className="w-full bg-white/5 border border-white/10 h-11 rounded-xl p-1 mb-6">
+   416→              <TabsTrigger
+   417→                value="signin"
+   418→                className="flex-1 rounded-lg data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 data-[state=active]:border-emerald-500/30 data-[state=active]:border data-[state=active]:shadow-none text-muted-foreground font-medium h-9 transition-all"
+   419→              >
+   420→                Sign In
+   421→              </TabsTrigger>
+   422→              <TabsTrigger
+   423→                value="register"
+   424→                className="flex-1 rounded-lg data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 data-[state=active]:border-emerald-500/30 data-[state=active]:border data-[state=active]:shadow-none text-muted-foreground font-medium h-9 transition-all"
+   425→              >
+   426→                Register
+   427→              </TabsTrigger>
+   428→            </TabsList>
+   429→
+   430→            {/* Sign In Form */}
+   431→            <TabsContent value="signin">
+   432→              <AnimatePresence mode="wait">
+   433→                <motion.div
+   434→                  key="signin"
+   435→                  initial={{ opacity: 0, x: -10 }}
+   436→                  animate={{ opacity: 1, x: 0 }}
+   437→                  exit={{ opacity: 0, x: 10 }}
+   438→                  transition={{ duration: 0.3 }}
+   439→                  className="space-y-5"
+   440→                >
+   441→                  <div className="space-y-2">
+   442→                    <Label htmlFor="signin-email" className="text-muted-foreground text-xs">
+   443→                      Email Address
+   444→                    </Label>
+   445→                    <div className="relative">
+   446→                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   447→                      <Input
+   448→                        id="signin-email"
+   449→                        type="email"
+   450→                        placeholder="you@example.com"
+   451→                        value={signInEmail}
+   452→                        onChange={(e) => setSignInEmail(e.target.value)}
+   453→                        onKeyDown={(e) => handleKeyDown(e, 'signin')}
+   454→                        className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   455→                        disabled={isLoading}
+   456→                      />
+   457→                    </div>
+   458→                  </div>
+   459→
+   460→                  <div className="space-y-2">
+   461→                    <Label htmlFor="signin-password" className="text-muted-foreground text-xs">
+   462→                      Password
+   463→                    </Label>
+   464→                    <div className="relative">
+   465→                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   466→                      <Input
+   467→                        id="signin-password"
+   468→                        type="password"
+   469→                        placeholder="Enter your password"
+   470→                        value={signInPassword}
+   471→                        onChange={(e) => setSignInPassword(e.target.value)}
+   472→                        onKeyDown={(e) => handleKeyDown(e, 'signin')}
+   473→                        className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   474→                        disabled={isLoading}
+   475→                      />
+   476→                    </div>
+   477→                  </div>
+   478→
+   479→                  <Button
+   480→                    onClick={handleSignIn}
+   481→                    disabled={isLoading}
+   482→                    className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 transition-all"
+   483→                  >
+   484→                    {isLoading ? (
+   485→                      <Loader2 className="w-4 h-4 animate-spin" />
+   486→                    ) : (
+   487→                      'Sign In'
+   488→                    )}
+   489→                  </Button>
+   490→
+   491→                  {/* Demo Login */}
+   492→                  <div className="relative">
+   493→                    <div className="absolute inset-0 flex items-center">
+   494→                      <div className="w-full border-t border-white/10" />
+   495→                    </div>
+   496→                    <div className="relative flex justify-center text-xs">
+   497→                      <span className="px-3 bg-card text-muted-foreground">or</span>
+   498→                    </div>
+   499→                  </div>
+   500→
+   501→                  <Button
+   502→                    onClick={handleDemoLogin}
+   503→                    disabled={isLoading}
+   504→                    variant="outline"
+   505→                    className="w-full h-11 border-amber-500/30 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 font-semibold rounded-xl transition-all"
+   506→                  >
+   507→                    <Sparkles className="w-4 h-4 mr-2" />
+   508→                    Try Demo Account
+   509→                  </Button>
+   510→
+   511→                  {/* Quick Role Demo */}
+   512→                  <div className="space-y-3 mt-4">
+   513→                    <div className="relative">
+   514→                      <div className="absolute inset-0 flex items-center">
+   515→                        <div className="w-full border-t border-white/10" />
+   516→                      </div>
+   517→                      <div className="relative flex justify-center text-xs">
+   518→                        <span className="px-3 bg-card text-muted-foreground">Quick Role Demo</span>
+   519→                      </div>
+   520→                    </div>
+   521→                    <div className="grid grid-cols-2 gap-2">
+   522→                      <Button
+   523→                        onClick={() => handleRoleDemo('producer1@agrilink.in', 'Producer')}
+   524→                        disabled={isLoading}
+   525→                        variant="outline"
+   526→                        className="h-auto py-3 flex-col gap-1.5 border-emerald-500/30 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 font-medium rounded-xl transition-all"
+   527→                      >
+   528→                        <Sprout className="w-5 h-5" />
+   529→                        <span className="text-xs">Producer</span>
+   530→                      </Button>
+   531→                      <Button
+   532→                        onClick={() => handleRoleDemo('buyer1@agrilink.in', 'Buyer')}
+   533→                        disabled={isLoading}
+   534→                        variant="outline"
+   535→                        className="h-auto py-3 flex-col gap-1.5 border-amber-500/30 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 font-medium rounded-xl transition-all"
+   536→                      >
+   537→                        <ShoppingBag className="w-5 h-5" />
+   538→                        <span className="text-xs">Buyer</span>
+   539→                      </Button>
+   540→                      <Button
+   541→                        onClick={() => handleRoleDemo('transport1@agrilink.in', 'Transporter')}
+   542→                        disabled={isLoading}
+   543→                        variant="outline"
+   544→                        className="h-auto py-3 flex-col gap-1.5 border-teal-500/30 bg-teal-500/5 text-teal-400 hover:bg-teal-500/15 hover:border-teal-500/40 font-medium rounded-xl transition-all"
+   545→                      >
+   546→                        <Truck className="w-5 h-5" />
+   547→                        <span className="text-xs">Transporter</span>
+   548→                      </Button>
+   549→                      <Button
+   550→                        onClick={() => handleRoleDemo('admin@agrilink.in', 'Admin')}
+   551→                        disabled={isLoading}
+   552→                        variant="outline"
+   553→                        className="h-auto py-3 flex-col gap-1.5 border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/15 hover:border-purple-500/40 font-medium rounded-xl transition-all"
+   554→                      >
+   555→                        <Shield className="w-5 h-5" />
+   556→                        <span className="text-xs">Admin</span>
+   557→                      </Button>
+   558→                    </div>
+   559→                  </div>
+   560→                </motion.div>
+   561→              </AnimatePresence>
+   562→            </TabsContent>
+   563→
+   564→            {/* Register Form */}
+   565→            <TabsContent value="register">
+   566→              <AnimatePresence mode="wait">
+   567→                <motion.div
+   568→                  key="register"
+   569→                  initial={{ opacity: 0, x: 10 }}
+   570→                  animate={{ opacity: 1, x: 0 }}
+   571→                  exit={{ opacity: 0, x: -10 }}
+   572→                  transition={{ duration: 0.3 }}
+   573→                  className="space-y-4"
+   574→                >
+   575→                  <div className="space-y-2">
+   576→                    <Label htmlFor="register-name" className="text-muted-foreground text-xs">
+   577→                      Full Name
+   578→                    </Label>
+   579→                    <div className="relative">
+   580→                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   581→                      <Input
+   582→                        id="register-name"
+   583→                        type="text"
+   584→                        placeholder="Rajesh Kumar"
+   585→                        value={registerName}
+   586→                        onChange={(e) => setRegisterName(e.target.value)}
+   587→                        onKeyDown={(e) => handleKeyDown(e, 'register')}
+   588→                        className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   589→                        disabled={isLoading}
+   590→                      />
+   591→                    </div>
+   592→                  </div>
+   593→
+   594→                  <div className="space-y-2">
+   595→                    <Label htmlFor="register-email" className="text-muted-foreground text-xs">
+   596→                      Email Address
+   597→                    </Label>
+   598→                    <div className="relative">
+   599→                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   600→                      <Input
+   601→                        id="register-email"
+   602→                        type="email"
+   603→                        placeholder="you@example.com"
+   604→                        value={registerEmail}
+   605→                        onChange={(e) => setRegisterEmail(e.target.value)}
+   606→                        onKeyDown={(e) => handleKeyDown(e, 'register')}
+   607→                        className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   608→                        disabled={isLoading}
+   609→                      />
+   610→                    </div>
+   611→                  </div>
+   612→
+   613→                  <div className="grid grid-cols-2 gap-3">
+   614→                    <div className="space-y-2">
+   615→                      <Label htmlFor="register-phone" className="text-muted-foreground text-xs">
+   616→                        Phone
+   617→                      </Label>
+   618→                      <div className="relative">
+   619→                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   620→                        <Input
+   621→                          id="register-phone"
+   622→                          type="tel"
+   623→                          placeholder="+91-9876543210"
+   624→                          value={registerPhone}
+   625→                          onChange={(e) => setRegisterPhone(e.target.value)}
+   626→                          className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   627→                          disabled={isLoading}
+   628→                        />
+   629→                      </div>
+   630→                    </div>
+   631→
+   632→                    <div className="space-y-2">
+   633→                      <Label htmlFor="register-company" className="text-muted-foreground text-xs">
+   634→                        Company
+   635→                      </Label>
+   636→                      <div className="relative">
+   637→                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   638→                        <Input
+   639→                          id="register-company"
+   640→                          type="text"
+   641→                          placeholder="Your Company"
+   642→                          value={registerCompany}
+   643→                          onChange={(e) => setRegisterCompany(e.target.value)}
+   644→                          className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   645→                          disabled={isLoading}
+   646→                        />
+   647→                      </div>
+   648→                    </div>
+   649→                  </div>
+   650→
+   651→                  <div className="space-y-2">
+   652→                    <Label htmlFor="register-password" className="text-muted-foreground text-xs">
+   653→                      Password
+   654→                    </Label>
+   655→                    <div className="relative">
+   656→                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+   657→                      <Input
+   658→                        id="register-password"
+   659→                        type="password"
+   660→                        placeholder="Create a strong password"
+   661→                        value={registerPassword}
+   662→                        onChange={(e) => setRegisterPassword(e.target.value)}
+   663→                        onKeyDown={(e) => handleKeyDown(e, 'register')}
+   664→                        className="pl-10 h-11 bg-white/5 border-white/10 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/20 placeholder:text-muted-foreground/40 rounded-xl"
+   665→                        disabled={isLoading}
+   666→                      />
+   667→                    </div>
+   668→                  </div>
+   669→
+   670→                  <Button
+   671→                    onClick={handleRegister}
+   672→                    disabled={isLoading}
+   673→                    className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 transition-all mt-2"
+   674→                  >
+   675→                    {isLoading ? (
+   676→                      <Loader2 className="w-4 h-4 animate-spin" />
+   677→                    ) : (
+   678→                      'Create Account'
+   679→                    )}
+   680→                  </Button>
+   681→                </motion.div>
+   682→              </AnimatePresence>
+   683→            </TabsContent>
+   684→          </Tabs>
+   685→
+   686→          {/* Footer */}
+   687→          <div className="mt-6 pt-4 border-t border-white/5 text-center">
+   688→            <p className="text-xs text-muted-foreground">
+   689→              By continuing, you agree to AgriLink&apos;s{' '}
+   690→              <button className="text-emerald-400 hover:underline">Terms of Service</button>
+   691→              {' '}and{' '}
+   692→              <button className="text-emerald-400 hover:underline">Privacy Policy</button>
+   693→            </p>
+   694→          </div>
+   695→        </div>
+   696→      </motion.div>
+   697→    </div>
+   698→  )
+   699→}
+   700→

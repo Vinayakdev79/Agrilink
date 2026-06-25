@@ -8,8 +8,9 @@ import {
   MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
   ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield,
   Eye, Gavel, Phone, Crosshair, CalendarDays, User, Leaf,
-  Wallet, CreditCard, ExternalLink
+  Wallet, CreditCard, ExternalLink, ShieldCheck
 } from 'lucide-react'
+import { openRazorpayCheckout } from '@/lib/razorpay-client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -111,7 +112,9 @@ function PaymentBreakdown({ order }: { order: any }) {
   const productCost = quantity * unitPrice
   const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
   const transportBookingFee = order.transportBookingFee || 30
-  const total = order.totalPayable || (productCost + platformFee + transportBookingFee)
+  const isFreeDelivery = order.freeDelivery || order.product?.freeDelivery
+  const deliveryFee = order.deliveryFee || 0
+  const total = order.totalPayable || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
   const advancePaid = order.advanceAmount || Math.round(total * 0.5 * 100) / 100
   const remaining = order.remainingAmount || Math.round(total * 0.5 * 100) / 100
 
@@ -144,6 +147,18 @@ function PaymentBreakdown({ order }: { order: any }) {
           <span className="text-muted-foreground">Transport Booking Fee</span>
           <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString()}</span>
         </div>
+        {/* Delivery Fee row — FREE badge or charged amount */}
+        {isFreeDelivery ? (
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Delivery Fee</span>
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-[10px]">FREE</Badge>
+          </div>
+        ) : deliveryFee > 0 ? (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Delivery Fee</span>
+            <span className="text-foreground font-medium">₹{deliveryFee.toLocaleString()}</span>
+          </div>
+        ) : null}
         <div className="flex justify-between pt-1.5 border-t border-glass-border">
           <span className="text-foreground font-semibold">Total</span>
           <span className="text-amber-400 font-bold">₹{total.toLocaleString()}</span>
@@ -344,26 +359,80 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
     return myShipments.find((s: any) => s.orderId === orderId)
   }
 
-  // Pay remaining amount
-  const handlePayRemaining = async (orderId: string) => {
+  // Pay remaining amount — 3-step Razorpay flow (create-order → checkout → verify)
+  const handlePayRemaining = async (orderId: string, amount: number) => {
     setPayingRemaining(orderId)
     try {
-      const res = await fetch('/api/orders', {
-        method: 'PATCH',
+      // 1. Create Razorpay order (server returns demoMode if keys are absent)
+      const createRes = await fetch('/api/payments/razorpay/create-order', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: 'remaining',
           orderId,
-          paymentStatus: 'full_paid',
-          remainingPaidAt: new Date().toISOString()
+          amount,
+          userId: user?.id,
+          description: 'Remaining payment for order',
+        }),
+      })
+      if (!createRes.ok) {
+        const e = await createRes.json().catch(() => ({}))
+        toast.error(e.error || 'Failed to initiate payment')
+        return
+      }
+      const {
+        orderId: razorpayOrderId,
+        amount: amountPaise,
+        demoMode,
+        keyId,
+      } = await createRes.json()
+
+      // 2. Open Razorpay checkout (auto-succeeds in demo mode)
+      await new Promise<void>((resolve, reject) => {
+        openRazorpayCheckout({
+          orderId: razorpayOrderId,
+          amount: amountPaise,
+          keyId,
+          demoMode,
+          name: 'AgriLink',
+          description: 'Remaining payment',
+          prefill: { name: user?.name, email: user?.email, contact: user?.phone },
+          onSuccess: async (paymentId, signature, rzpOrderId) => {
+            try {
+              // 3. Verify signature & persist payment status
+              const verifyRes = await fetch('/api/payments/razorpay/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: 'remaining',
+                  razorpayOrderId: rzpOrderId,
+                  razorpayPaymentId: paymentId,
+                  razorpaySignature: signature,
+                  orderId,
+                  userId: user?.id,
+                  amount,
+                }),
+              })
+              if (!verifyRes.ok) {
+                const e = await verifyRes.json().catch(() => ({}))
+                toast.error(e.error || 'Payment verification failed')
+                reject(new Error('verify failed'))
+                return
+              }
+              toast.success('Remaining payment completed successfully!')
+              fetchData()
+              resolve()
+            } catch (err) {
+              toast.error('Payment verification failed')
+              reject(err)
+            }
+          },
+          onDismiss: () => {
+            toast.info('Payment cancelled')
+            resolve()
+          },
         })
       })
-      if (res.ok) {
-        toast.success('Remaining payment completed successfully!')
-        fetchData()
-      } else {
-        const data = await res.json()
-        toast.error(data.error || 'Failed to process payment')
-      }
     } catch {
       toast.error('Failed to process payment')
     } finally {
@@ -394,10 +463,10 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
       <div className="space-y-6">
         {/* Stat cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={<ClipboardList className="h-5 w-5" />} value={String(activeProcurements)} label="Active Sourcing" trend="+5%" trendUp />
           <StatCard icon={<ShoppingCart className="h-5 w-5" />} value={String(totalOrders)} label="Orders Placed" trend="+15%" trendUp />
           <StatCard icon={<IndianRupee className="h-5 w-5" />} value={`₹${(savings / 1000).toFixed(0)}K`} label="Savings" trend="+18%" trendUp />
           <StatCard icon={<Users className="h-5 w-5" />} value={String(suppliers)} label="Suppliers" trend="+2" trendUp />
+          <StatCard icon={<CheckCircle className="h-5 w-5" />} value={String(orders.filter(o => o.status === 'delivered').length)} label="Delivered" trend="+8%" trendUp />
         </div>
 
         {/* Charts row */}
@@ -1018,7 +1087,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         <Button
                           className="bg-orange-600 hover:bg-orange-500 gap-2 text-sm shadow-lg shadow-orange-600/20"
                           disabled={payingRemaining === order.id}
-                          onClick={() => handlePayRemaining(order.id)}
+                          onClick={() => handlePayRemaining(order.id, remainingAmount)}
                         >
                           {payingRemaining === order.id ? (
                             <>
@@ -1031,6 +1100,10 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                             </>
                           )}
                         </Button>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                        <span>Secured by Razorpay</span>
                       </div>
                     </motion.div>
                   )}
@@ -1053,9 +1126,71 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                     <PaymentBreakdown order={order} />
                   )}
 
+                  {/* Producer-handled delivery info banner (replaces Create Shipment) */}
+                  {order.status === 'confirmed' && !hasShipment && (order.product?.deliveryHandledByProducer || order.deliveryType === 'producer' || order.deliveryType === 'local') && (
+                    <div className="glass-card p-4 border border-emerald-500/25 bg-emerald-500/[0.05]">
+                      <div className="flex items-start gap-3">
+                        <div className="h-9 w-9 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                          <Truck className="h-4 w-4 text-emerald-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground">
+                            {order.deliveryType === 'local' ? "🚚 Producer's Local Transporter is handling delivery" : '🚚 This order is being delivered by the producer'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Shipment creation is not required.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Local Transporter details (when deliveryType is 'local') */}
+                  {order.deliveryType === 'local' && (order.localTransporterName || order.localTransporterPhone || order.localTransporterVehicle) && (
+                    <div className="glass-card p-4 border border-teal-500/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Truck className="h-4 w-4 text-teal-400" />
+                        <h5 className="text-sm font-semibold text-foreground">Local Transporter Details</h5>
+                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px] gap-1">
+                          <ExternalLink className="h-2.5 w-2.5" /> Producer-managed
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                        {order.localTransporterName && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Transporter Name</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <User className="h-3 w-3 text-teal-400" />
+                              {order.localTransporterName}
+                            </p>
+                          </div>
+                        )}
+                        {order.localTransporterPhone && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Phone</p>
+                            <a
+                              href={`tel:${order.localTransporterPhone}`}
+                              className="text-foreground font-medium text-xs flex items-center gap-1 hover:text-teal-400 transition-colors"
+                            >
+                              <Phone className="h-2.5 w-2.5 text-teal-400" />
+                              {order.localTransporterPhone}
+                            </a>
+                          </div>
+                        )}
+                        {order.localTransporterVehicle && (
+                          <div>
+                            <p className="text-muted-foreground text-[10px]">Vehicle</p>
+                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                              <Truck className="h-3 w-3 text-teal-400" />
+                              {order.localTransporterVehicle}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {order.status === 'confirmed' && !hasShipment && (
+                    {order.status === 'confirmed' && !hasShipment && !order.product?.deliveryHandledByProducer && (!order.deliveryType || order.deliveryType === 'platform') && (
                       <Button
                         size="sm"
                         variant="outline"

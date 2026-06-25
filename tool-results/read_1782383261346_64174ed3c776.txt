@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import { useAppStore } from '@/lib/store'
+     4→import { useEffect, useState, useCallback, useRef } from 'react'
+     5→import { motion } from 'framer-motion'
+     6→import {
+     7→  Package, ShoppingCart, IndianRupee, Star, Plus, MessageSquare,
+     8→  TrendingUp, TrendingDown, MapPin, Eye, Check, X, User,
+     9→  Truck, Phone, Clock, Crosshair, CalendarDays,
+    10→  Upload, Image as ImageIcon, Leaf, FileText, Shield,
+    11→  AlertTriangle, Pencil, CheckCircle, Building2, Mail,
+    12→  ArrowRightLeft, Receipt
+    13→} from 'lucide-react'
+    14→import { Button } from '@/components/ui/button'
+    15→import { Badge } from '@/components/ui/badge'
+    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→import { Input } from '@/components/ui/input'
+    18→import { Label } from '@/components/ui/label'
+    19→import { Textarea } from '@/components/ui/textarea'
+    20→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    21→import { Switch } from '@/components/ui/switch'
+    22→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    23→import {
+    24→  Dialog, DialogContent, DialogDescription, DialogFooter,
+    25→  DialogHeader, DialogTitle, DialogTrigger
+    26→} from '@/components/ui/dialog'
+    27→import {
+    28→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    29→} from '@/components/ui/table'
+    30→import {
+    31→  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+    32→  ResponsiveContainer
+    33→} from 'recharts'
+    34→import { toast } from 'sonner'
+    35→import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
+    36→
+    37→// ─── Types ────────────────────────────────────────────────────────────────────
+    38→interface ProducerDashboardProps {
+    39→  tab: string
+    40→}
+    41→
+    42→// ─── Constants ────────────────────────────────────────────────────────────────
+    43→const revenueData = [
+    44→  { month: 'Jul', revenue: 125000, orders: 12 },
+    45→  { month: 'Aug', revenue: 178000, orders: 16 },
+    46→  { month: 'Sep', revenue: 145000, orders: 14 },
+    47→  { month: 'Oct', revenue: 210000, orders: 20 },
+    48→  { month: 'Nov', revenue: 195000, orders: 18 },
+    49→  { month: 'Dec', revenue: 245000, orders: 22 },
+    50→]
+    51→
+    52→const statusColors: Record<string, string> = {
+    53→  negotiating: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    54→  confirmed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    55→  shipped: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    56→  delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
+    57→  cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+    58→  disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    59→}
+    60→
+    61→const paymentStatusColors: Record<string, string> = {
+    62→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    63→  advance_paid: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    64→  full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    65→  refunded: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    66→}
+    67→
+    68→const shipmentStatusColors: Record<string, string> = {
+    69→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    70→  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    71→  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    72→  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    73→  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    74→  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    75→}
+    76→
+    77→const categories = ['grains', 'vegetables', 'fruits', 'spices', 'dairy', 'poultry', 'pulses', 'oilseeds']
+    78→
+    79→// ─── Stock Bar ────────────────────────────────────────────────────────────────
+    80→function StockBar({ quantity, unit, minOrderQty }: { quantity: number; unit: string; minOrderQty?: number }) {
+    81→  const isOutOfStock = quantity === 0
+    82→  const isLowStock = quantity > 0 && quantity < 10
+    83→  const maxQty = minOrderQty ? Math.max(minOrderQty * 20, quantity) : quantity
+    84→  const stockPercent = maxQty > 0 ? Math.min((quantity / maxQty) * 100, 100) : 0
+    85→  const stockBarColor = isOutOfStock
+    86→    ? 'bg-red-500'
+    87→    : isLowStock
+    88→      ? 'bg-yellow-500'
+    89→      : stockPercent > 50
+    90→        ? 'bg-emerald-500'
+    91→        : 'bg-yellow-500'
+    92→
+    93→  return (
+    94→    <div className="space-y-1">
+    95→      <div className="flex items-center justify-between text-xs">
+    96→        <span className="text-muted-foreground flex items-center gap-1">
+    97→          <Package className="h-3 w-3" />
+    98→          Stock Remaining
+    99→        </span>
+   100→        <span
+   101→          className={`font-medium ${
+   102→            isOutOfStock ? 'text-red-400' : isLowStock ? 'text-yellow-400' : 'text-foreground'
+   103→          }`}
+   104→        >
+   105→          {isOutOfStock ? 'Out of Stock' : `${quantity.toLocaleString('en-IN')} ${unit}`}
+   106→        </span>
+   107→      </div>
+   108→      {!isOutOfStock && (
+   109→        <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+   110→          <div
+   111→            className={`h-full rounded-full transition-all duration-500 ${stockBarColor}`}
+   112→            style={{ width: `${stockPercent}%` }}
+   113→          />
+   114→        </div>
+   115→      )}
+   116→      {isLowStock && (
+   117→        <div className="flex items-center gap-1">
+   118→          <AlertTriangle className="h-3 w-3 text-orange-400" />
+   119→          <span className="text-[10px] font-semibold text-orange-400">Low Stock</span>
+   120→        </div>
+   121→      )}
+   122→    </div>
+   123→  )
+   124→}
+   125→
+   126→// ─── Stat Card ────────────────────────────────────────────────────────────────
+   127→function StatCard({
+   128→  icon,
+   129→  value,
+   130→  label,
+   131→  trend,
+   132→  trendUp,
+   133→}: {
+   134→  icon: React.ReactNode
+   135→  value: string
+   136→  label: string
+   137→  trend?: string
+   138→  trendUp?: boolean
+   139→}) {
+   140→  return (
+   141→    <motion.div
+   142→      initial={{ opacity: 0, y: 20 }}
+   143→      animate={{ opacity: 1, y: 0 }}
+   144→      className="glass-card p-5 flex flex-col gap-3"
+   145→    >
+   146→      <div className="flex items-center justify-between">
+   147→        <div className="h-10 w-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+   148→          {icon}
+   149→        </div>
+   150→        {trend && (
+   151→          <div
+   152→            className={`flex items-center gap-1 text-xs font-medium ${
+   153→              trendUp ? 'text-emerald-400' : 'text-red-400'
+   154→            }`}
+   155→          >
+   156→            {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+   157→            {trend}
+   158→          </div>
+   159→        )}
+   160→      </div>
+   161→      <div>
+   162→        <p className="text-2xl font-bold text-foreground">{value}</p>
+   163→        <p className="text-sm text-muted-foreground">{label}</p>
+   164→      </div>
+   165→    </motion.div>
+   166→  )
+   167→}
+   168→
+   169→// ─── Add Listing Form ─────────────────────────────────────────────────────────
+   170→function AddListingForm({
+   171→  formData,
+   172→  setFormData,
+   173→}: {
+   174→  formData: Record<string, any>
+   175→  setFormData: React.Dispatch<React.SetStateAction<Record<string, any>>>
+   176→  onSubmit?: () => void
+   177→  onCancel?: () => void
+   178→  isSubmitting?: boolean
+   179→}) {
+   180→  const [uploading, setUploading] = useState(false)
+   181→  const [imagePreview, setImagePreview] = useState<string | null>(null)
+   182→  const fileInputRef = useRef<HTMLInputElement>(null)
+   183→
+   184→  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   185→    const file = e.target.files?.[0]
+   186→    if (!file) return
+   187→
+   188→    setUploading(true)
+   189→    try {
+   190→      const uploadForm = new FormData()
+   191→      uploadForm.append('file', file)
+   192→      uploadForm.append('folder', 'products')
+   193→      const res = await fetch('/api/upload', { method: 'POST', body: uploadForm })
+   194→      if (res.ok) {
+   195→        const data = await res.json()
+   196→        setFormData((prev) => ({ ...prev, imageUrl: data.url }))
+   197→        setImagePreview(data.url)
+   198→        toast.success('Image uploaded!')
+   199→      } else {
+   200→        toast.error('Failed to upload image')
+   201→      }
+   202→    } catch {
+   203→      toast.error('Failed to upload image')
+   204→    } finally {
+   205→      setUploading(false)
+   206→    }
+   207→  }
+   208→
+   209→  const setField = (key: string, value: any) => {
+   210→    setFormData((prev) => ({ ...prev, [key]: value }))
+   211→  }
+   212→
+   213→  return (
+   214→    <div className="grid gap-5 py-4">
+   215→      {/* Basic Details */}
+   216→      <div className="space-y-3">
+   217→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   218→          <Package className="h-4 w-4" /> Basic Details
+   219→        </h4>
+   220→        <div className="grid gap-3">
+   221→          <div className="grid gap-2">
+   222→            <Label className="text-foreground text-xs">Product Name *</Label>
+   223→            <Input
+   224→              className="glass-input text-foreground"
+   225→              placeholder="e.g. Basmati Rice"
+   226→              value={formData.name}
+   227→              onChange={(e) => setField('name', e.target.value)}
+   228→            />
+   229→          </div>
+   230→          <div className="grid grid-cols-2 gap-3">
+   231→            <div className="grid gap-2">
+   232→              <Label className="text-foreground text-xs">Category *</Label>
+   233→              <Select value={formData.category} onValueChange={(v) => setField('category', v)}>
+   234→                <SelectTrigger className="glass-input text-foreground">
+   235→                  <SelectValue placeholder="Select" />
+   236→                </SelectTrigger>
+   237→                <SelectContent>
+   238→                  {categories.map((c) => (
+   239→                    <SelectItem key={c} value={c}>
+   240→                      {c.charAt(0).toUpperCase() + c.slice(1)}
+   241→                    </SelectItem>
+   242→                  ))}
+   243→                </SelectContent>
+   244→              </Select>
+   245→            </div>
+   246→            <div className="grid gap-2">
+   247→              <Label className="text-foreground text-xs">Quality Grade</Label>
+   248→              <Select value={formData.qualityGrade} onValueChange={(v) => setField('qualityGrade', v)}>
+   249→                <SelectTrigger className="glass-input text-foreground">
+   250→                  <SelectValue />
+   251→                </SelectTrigger>
+   252→                <SelectContent>
+   253→                  <SelectItem value="A">Grade A</SelectItem>
+   254→                  <SelectItem value="B">Grade B</SelectItem>
+   255→                  <SelectItem value="C">Grade C</SelectItem>
+   256→                </SelectContent>
+   257→              </Select>
+   258→            </div>
+   259→          </div>
+   260→        </div>
+   261→      </div>
+   262→
+   263→      <div className="border-t border-glass-border" />
+   264→
+   265→      {/* Product Image */}
+   266→      <div className="space-y-3">
+   267→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   268→          <ImageIcon className="h-4 w-4" /> Product Image
+   269→        </h4>
+   270→        <div className="grid gap-3">
+   271→          {imagePreview || formData.imageUrl ? (
+   272→            <div className="relative w-full h-40 rounded-xl overflow-hidden border border-glass-border">
+   273→              <img
+   274→                src={imagePreview || formData.imageUrl}
+   275→                alt="Product preview"
+   276→                className="w-full h-full object-cover"
+   277→              />
+   278→              <Button
+   279→                size="sm"
+   280→                variant="outline"
+   281→                className="absolute top-2 right-2 border-glass-border bg-black/50 text-white hover:bg-black/70 h-7 text-xs"
+   282→                onClick={() => fileInputRef.current?.click()}
+   283→              >
+   284→                Change
+   285→              </Button>
+   286→            </div>
+   287→          ) : (
+   288→            <button
+   289→              type="button"
+   290→              onClick={() => fileInputRef.current?.click()}
+   291→              disabled={uploading}
+   292→              className="w-full h-32 rounded-xl border-2 border-dashed border-glass-border hover:border-emerald-500/40 flex flex-col items-center justify-center gap-2 transition-colors bg-white/[0.02]"
+   293→            >
+   294→              {uploading ? (
+   295→                <>
+   296→                  <span className="h-6 w-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+   297→                  <p className="text-xs text-muted-foreground">Uploading...</p>
+   298→                </>
+   299→              ) : (
+   300→                <>
+   301→                  <Upload className="h-6 w-6 text-muted-foreground" />
+   302→                  <p className="text-xs text-muted-foreground">Click to upload product image</p>
+   303→                  <p className="text-[10px] text-muted-foreground/60">JPEG, PNG, WebP — Max 5MB</p>
+   304→                </>
+   305→              )}
+   306→            </button>
+   307→          )}
+   308→          <input
+   309→            ref={fileInputRef}
+   310→            type="file"
+   311→            accept="image/jpeg,image/png,image/webp"
+   312→            className="hidden"
+   313→            onChange={handleImageUpload}
+   314→          />
+   315→        </div>
+   316→      </div>
+   317→
+   318→      <div className="border-t border-glass-border" />
+   319→
+   320→      {/* Pricing & Quantity */}
+   321→      <div className="space-y-3">
+   322→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   323→          <IndianRupee className="h-4 w-4" /> Pricing & Quantity
+   324→        </h4>
+   325→        <div className="grid grid-cols-2 gap-3">
+   326→          <div className="grid gap-2">
+   327→            <Label className="text-foreground text-xs">Price per Unit (₹) *</Label>
+   328→            <Input
+   329→              type="number"
+   330→              className="glass-input text-foreground"
+   331→              placeholder="500"
+   332→              value={formData.pricePerUnit}
+   333→              onChange={(e) => setField('pricePerUnit', e.target.value)}
+   334→            />
+   335→          </div>
+   336→          <div className="grid gap-2">
+   337→            <Label className="text-foreground text-xs">Unit *</Label>
+   338→            <Select value={formData.unit} onValueChange={(v) => setField('unit', v)}>
+   339→              <SelectTrigger className="glass-input text-foreground">
+   340→                <SelectValue />
+   341→              </SelectTrigger>
+   342→              <SelectContent>
+   343→                <SelectItem value="kg">Kg</SelectItem>
+   344→                <SelectItem value="quintal">Quintal</SelectItem>
+   345→                <SelectItem value="tonne">Tonne</SelectItem>
+   346→                <SelectItem value="litre">Litre</SelectItem>
+   347→              </SelectContent>
+   348→            </Select>
+   349→          </div>
+   350→        </div>
+   351→        <div className="grid grid-cols-2 gap-3">
+   352→          <div className="grid gap-2">
+   353→            <Label className="text-foreground text-xs">Quantity *</Label>
+   354→            <Input
+   355→              type="number"
+   356→              className="glass-input text-foreground"
+   357→              placeholder="100"
+   358→              value={formData.quantity}
+   359→              onChange={(e) => setField('quantity', e.target.value)}
+   360→            />
+   361→          </div>
+   362→          <div className="grid gap-2">
+   363→            <Label className="text-foreground text-xs">Min Order Qty</Label>
+   364→            <Input
+   365→              type="number"
+   366→              className="glass-input text-foreground"
+   367→              placeholder="10"
+   368→              value={formData.minOrderQty}
+   369→              onChange={(e) => setField('minOrderQty', e.target.value)}
+   370→            />
+   371→          </div>
+   372→        </div>
+   373→      </div>
+   374→
+   375→      <div className="border-t border-glass-border" />
+   376→
+   377→      {/* Location */}
+   378→      <div className="space-y-3">
+   379→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   380→          <MapPin className="h-4 w-4" /> Location
+   381→        </h4>
+   382→        <div className="grid grid-cols-2 gap-3">
+   383→          <div className="grid gap-2">
+   384→            <Label className="text-foreground text-xs">Location *</Label>
+   385→            <Input
+   386→              className="glass-input text-foreground"
+   387→              placeholder="e.g. Nashik"
+   388→              value={formData.location}
+   389→              onChange={(e) => setField('location', e.target.value)}
+   390→            />
+   391→          </div>
+   392→          <div className="grid gap-2">
+   393→            <Label className="text-foreground text-xs">State</Label>
+   394→            <Input
+   395→              className="glass-input text-foreground"
+   396→              placeholder="e.g. Maharashtra"
+   397→              value={formData.state}
+   398→              onChange={(e) => setField('state', e.target.value)}
+   399→            />
+   400→          </div>
+   401→        </div>
+   402→      </div>
+   403→
+   404→      <div className="border-t border-glass-border" />
+   405→
+   406→      {/* Crop Details */}
+   407→      <div className="space-y-3">
+   408→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   409→          <Leaf className="h-4 w-4" /> Crop Details
+   410→        </h4>
+   411→        <div className="grid grid-cols-2 gap-3">
+   412→          <div className="grid gap-2">
+   413→            <Label className="text-foreground text-xs">Crop Variety</Label>
+   414→            <Input
+   415→              className="glass-input text-foreground"
+   416→              placeholder="e.g. 1121, Alphonso"
+   417→              value={formData.cropVariety}
+   418→              onChange={(e) => setField('cropVariety', e.target.value)}
+   419→            />
+   420→          </div>
+   421→          <div className="grid gap-2">
+   422→            <Label className="text-foreground text-xs">Harvest Date</Label>
+   423→            <Input
+   424→              type="date"
+   425→              className="glass-input text-foreground"
+   426→              value={formData.harvestDate}
+   427→              onChange={(e) => setField('harvestDate', e.target.value)}
+   428→            />
+   429→          </div>
+   430→        </div>
+   431→        <div className="grid grid-cols-2 gap-3">
+   432→          <div className="grid gap-2">
+   433→            <Label className="text-foreground text-xs">Freshness</Label>
+   434→            <Select value={formData.freshness} onValueChange={(v) => setField('freshness', v)}>
+   435→              <SelectTrigger className="glass-input text-foreground">
+   436→                <SelectValue placeholder="Select" />
+   437→              </SelectTrigger>
+   438→              <SelectContent>
+   439→                <SelectItem value="Fresh">Fresh</SelectItem>
+   440→                <SelectItem value="Recently Harvested">Recently Harvested</SelectItem>
+   441→                <SelectItem value="Stored">Stored</SelectItem>
+   442→              </SelectContent>
+   443→            </Select>
+   444→          </div>
+   445→          <div className="grid gap-2">
+   446→            <Label className="text-foreground text-xs">Is Organic</Label>
+   447→            <div className="flex items-center gap-3 h-10">
+   448→              <Switch
+   449→                checked={formData.isOrganic}
+   450→                onCheckedChange={(checked) => setField('isOrganic', checked)}
+   451→              />
+   452→              <span className="text-sm text-foreground">{formData.isOrganic ? 'Yes' : 'No'}</span>
+   453→            </div>
+   454→          </div>
+   455→        </div>
+   456→        <div className="grid grid-cols-2 gap-3">
+   457→          <div className="grid gap-2">
+   458→            <Label className="text-foreground text-xs">Pesticides Used</Label>
+   459→            <Input
+   460→              className="glass-input text-foreground"
+   461→              placeholder="e.g. Neem-based"
+   462→              value={formData.pesticidesUsed}
+   463→              onChange={(e) => setField('pesticidesUsed', e.target.value)}
+   464→            />
+   465→          </div>
+   466→          <div className="grid gap-2">
+   467→            <Label className="text-foreground text-xs">Moisture Content</Label>
+   468→            <Input
+   469→              className="glass-input text-foreground"
+   470→              placeholder="e.g. 12%"
+   471→              value={formData.moistureContent}
+   472→              onChange={(e) => setField('moistureContent', e.target.value)}
+   473→            />
+   474→          </div>
+   475→        </div>
+   476→        <div className="grid grid-cols-2 gap-3">
+   477→          <div className="grid gap-2">
+   478→            <Label className="text-foreground text-xs">Shelf Life</Label>
+   479→            <Input
+   480→              className="glass-input text-foreground"
+   481→              placeholder="e.g. 6 months"
+   482→              value={formData.shelfLife}
+   483→              onChange={(e) => setField('shelfLife', e.target.value)}
+   484→            />
+   485→          </div>
+   486→          <div className="grid gap-2">
+   487→            <Label className="text-foreground text-xs">Storage Condition</Label>
+   488→            <Input
+   489→              className="glass-input text-foreground"
+   490→              placeholder="e.g. Cool, dry place"
+   491→              value={formData.storageCondition}
+   492→              onChange={(e) => setField('storageCondition', e.target.value)}
+   493→            />
+   494→          </div>
+   495→        </div>
+   496→      </div>
+   497→
+   498→      <div className="border-t border-glass-border" />
+   499→
+   500→      {/* Certifications */}
+   501→      <div className="space-y-3">
+   502→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   503→          <Shield className="h-4 w-4" /> Certifications
+   504→        </h4>
+   505→        <div className="grid gap-2">
+   506→          <Label className="text-foreground text-xs">Product Certifications</Label>
+   507→          <Input
+   508→            className="glass-input text-foreground"
+   509→            placeholder="e.g. FSSAI, APEDA, Organic India (comma separated)"
+   510→            value={formData.certifications}
+   511→            onChange={(e) => setField('certifications', e.target.value)}
+   512→          />
+   513→        </div>
+   514→      </div>
+   515→
+   516→      <div className="border-t border-glass-border" />
+   517→
+   518→      {/* Description */}
+   519→      <div className="space-y-3">
+   520→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   521→          <FileText className="h-4 w-4" /> Description
+   522→        </h4>
+   523→        <div className="grid gap-2">
+   524→          <Textarea
+   525→            className="glass-input text-foreground min-h-[80px]"
+   526→            placeholder="Describe your product..."
+   527→            value={formData.description}
+   528→            onChange={(e) => setField('description', e.target.value)}
+   529→          />
+   530→        </div>
+   531→      </div>
+   532→    </div>
+   533→  )
+   534→}
+   535→
+   536→// ─── Inline Create Shipment Dialog Content ───────────────────────────────────
+   537→function CreateShipmentDialogContent({
+   538→  selectedOrder,
+   539→  user,
+   540→  onClose,
+   541→  onSubmit,
+   542→  submitting,
+   543→}: {
+   544→  selectedOrder: any
+   545→  user: any
+   546→  onClose: () => void
+   547→  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+   548→  submitting: boolean
+   549→}) {
+   550→  const [transporterOption, setTransporterOption] = useState<'platform' | 'external'>('platform')
+   551→  const [transporters, setTransporters] = useState<any[]>([])
+   552→  const [selectedTransporterId, setSelectedTransporterId] = useState<string>('')
+   553→  const [budgetRange, setBudgetRange] = useState({ min: '', max: '' })
+   554→  const [externalForm, setExternalForm] = useState({
+   555→    transporterName: '',
+   556→    companyName: '',
+   557→    driverName: '',
+   558→    vehicleNumber: '',
+   559→    mobileNumber: '',
+   560→    estimatedPickupDate: '',
+   561→    estimatedDeliveryDate: '',
+   562→  })
+   563→
+   564→  // Fetch transporters on mount
+   565→  useEffect(() => {
+   566→    fetch('/api/users?role=transporter')
+   567→      .then((r) => r.json())
+   568→      .then((data) => {
+   569→        if (data.users) setTransporters(data.users)
+   570→      })
+   571→      .catch(() => toast.error('Failed to load transporters'))
+   572→  }, [])
+   573→
+   574→  const handleSubmit = async () => {
+   575→    if (transporterOption === 'platform' && !selectedTransporterId) {
+   576→      toast.error('Please select a transporter')
+   577→      return
+   578→    }
+   579→    if (transporterOption === 'external') {
+   580→      if (!externalForm.transporterName || !externalForm.driverName || !externalForm.vehicleNumber || !externalForm.mobileNumber) {
+   581→        toast.error('Please fill all required external transporter fields')
+   582→        return
+   583→      }
+   584→    }
+   585→
+   586→    const order = selectedOrder
+   587→    const pickupAddress =
+   588→      user.farmLocation || [user.city, user.state].filter(Boolean).join(', ') || order.product?.location || ''
+   589→    const deliveryAddress =
+   590→      order.deliveryFullAddress ||
+   591→      [order.deliveryAddress, order.deliveryCity, order.deliveryState].filter(Boolean).join(', ') ||
+   592→      [order.buyer?.city, order.buyer?.state].filter(Boolean).join(', ') ||
+   593→      ''
+   594→
+   595→    const shipmentData: Record<string, unknown> = {
+   596→      orderId: order.id,
+   597→      origin: pickupAddress,
+   598→      destination: deliveryAddress,
+   599→      exactPickupAddress: pickupAddress,
+   600→      exactDropAddress: deliveryAddress,
+   601→      expectedPickupDate:
+   602→        transporterOption === 'external' && externalForm.estimatedPickupDate
+   603→          ? new Date(externalForm.estimatedPickupDate).toISOString()
+   604→          : null,
+   605→      budgetMin: budgetRange.min ? parseFloat(budgetRange.min) : null,
+   606→      budgetMax: budgetRange.max ? parseFloat(budgetRange.max) : null,
+   607→    }
+   608→
+   609→    if (transporterOption === 'platform') {
+   610→      shipmentData.transporterId = selectedTransporterId
+   611→      shipmentData.status = 'assigned'
+   612→    } else {
+   613→      shipmentData.isExternal = true
+   614→      shipmentData.externalTransporterName = externalForm.transporterName
+   615→      shipmentData.externalCompanyName = externalForm.companyName || null
+   616→      shipmentData.driverName = externalForm.driverName
+   617→      shipmentData.vehicleNumber = externalForm.vehicleNumber
+   618→      shipmentData.driverPhone = externalForm.mobileNumber
+   619→      shipmentData.expectedDeliveryDate = externalForm.estimatedDeliveryDate
+   620→        ? new Date(externalForm.estimatedDeliveryDate).toISOString()
+   621→        : null
+   622→      shipmentData.status = 'assigned'
+   623→    }
+   624→
+   625→    await onSubmit(shipmentData)
+   626→    onClose()
+   627→  }
+   628→
+   629→  return (
+   630→    <>
+   631→      <DialogHeader>
+   632→        <DialogTitle className="text-foreground">Create Shipment</DialogTitle>
+   633→        <DialogDescription className="text-muted-foreground">
+   634→          {selectedOrder && (
+   635→            <>
+   636→              Order: {selectedOrder.product?.name || 'N/A'} &bull; {selectedOrder.quantity}{' '}
+   637→              {selectedOrder.product?.unit || ''}
+   638→            </>
+   639→          )}
+   640→        </DialogDescription>
+   641→      </DialogHeader>
+   642→
+   643→      <div className="grid gap-5 py-4">
+   644→        {/* Pickup & Delivery Info (auto-filled) */}
+   645→        <div className="space-y-3">
+   646→          <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   647→            <MapPin className="h-4 w-4" /> Addresses (Auto-filled)
+   648→          </h4>
+   649→          <div className="grid gap-2">
+   650→            <div className="glass-card p-3 border border-emerald-500/15">
+   651→              <p className="text-[10px] text-muted-foreground mb-0.5">Pickup Location (Your Address)</p>
+   652→              <p className="text-xs text-foreground font-medium">
+   653→                {user?.farmLocation ||
+   654→                  [user?.city, user?.state].filter(Boolean).join(', ') ||
+   655→                  selectedOrder?.product?.location ||
+   656→                  'Not set'}
+   657→              </p>
+   658→            </div>
+   659→            <div className="glass-card p-3 border border-teal-500/15">
+   660→              <p className="text-[10px] text-muted-foreground mb-0.5">Delivery Address (Buyer)</p>
+   661→              <p className="text-xs text-foreground font-medium">
+   662→                {selectedOrder?.deliveryFullAddress ||
+   663→                  [selectedOrder?.deliveryAddress, selectedOrder?.deliveryCity, selectedOrder?.deliveryState]
+   664→                    .filter(Boolean)
+   665→                    .join(', ') ||
+   666→                  [selectedOrder?.buyer?.city, selectedOrder?.buyer?.state].filter(Boolean).join(', ') ||
+   667→                  'Not set'}
+   668→              </p>
+   669→            </div>
+   670→          </div>
+   671→        </div>
+   672→
+   673→        <div className="border-t border-glass-border" />
+   674→
+   675→        {/* Budget Range */}
+   676→        <div className="space-y-3">
+   677→          <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   678→            <IndianRupee className="h-4 w-4" /> Budget Range (Transport Cost)
+   679→          </h4>
+   680→          <div className="grid grid-cols-2 gap-3">
+   681→            <div className="grid gap-2">
+   682→              <Label className="text-foreground text-xs">Min Budget (₹)</Label>
+   683→              <Input
+   684→                type="number"
+   685→                className="glass-input text-foreground"
+   686→                placeholder="1000"
+   687→                value={budgetRange.min}
+   688→                onChange={(e) => setBudgetRange((p) => ({ ...p, min: e.target.value }))}
+   689→              />
+   690→            </div>
+   691→            <div className="grid gap-2">
+   692→              <Label className="text-foreground text-xs">Max Budget (₹)</Label>
+   693→              <Input
+   694→                type="number"
+   695→                className="glass-input text-foreground"
+   696→                placeholder="5000"
+   697→                value={budgetRange.max}
+   698→                onChange={(e) => setBudgetRange((p) => ({ ...p, max: e.target.value }))}
+   699→              />
+   700→            </div>
+   701→          </div>
+   702→        </div>
+   703→
+   704→        <div className="border-t border-glass-border" />
+   705→
+   706→        {/* Transporter Option Toggle */}
+   707→        <div className="space-y-3">
+   708→          <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   709→            <Truck className="h-4 w-4" /> Transporter
+   710→          </h4>
+   711→          <div className="flex gap-2">
+   712→            <button
+   713→              type="button"
+   714→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   715→                transporterOption === 'platform'
+   716→                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+   717→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   718→              }`}
+   719→              onClick={() => setTransporterOption('platform')}
+   720→            >
+   721→              <Building2 className="h-4 w-4 mx-auto mb-1" />
+   722→              AgroBridge Transporters
+   723→            </button>
+   724→            <button
+   725→              type="button"
+   726→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   727→                transporterOption === 'external'
+   728→                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+   729→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   730→              }`}
+   731→              onClick={() => setTransporterOption('external')}
+   732→            >
+   733→              <User className="h-4 w-4 mx-auto mb-1" />
+   734→              Own Transporter
+   735→            </button>
+   736→          </div>
+   737→
+   738→          {/* Platform Transporters List */}
+   739→          {transporterOption === 'platform' && (
+   740→            <div className="space-y-3 max-h-60 overflow-y-auto">
+   741→              {transporters.length === 0 ? (
+   742→                <div className="glass-card p-4 text-center">
+   743→                  <p className="text-xs text-muted-foreground">Loading transporters...</p>
+   744→                </div>
+   745→              ) : (
+   746→                transporters.map((t: any) => (
+   747→                  <button
+   748→                    key={t.id}
+   749→                    type="button"
+   750→                    className={`w-full glass-card p-3 text-left transition-all ${
+   751→                      selectedTransporterId === t.id
+   752→                        ? 'border-emerald-500/40 bg-emerald-500/5'
+   753→                        : 'hover:border-white/20'
+   754→                    }`}
+   755→                    onClick={() => setSelectedTransporterId(t.id)}
+   756→                  >
+   757→                    <div className="flex items-center gap-3">
+   758→                      <Avatar className="h-8 w-8 border border-glass-border">
+   759→                        <AvatarFallback className="bg-teal-500/20 text-teal-400 text-[10px] font-semibold">
+   760→                          {(t.name || t.companyName || 'T').slice(0, 2).toUpperCase()}
+   761→                        </AvatarFallback>
+   762→                      </Avatar>
+   763→                      <div className="flex-1 min-w-0">
+   764→                        <p className="text-sm font-medium text-foreground truncate">
+   765→                          {t.companyName || t.name}
+   766→                        </p>
+   767→                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+   768→                          {t.city && <span>{t.city}</span>}
+   769→                          {t.avgRating && (
+   770→                            <span className="flex items-center gap-0.5">
+   771→                              <Star className="h-2.5 w-2.5 text-amber-400" /> {t.avgRating.toFixed(1)}
+   772→                            </span>
+   773→                          )}
+   774→                          <span>{t._count?.shipmentsAsTransporter || 0} shipments</span>
+   775→                        </div>
+   776→                      </div>
+   777→                      {selectedTransporterId === t.id && (
+   778→                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+   779→                      )}
+   780→                    </div>
+   781→                  </button>
+   782→                ))
+   783→              )}
+   784→            </div>
+   785→          )}
+   786→
+   787→          {/* External Transporter Form */}
+   788→          {transporterOption === 'external' && (
+   789→            <div className="space-y-3">
+   790→              <p className="text-xs text-muted-foreground bg-purple-500/10 p-2 rounded-lg border border-purple-500/20">
+   791→                No logistics commission is charged when using your own transporter. The shipment will
+   792→                still be tracked within AgroBridge.
+   793→              </p>
+   794→              <div className="grid grid-cols-2 gap-3">
+   795→                <div className="grid gap-2">
+   796→                  <Label className="text-foreground text-xs">Transporter Name *</Label>
+   797→                  <Input
+   798→                    className="glass-input text-foreground"
+   799→                    placeholder="e.g. Sharma Logistics"
+   800→                    value={externalForm.transporterName}
+   801→                    onChange={(e) =>
+   802→                      setExternalForm((p) => ({ ...p, transporterName: e.target.value }))
+   803→                    }
+   804→                  />
+   805→                </div>
+   806→                <div className="grid gap-2">
+   807→                  <Label className="text-foreground text-xs">Company Name</Label>
+   808→                  <Input
+   809→                    className="glass-input text-foreground"
+   810→                    placeholder="Optional"
+   811→                    value={externalForm.companyName}
+   812→                    onChange={(e) =>
+   813→                      setExternalForm((p) => ({ ...p, companyName: e.target.value }))
+   814→                    }
+   815→                  />
+   816→                </div>
+   817→              </div>
+   818→              <div className="grid grid-cols-2 gap-3">
+   819→                <div className="grid gap-2">
+   820→                  <Label className="text-foreground text-xs">Driver Name *</Label>
+   821→                  <Input
+   822→                    className="glass-input text-foreground"
+   823→                    placeholder="e.g. Raj Kumar"
+   824→                    value={externalForm.driverName}
+   825→                    onChange={(e) =>
+   826→                      setExternalForm((p) => ({ ...p, driverName: e.target.value }))
+   827→                    }
+   828→                  />
+   829→                </div>
+   830→                <div className="grid gap-2">
+   831→                  <Label className="text-foreground text-xs">Vehicle Number *</Label>
+   832→                  <Input
+   833→                    className="glass-input text-foreground"
+   834→                    placeholder="e.g. MH12AB1234"
+   835→                    value={externalForm.vehicleNumber}
+   836→                    onChange={(e) =>
+   837→                      setExternalForm((p) => ({ ...p, vehicleNumber: e.target.value }))
+   838→                    }
+   839→                  />
+   840→                </div>
+   841→              </div>
+   842→              <div className="grid grid-cols-2 gap-3">
+   843→                <div className="grid gap-2">
+   844→                  <Label className="text-foreground text-xs">Mobile Number *</Label>
+   845→                  <Input
+   846→                    className="glass-input text-foreground"
+   847→                    placeholder="e.g. 9876543210"
+   848→                    value={externalForm.mobileNumber}
+   849→                    onChange={(e) =>
+   850→                      setExternalForm((p) => ({ ...p, mobileNumber: e.target.value }))
+   851→                    }
+   852→                  />
+   853→                </div>
+   854→                <div className="grid gap-2">
+   855→                  <Label className="text-foreground text-xs">Estimated Pickup Date *</Label>
+   856→                  <Input
+   857→                    type="date"
+   858→                    className="glass-input text-foreground"
+   859→                    value={externalForm.estimatedPickupDate}
+   860→                    onChange={(e) =>
+   861→                      setExternalForm((p) => ({ ...p, estimatedPickupDate: e.target.value }))
+   862→                    }
+   863→                  />
+   864→                </div>
+   865→              </div>
+   866→              <div className="grid grid-cols-2 gap-3">
+   867→                <div className="grid gap-2">
+   868→                  <Label className="text-foreground text-xs">Estimated Delivery Date</Label>
+   869→                  <Input
+   870→                    type="date"
+   871→                    className="glass-input text-foreground"
+   872→                    value={externalForm.estimatedDeliveryDate}
+   873→                    onChange={(e) =>
+   874→                      setExternalForm((p) => ({ ...p, estimatedDeliveryDate: e.target.value }))
+   875→                    }
+   876→                  />
+   877→                </div>
+   878→              </div>
+   879→            </div>
+   880→          )}
+   881→        </div>
+   882→      </div>
+   883→
+   884→      <DialogFooter>
+   885→        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+   886→          Cancel
+   887→        </Button>
+   888→        <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={handleSubmit} disabled={submitting}>
+   889→          {submitting ? (
+   890→            <>
+   891→              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+   892→              Creating...
+   893→            </>
+   894→          ) : (
+   895→            'Create Shipment'
+   896→          )}
+   897→        </Button>
+   898→      </DialogFooter>
+   899→    </>
+   900→  )
+   901→}
+   902→
+   903→// ─── Reassign Transporter Dialog Content ──────────────────────────────────────
+   904→function ReassignTransporterDialogContent({
+   905→  shipment,
+   906→  onClose,
+   907→  onSubmit,
+   908→  submitting,
+   909→}: {
+   910→  shipment: any
+   911→  onClose: () => void
+   912→  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+   913→  submitting: boolean
+   914→}) {
+   915→  const [transporterOption, setTransporterOption] = useState<'platform' | 'external'>('platform')
+   916→  const [transporters, setTransporters] = useState<any[]>([])
+   917→  const [selectedTransporterId, setSelectedTransporterId] = useState<string>('')
+   918→  const [externalForm, setExternalForm] = useState({
+   919→    transporterName: '',
+   920→    companyName: '',
+   921→    driverName: '',
+   922→    vehicleNumber: '',
+   923→    mobileNumber: '',
+   924→  })
+   925→
+   926→  // Fetch transporters on mount
+   927→  useEffect(() => {
+   928→    fetch('/api/users?role=transporter')
+   929→      .then((r) => r.json())
+   930→      .then((data) => {
+   931→        if (data.users) {
+   932→          // Filter out the current transporter if it's a platform transporter
+   933→          const currentTransporterId = shipment.transporterId
+   934→          const filtered = currentTransporterId
+   935→            ? data.users.filter((t: any) => t.id !== currentTransporterId)
+   936→            : data.users
+   937→          setTransporters(filtered)
+   938→        }
+   939→      })
+   940→      .catch(() => toast.error('Failed to load transporters'))
+   941→  }, [shipment.transporterId])
+   942→
+   943→  const handleSubmit = async () => {
+   944→    if (transporterOption === 'platform' && !selectedTransporterId) {
+   945→      toast.error('Please select a new transporter')
+   946→      return
+   947→    }
+   948→    if (transporterOption === 'external') {
+   949→      if (!externalForm.transporterName || !externalForm.driverName || !externalForm.vehicleNumber || !externalForm.mobileNumber) {
+   950→        toast.error('Please fill all required external transporter fields')
+   951→        return
+   952→      }
+   953→    }
+   954→
+   955→    const reassignData: Record<string, unknown> = {
+   956→      shipmentId: shipment.id,
+   957→    }
+   958→
+   959→    if (transporterOption === 'platform') {
+   960→      reassignData.transporterId = selectedTransporterId
+   961→    } else {
+   962→      reassignData.isExternal = true
+   963→      reassignData.externalTransporterName = externalForm.transporterName
+   964→      reassignData.externalCompanyName = externalForm.companyName || null
+   965→      reassignData.externalDriverName = externalForm.driverName
+   966→      reassignData.externalVehicleNumber = externalForm.vehicleNumber
+   967→      reassignData.externalMobileNumber = externalForm.mobileNumber
+   968→      reassignData.driverName = externalForm.driverName
+   969→      reassignData.vehicleNumber = externalForm.vehicleNumber
+   970→      reassignData.driverPhone = externalForm.mobileNumber
+   971→    }
+   972→
+   973→    await onSubmit(reassignData)
+   974→    onClose()
+   975→  }
+   976→
+   977→  return (
+   978→    <>
+   979→      <DialogHeader>
+   980→        <DialogTitle className="text-foreground flex items-center gap-2">
+   981→          <ArrowRightLeft className="h-5 w-5 text-amber-400" />
+   982→          Reassign Transporter
+   983→        </DialogTitle>
+   984→        <DialogDescription className="text-muted-foreground">
+   985→          {shipment && (
+   986→            <>
+   987→              Shipment for {shipment.order?.product?.name || 'N/A'} — Current status:{' '}
+   988→              <span className="text-amber-400 font-medium">{(shipment.status || '').replace('_', ' ')}</span>
+   989→              {shipment.transporter?.name && (
+   990→                <span className="text-muted-foreground"> (was: {shipment.transporter.name})</span>
+   991→              )}
+   992→            </>
+   993→          )}
+   994→        </DialogDescription>
+   995→      </DialogHeader>
+   996→
+   997→      <div className="grid gap-5 py-4">
+   998→        {/* Current transporter info */}
+   999→        {(shipment.transporterId || shipment.isExternal || shipment.isExternalTransporter) && (
+  1000→          <div className="glass-card p-3 border border-red-500/20 bg-red-500/5">
+  1001→            <p className="text-[10px] text-red-400 font-semibold mb-1">Current Transporter (to be replaced)</p>
+  1002→            <p className="text-xs text-foreground font-medium">
+  1003→              {shipment.isExternal || shipment.isExternalTransporter
+  1004→                ? shipment.externalCompanyName || shipment.externalTransporterName || 'External Transporter'
+  1005→                : shipment.transporter?.companyName || shipment.transporter?.name || 'Platform Transporter'}
+  1006→            </p>
+  1007→          </div>
+  1008→        )}
+  1009→
+  1010→        <div className="border-t border-glass-border" />
+  1011→
+  1012→        {/* Transporter Option Toggle */}
+  1013→        <div className="space-y-3">
+  1014→          <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+  1015→            <Truck className="h-4 w-4" /> Select New Transporter
+  1016→          </h4>
+  1017→          <div className="flex gap-2">
+  1018→            <button
+  1019→              type="button"
+  1020→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+  1021→                transporterOption === 'platform'
+  1022→                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+  1023→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+  1024→              }`}
+  1025→              onClick={() => setTransporterOption('platform')}
+  1026→            >
+  1027→              <Building2 className="h-4 w-4 mx-auto mb-1" />
+  1028→              AgroBridge Transporters
+  1029→            </button>
+  1030→            <button
+  1031→              type="button"
+  1032→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+  1033→                transporterOption === 'external'
+  1034→                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+  1035→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+  1036→              }`}
+  1037→              onClick={() => setTransporterOption('external')}
+  1038→            >
+  1039→              <User className="h-4 w-4 mx-auto mb-1" />
+  1040→              External Transporter
+  1041→            </button>
+  1042→          </div>
+  1043→
+  1044→          {/* Platform Transporters List */}
+  1045→          {transporterOption === 'platform' && (
+  1046→            <div className="space-y-3 max-h-60 overflow-y-auto">
+  1047→              {transporters.length === 0 ? (
+  1048→                <div className="glass-card p-4 text-center">
+  1049→                  <p className="text-xs text-muted-foreground">No other transporters available</p>
+  1050→                </div>
+  1051→              ) : (
+  1052→                transporters.map((t: any) => (
+  1053→                  <button
+  1054→                    key={t.id}
+  1055→                    type="button"
+  1056→                    className={`w-full glass-card p-3 text-left transition-all ${
+  1057→                      selectedTransporterId === t.id
+  1058→                        ? 'border-emerald-500/40 bg-emerald-500/5'
+  1059→                        : 'hover:border-white/20'
+  1060→                    }`}
+  1061→                    onClick={() => setSelectedTransporterId(t.id)}
+  1062→                  >
+  1063→                    <div className="flex items-center gap-3">
+  1064→                      <Avatar className="h-8 w-8 border border-glass-border">
+  1065→                        <AvatarFallback className="bg-teal-500/20 text-teal-400 text-[10px] font-semibold">
+  1066→                          {(t.name || t.companyName || 'T').slice(0, 2).toUpperCase()}
+  1067→                        </AvatarFallback>
+  1068→                      </Avatar>
+  1069→                      <div className="flex-1 min-w-0">
+  1070→                        <p className="text-sm font-medium text-foreground truncate">
+  1071→                          {t.companyName || t.name}
+  1072→                        </p>
+  1073→                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+  1074→                          {t.city && <span>{t.city}</span>}
+  1075→                          {t.avgRating && (
+  1076→                            <span className="flex items-center gap-0.5">
+  1077→                              <Star className="h-2.5 w-2.5 text-amber-400" /> {t.avgRating.toFixed(1)}
+  1078→                            </span>
+  1079→                          )}
+  1080→                          <span>{t._count?.shipmentsAsTransporter || 0} shipments</span>
+  1081→                        </div>
+  1082→                      </div>
+  1083→                      {selectedTransporterId === t.id && (
+  1084→                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+  1085→                      )}
+  1086→                    </div>
+  1087→                  </button>
+  1088→                ))
+  1089→              )}
+  1090→            </div>
+  1091→          )}
+  1092→
+  1093→          {/* External Transporter Form */}
+  1094→          {transporterOption === 'external' && (
+  1095→            <div className="space-y-3">
+  1096→              <p className="text-xs text-muted-foreground bg-purple-500/10 p-2 rounded-lg border border-purple-500/20">
+  1097→                No logistics commission is charged for external transporters. The shipment will
+  1098→                still be tracked within AgroBridge.
+  1099→              </p>
+  1100→              <div className="grid grid-cols-2 gap-3">
+  1101→                <div className="grid gap-2">
+  1102→                  <Label className="text-foreground text-xs">Transporter Name *</Label>
+  1103→                  <Input
+  1104→                    className="glass-input text-foreground"
+  1105→                    placeholder="e.g. Sharma Logistics"
+  1106→                    value={externalForm.transporterName}
+  1107→                    onChange={(e) =>
+  1108→                      setExternalForm((p) => ({ ...p, transporterName: e.target.value }))
+  1109→                    }
+  1110→                  />
+  1111→                </div>
+  1112→                <div className="grid gap-2">
+  1113→                  <Label className="text-foreground text-xs">Company Name</Label>
+  1114→                  <Input
+  1115→                    className="glass-input text-foreground"
+  1116→                    placeholder="Optional"
+  1117→                    value={externalForm.companyName}
+  1118→                    onChange={(e) =>
+  1119→                      setExternalForm((p) => ({ ...p, companyName: e.target.value }))
+  1120→                    }
+  1121→                  />
+  1122→                </div>
+  1123→              </div>
+  1124→              <div className="grid grid-cols-2 gap-3">
+  1125→                <div className="grid gap-2">
+  1126→                  <Label className="text-foreground text-xs">Driver Name *</Label>
+  1127→                  <Input
+  1128→                    className="glass-input text-foreground"
+  1129→                    placeholder="e.g. Raj Kumar"
+  1130→                    value={externalForm.driverName}
+  1131→                    onChange={(e) =>
+  1132→                      setExternalForm((p) => ({ ...p, driverName: e.target.value }))
+  1133→                    }
+  1134→                  />
+  1135→                </div>
+  1136→                <div className="grid gap-2">
+  1137→                  <Label className="text-foreground text-xs">Vehicle Number *</Label>
+  1138→                  <Input
+  1139→                    className="glass-input text-foreground"
+  1140→                    placeholder="e.g. MH12AB1234"
+  1141→                    value={externalForm.vehicleNumber}
+  1142→                    onChange={(e) =>
+  1143→                      setExternalForm((p) => ({ ...p, vehicleNumber: e.target.value }))
+  1144→                    }
+  1145→                  />
+  1146→                </div>
+  1147→              </div>
+  1148→              <div className="grid gap-2">
+  1149→                <Label className="text-foreground text-xs">Mobile Number *</Label>
+  1150→                <Input
+  1151→                  className="glass-input text-foreground"
+  1152→                  placeholder="e.g. 9876543210"
+  1153→                  value={externalForm.mobileNumber}
+  1154→                  onChange={(e) =>
+  1155→                    setExternalForm((p) => ({ ...p, mobileNumber: e.target.value }))
+  1156→                  }
+  1157→                />
+  1158→              </div>
+  1159→            </div>
+  1160→          )}
+  1161→        </div>
+  1162→      </div>
+  1163→
+  1164→      <DialogFooter>
+  1165→        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+  1166→          Cancel
+  1167→        </Button>
+  1168→        <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleSubmit} disabled={submitting}>
+  1169→          {submitting ? (
+  1170→            <>
+  1171→              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+  1172→              Reassigning...
+  1173→            </>
+  1174→          ) : (
+  1175→            <>
+  1176→              <ArrowRightLeft className="h-4 w-4 mr-1" /> Reassign Transporter
+  1177→            </>
+  1178→          )}
+  1179→        </Button>
+  1180→      </DialogFooter>
+  1181→    </>
+  1182→  )
+  1183→}
+  1184→
+  1185→// ═══════════════════════════════════════════════════════════════════════════════
+  1186→// ─── Main Producer Dashboard Component ────────────────────────────────────────
+  1187→// ═══════════════════════════════════════════════════════════════════════════════
+  1188→export function ProducerDashboard({ tab }: ProducerDashboardProps) {
+  1189→  const { user, setChatOpen, setActiveChatUser, setDashboardTab } = useAppStore()
+  1190→
+  1191→  // Core data state
+  1192→  const [orders, setOrders] = useState<any[]>([])
+  1193→  const [products, setProducts] = useState<any[]>([])
+  1194→  const [loading, setLoading] = useState(true)
+  1195→
+  1196→  // Add listing dialog state
+  1197→  const [addListingOpen, setAddListingOpen] = useState(false)
+  1198→  const [isSubmitting, setIsSubmitting] = useState(false)
+  1199→  const [formData, setFormData] = useState<Record<string, any>>({
+  1200→    name: '',
+  1201→    category: '',
+  1202→    description: '',
+  1203→    quantity: '',
+  1204→    unit: 'kg',
+  1205→    pricePerUnit: '',
+  1206→    minOrderQty: '',
+  1207→    location: '',
+  1208→    state: '',
+  1209→    qualityGrade: 'A',
+  1210→    imageUrl: '',
+  1211→    cropVariety: '',
+  1212→    harvestDate: '',
+  1213→    freshness: '',
+  1214→    isOrganic: false,
+  1215→    pesticidesUsed: '',
+  1216→    moistureContent: '',
+  1217→    shelfLife: '',
+  1218→    storageCondition: '',
+  1219→    certifications: '',
+  1220→  })
+  1221→
+  1222→  // Shipment tracking state
+  1223→  const [shipments, setShipments] = useState<any[]>([])
+  1224→  const [trackingShipment, setTrackingShipment] = useState<any>(null)
+  1225→  const [trackerOpen, setTrackerOpen] = useState(false)
+  1226→
+  1227→  // Inline quantity edit state
+  1228→  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
+  1229→  const [editQtyValue, setEditQtyValue] = useState<string>('')
+  1230→
+  1231→  // Create shipment dialog state
+  1232→  const [createShipmentOpen, setCreateShipmentOpen] = useState(false)
+  1233→  const [selectedOrderForShipment, setSelectedOrderForShipment] = useState<any>(null)
+  1234→  const [shipmentSubmitting, setShipmentSubmitting] = useState(false)
+  1235→
+  1236→  // Reassign transporter dialog state
+  1237→  const [reassignOpen, setReassignOpen] = useState(false)
+  1238→  const [reassignShipment, setReassignShipment] = useState<any>(null)
+  1239→  const [reassignSubmitting, setReassignSubmitting] = useState(false)
+  1240→
+  1241→  // ─── Data Fetching ──────────────────────────────────────────────────────────
+  1242→  const fetchData = useCallback(async () => {
+  1243→    if (!user) return
+  1244→    setLoading(true)
+  1245→    try {
+  1246→      const [ordersRes, productsRes] = await Promise.all([
+  1247→        fetch(`/api/orders?userId=${user.id}&role=producer`),
+  1248→        fetch(`/api/products?sellerId=${user.id}`),
+  1249→      ])
+  1250→      const ordersData = await ordersRes.json()
+  1251→      const productsData = await productsRes.json()
+  1252→      if (ordersData.orders) setOrders(ordersData.orders)
+  1253→      if (productsData.products) setProducts(productsData.products)
+  1254→
+  1255→      // Fetch shipments for this producer's orders
+  1256→      const shipRes = await fetch('/api/shipments')
+  1257→      const shipData = await shipRes.json()
+  1258→      const allShipments = shipData.shipments || []
+  1259→      const myOrderIds = new Set((ordersData.orders || []).map((o: any) => o.id))
+  1260→      const myShips = allShipments.filter((s: any) => myOrderIds.has(s.orderId))
+  1261→      setShipments(myShips)
+  1262→    } catch {
+  1263→      toast.error('Failed to load data')
+  1264→    } finally {
+  1265→      setLoading(false)
+  1266→    }
+  1267→  }, [user])
+  1268→
+  1269→  useEffect(() => {
+  1270→    fetchData()
+  1271→  }, [fetchData])
+  1272→
+  1273→  // ─── Handlers ───────────────────────────────────────────────────────────────
+  1274→  const resetFormData = () => {
+  1275→    setFormData({
+  1276→      name: '',
+  1277→      category: '',
+  1278→      description: '',
+  1279→      quantity: '',
+  1280→      unit: 'kg',
+  1281→      pricePerUnit: '',
+  1282→      minOrderQty: '',
+  1283→      location: '',
+  1284→      state: '',
+  1285→      qualityGrade: 'A',
+  1286→      imageUrl: '',
+  1287→      cropVariety: '',
+  1288→      harvestDate: '',
+  1289→      freshness: '',
+  1290→      isOrganic: false,
+  1291→      pesticidesUsed: '',
+  1292→      moistureContent: '',
+  1293→      shelfLife: '',
+  1294→      storageCondition: '',
+  1295→      certifications: '',
+  1296→    })
+  1297→  }
+  1298→
+  1299→  const handleAddListing = async () => {
+  1300→    if (!user) return
+  1301→    setIsSubmitting(true)
+  1302→    try {
+  1303→      const res = await fetch('/api/products', {
+  1304→        method: 'POST',
+  1305→        headers: { 'Content-Type': 'application/json' },
+  1306→        body: JSON.stringify({ sellerId: user.id, ...formData }),
+  1307→      })
+  1308→      if (res.ok) {
+  1309→        toast.success('Listing created successfully!')
+  1310→        setAddListingOpen(false)
+  1311→        resetFormData()
+  1312→        fetchData()
+  1313→      } else {
+  1314→        toast.error('Failed to create listing')
+  1315→      }
+  1316→    } catch {
+  1317→      toast.error('Failed to create listing')
+  1318→    } finally {
+  1319→      setIsSubmitting(false)
+  1320→    }
+  1321→  }
+  1322→
+  1323→  const handleOrderAction = async (orderId: string, status: string) => {
+  1324→    try {
+  1325→      const res = await fetch('/api/orders', {
+  1326→        method: 'PATCH',
+  1327→        headers: { 'Content-Type': 'application/json' },
+  1328→        body: JSON.stringify({ orderId, status }),
+  1329→      })
+  1330→      if (res.ok) {
+  1331→        toast.success(`Order ${status === 'confirmed' ? 'accepted' : 'rejected'}`)
+  1332→        fetchData()
+  1333→      } else {
+  1334→        toast.error('Failed to update order')
+  1335→      }
+  1336→    } catch {
+  1337→      toast.error('Failed to update order')
+  1338→    }
+  1339→  }
+  1340→
+  1341→  const handleTrackShipment = (shipment: any) => {
+  1342→    setTrackingShipment(shipment)
+  1343→    setTrackerOpen(true)
+  1344→  }
+  1345→
+  1346→  const getShipmentForOrder = (orderId: string) => {
+  1347→    return shipments.find((s: any) => s.orderId === orderId)
+  1348→  }
+  1349→
+  1350→  // Inline quantity edit
+  1351→  const handleStartEditQty = (productId: string, currentQty: number) => {
+  1352→    setEditingQtyId(productId)
+  1353→    setEditQtyValue(String(currentQty))
+  1354→  }
+  1355→
+  1356→  const handleSaveQty = async (productId: string) => {
+  1357→    try {
+  1358→      const res = await fetch('/api/products', {
+  1359→        method: 'PATCH',
+  1360→        headers: { 'Content-Type': 'application/json' },
+  1361→        body: JSON.stringify({ productId, quantity: parseFloat(editQtyValue) }),
+  1362→      })
+  1363→      if (res.ok) {
+  1364→        toast.success('Quantity updated')
+  1365→        setEditingQtyId(null)
+  1366→        fetchData()
+  1367→      } else {
+  1368→        toast.error('Failed to update quantity')
+  1369→      }
+  1370→    } catch {
+  1371→      toast.error('Failed to update quantity')
+  1372→    }
+  1373→  }
+  1374→
+  1375→  const handleCancelEditQty = () => {
+  1376→    setEditingQtyId(null)
+  1377→    setEditQtyValue('')
+  1378→  }
+  1379→
+  1380→  // Create shipment
+  1381→  const openCreateShipment = (order: any) => {
+  1382→    setSelectedOrderForShipment(order)
+  1383→    setCreateShipmentOpen(true)
+  1384→  }
+  1385→
+  1386→  const handleCreateShipment = async (shipmentData: Record<string, unknown>) => {
+  1387→    setShipmentSubmitting(true)
+  1388→    try {
+  1389→      const res = await fetch('/api/shipments', {
+  1390→        method: 'POST',
+  1391→        headers: { 'Content-Type': 'application/json' },
+  1392→        body: JSON.stringify(shipmentData),
+  1393→      })
+  1394→      if (res.ok) {
+  1395→        toast.success('Shipment created successfully!')
+  1396→        setCreateShipmentOpen(false)
+  1397→        setSelectedOrderForShipment(null)
+  1398→        fetchData()
+  1399→      } else {
+  1400→        toast.error('Failed to create shipment')
+  1401→      }
+  1402→    } catch {
+  1403→      toast.error('Failed to create shipment')
+  1404→    } finally {
+  1405→      setShipmentSubmitting(false)
+  1406→    }
+  1407→  }
+  1408→
+  1409→  // Reassign transporter
+  1410→  const openReassignTransporter = (shipment: any) => {
+  1411→    setReassignShipment(shipment)
+  1412→    setReassignOpen(true)
+  1413→  }
+  1414→
+  1415→  const handleReassignTransporter = async (reassignData: Record<string, unknown>) => {
+  1416→    setReassignSubmitting(true)
+  1417→    try {
+  1418→      const res = await fetch('/api/shipments', {
+  1419→        method: 'PATCH',
+  1420→        headers: { 'Content-Type': 'application/json' },
+  1421→        body: JSON.stringify(reassignData),
+  1422→      })
+  1423→      if (res.ok) {
+  1424→        toast.success('Transporter reassigned successfully!')
+  1425→        setReassignOpen(false)
+  1426→        setReassignShipment(null)
+  1427→        fetchData()
+  1428→      } else {
+  1429→        toast.error('Failed to reassign transporter')
+  1430→      }
+  1431→    } catch {
+  1432→      toast.error('Failed to reassign transporter')
+  1433→    } finally {
+  1434→      setReassignSubmitting(false)
+  1435→    }
+  1436→  }
+  1437→
+  1438→  // Check if shipment deadline has passed
+  1439→  const isDeadlinePassed = (shipment: any) => {
+  1440→    if (!shipment.assignedAt && !shipment.pickupDeadline) return false
+  1441→    const deadline = shipment.pickupDeadline
+  1442→      ? new Date(shipment.pickupDeadline)
+  1443→      : new Date(new Date(shipment.assignedAt).getTime() + 24 * 60 * 60 * 1000)
+  1444→    return new Date() > deadline
+  1445→  }
+  1446→
+  1447→  // ─── Computed Values ────────────────────────────────────────────────────────
+  1448→  const activeListings = products.filter((p) => p.isActive).length
+  1449→  const totalOrders = orders.length
+  1450→  const revenue = orders
+  1451→    .filter((o) => o.status === 'delivered')
+  1452→    .reduce((s, o) => s + (o.totalPrice || 0), 0)
+  1453→  const avgRating = user?.avgRating || 4.7
+  1454→
+  1455→  // ─── Shared Create Shipment Dialog (used by orders & shipments tabs) ────────
+  1456→  const renderCreateShipmentDialog = () => (
+  1457→    <Dialog open={createShipmentOpen} onOpenChange={setCreateShipmentOpen}>
+  1458→      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1459→        {selectedOrderForShipment && (
+  1460→          <CreateShipmentDialogContent
+  1461→            selectedOrder={selectedOrderForShipment}
+  1462→            user={user}
+  1463→            onClose={() => {
+  1464→              setCreateShipmentOpen(false)
+  1465→              setSelectedOrderForShipment(null)
+  1466→            }}
+  1467→            onSubmit={handleCreateShipment}
+  1468→            submitting={shipmentSubmitting}
+  1469→          />
+  1470→        )}
+  1471→      </DialogContent>
+  1472→    </Dialog>
+  1473→  )
+  1474→
+  1475→  // ─── Shared Reassign Transporter Dialog ─────────────────────────────────────
+  1476→  const renderReassignDialog = () => (
+  1477→    <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+  1478→      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1479→        {reassignShipment && (
+  1480→          <ReassignTransporterDialogContent
+  1481→            shipment={reassignShipment}
+  1482→            onClose={() => {
+  1483→              setReassignOpen(false)
+  1484→              setReassignShipment(null)
+  1485→            }}
+  1486→            onSubmit={handleReassignTransporter}
+  1487→            submitting={reassignSubmitting}
+  1488→          />
+  1489→        )}
+  1490→      </DialogContent>
+  1491→    </Dialog>
+  1492→  )
+  1493→
+  1494→  // ─── Shared Shipment Tracker Dialog ─────────────────────────────────────────
+  1495→  const renderShipmentTracker = () => (
+  1496→    <ShipmentTracker
+  1497→      shipment={trackingShipment}
+  1498→      open={trackerOpen}
+  1499→      onClose={() => setTrackerOpen(false)}
+  1500→    />
+  1501→  )
+  1502→
+  1503→  // ═══════════════════════════════════════════════════════════════════════════
+  1504→  // ─── OVERVIEW TAB ──────────────────────────────────────────────────────────
+  1505→  // ═══════════════════════════════════════════════════════════════════════════
+  1506→  if (tab === 'overview') {
+  1507→    return (
+  1508→      <div className="space-y-6">
+  1509→        {/* Stat cards */}
+  1510→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  1511→          <StatCard
+  1512→            icon={<Package className="h-5 w-5" />}
+  1513→            value={String(activeListings)}
+  1514→            label="Active Listings"
+  1515→            trend="+12%"
+  1516→            trendUp
+  1517→          />
+  1518→          <StatCard
+  1519→            icon={<ShoppingCart className="h-5 w-5" />}
+  1520→            value={String(totalOrders)}
+  1521→            label="Total Orders"
+  1522→            trend="+8%"
+  1523→            trendUp
+  1524→          />
+  1525→          <StatCard
+  1526→            icon={<IndianRupee className="h-5 w-5" />}
+  1527→            value={`₹${(revenue / 1000).toFixed(0)}K`}
+  1528→            label="Revenue"
+  1529→            trend="+24%"
+  1530→            trendUp
+  1531→          />
+  1532→          <StatCard
+  1533→            icon={<Star className="h-5 w-5" />}
+  1534→            value={avgRating.toFixed(1)}
+  1535→            label="Avg Rating"
+  1536→            trend="+0.3"
+  1537→            trendUp
+  1538→          />
+  1539→        </div>
+  1540→
+  1541→        {/* Revenue chart */}
+  1542→        <div className="glass-card p-6">
+  1543→          <h3 className="text-lg font-semibold text-foreground mb-4">Revenue Trend</h3>
+  1544→          <div className="h-72">
+  1545→            <ResponsiveContainer width="100%" height="100%">
+  1546→              <AreaChart data={revenueData}>
+  1547→                <defs>
+  1548→                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+  1549→                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+  1550→                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+  1551→                  </linearGradient>
+  1552→                </defs>
+  1553→                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+  1554→                <XAxis dataKey="month" stroke="rgba(255,255,255,0.4)" fontSize={12} />
+  1555→                <YAxis
+  1556→                  stroke="rgba(255,255,255,0.4)"
+  1557→                  fontSize={12}
+  1558→                  tickFormatter={(v) => `₹${v / 1000}K`}
+  1559→                />
+  1560→                <Tooltip
+  1561→                  contentStyle={{
+  1562→                    backgroundColor: 'rgba(15,15,30,0.9)',
+  1563→                    border: '1px solid rgba(255,255,255,0.1)',
+  1564→                    borderRadius: '12px',
+  1565→                    color: '#fff',
+  1566→                  }}
+  1567→                  formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Revenue']}
+  1568→                />
+  1569→                <Area
+  1570→                  type="monotone"
+  1571→                  dataKey="revenue"
+  1572→                  stroke="#10b981"
+  1573→                  fill="url(#revenueGrad)"
+  1574→                  strokeWidth={2}
+  1575→                />
+  1576→              </AreaChart>
+  1577→            </ResponsiveContainer>
+  1578→          </div>
+  1579→        </div>
+  1580→
+  1581→        {/* Recent orders */}
+  1582→        <div className="glass-card p-6">
+  1583→          <div className="flex items-center justify-between mb-4">
+  1584→            <h3 className="text-lg font-semibold text-foreground">Recent Orders</h3>
+  1585→            <Button
+  1586→              variant="ghost"
+  1587→              size="sm"
+  1588→              className="text-emerald-400 hover:text-emerald-300"
+  1589→              onClick={() => setDashboardTab('orders')}
+  1590→            >
+  1591→              View All
+  1592→            </Button>
+  1593→          </div>
+  1594→          {loading ? (
+  1595→            <div className="space-y-3">
+  1596→              {[1, 2, 3].map((i) => (
+  1597→                <Skeleton key={i} className="h-12 w-full rounded-lg" />
+  1598→              ))}
+  1599→            </div>
+  1600→          ) : orders.length === 0 ? (
+  1601→            <p className="text-muted-foreground text-sm py-8 text-center">No orders yet</p>
+  1602→          ) : (
+  1603→            <Table>
+  1604→              <TableHeader>
+  1605→                <TableRow className="border-glass-border hover:bg-transparent">
+  1606→                  <TableHead className="text-muted-foreground">Product</TableHead>
+  1607→                  <TableHead className="text-muted-foreground">Buyer</TableHead>
+  1608→                  <TableHead className="text-muted-foreground">Qty</TableHead>
+  1609→                  <TableHead className="text-muted-foreground">Total</TableHead>
+  1610→                  <TableHead className="text-muted-foreground">Status</TableHead>
+  1611→                </TableRow>
+  1612→              </TableHeader>
+  1613→              <TableBody>
+  1614→                {orders.slice(0, 5).map((order) => (
+  1615→                  <TableRow key={order.id} className="border-glass-border">
+  1616→                    <TableCell className="font-medium text-foreground">
+  1617→                      {order.product?.name || 'N/A'}
+  1618→                    </TableCell>
+  1619→                    <TableCell className="text-muted-foreground">
+  1620→                      {order.buyer?.name || order.buyer?.companyName || 'N/A'}
+  1621→                    </TableCell>
+  1622→                    <TableCell className="text-muted-foreground">
+  1623→                      {order.quantity} {order.product?.unit || ''}
+  1624→                    </TableCell>
+  1625→                    <TableCell className="text-emerald-400 font-medium">
+  1626→                      ₹{order.totalPrice?.toLocaleString()}
+  1627→                    </TableCell>
+  1628→                    <TableCell>
+  1629→                      <Badge
+  1630→                        className={`${
+  1631→                          statusColors[order.status] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+  1632→                        } border text-xs`}
+  1633→                      >
+  1634→                        {order.status}
+  1635→                      </Badge>
+  1636→                    </TableCell>
+  1637→                  </TableRow>
+  1638→                ))}
+  1639→              </TableBody>
+  1640→            </Table>
+  1641→          )}
+  1642→        </div>
+  1643→
+  1644→        {/* Quick actions */}
+  1645→        <div className="flex flex-wrap gap-3">
+  1646→          <Button className="bg-emerald-600 hover:bg-emerald-500 gap-2" onClick={() => setAddListingOpen(true)}>
+  1647→            <Plus className="h-4 w-4" /> Add New Listing
+  1648→          </Button>
+  1649→          <Button variant="outline" className="border-glass-border gap-2" onClick={() => setChatOpen(true)}>
+  1650→            <MessageSquare className="h-4 w-4" /> View Messages
+  1651→          </Button>
+  1652→        </div>
+  1653→
+  1654→        {/* Add Listing Dialog */}
+  1655→        <Dialog open={addListingOpen} onOpenChange={setAddListingOpen}>
+  1656→          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1657→            <DialogHeader>
+  1658→              <DialogTitle className="text-foreground">Add New Listing</DialogTitle>
+  1659→              <DialogDescription className="text-muted-foreground">
+  1660→                Create a new product listing for the marketplace
+  1661→              </DialogDescription>
+  1662→            </DialogHeader>
+  1663→            <AddListingForm
+  1664→              formData={formData}
+  1665→              setFormData={setFormData}
+  1666→              onSubmit={handleAddListing}
+  1667→              onCancel={() => setAddListingOpen(false)}
+  1668→              isSubmitting={isSubmitting}
+  1669→            />
+  1670→            <DialogFooter>
+  1671→              <Button
+  1672→                variant="outline"
+  1673→                className="border-glass-border"
+  1674→                onClick={() => setAddListingOpen(false)}
+  1675→              >
+  1676→                Cancel
+  1677→              </Button>
+  1678→              <Button
+  1679→                className="bg-emerald-600 hover:bg-emerald-500"
+  1680→                onClick={handleAddListing}
+  1681→                disabled={isSubmitting}
+  1682→              >
+  1683→                {isSubmitting ? (
+  1684→                  <>
+  1685→                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+  1686→                    Creating...
+  1687→                  </>
+  1688→                ) : (
+  1689→                  'Create Listing'
+  1690→                )}
+  1691→              </Button>
+  1692→            </DialogFooter>
+  1693→          </DialogContent>
+  1694→        </Dialog>
+  1695→      </div>
+  1696→    )
+  1697→  }
+  1698→
+  1699→  // ═══════════════════════════════════════════════════════════════════════════
+  1700→  // ─── LISTINGS TAB ──────────────────────────────────────────────────────────
+  1701→  // ═══════════════════════════════════════════════════════════════════════════
+  1702→  if (tab === 'listings') {
+  1703→    return (
+  1704→      <div className="space-y-6">
+  1705→        <div className="flex items-center justify-between">
+  1706→          <h3 className="text-xl font-semibold text-foreground">My Listings</h3>
+  1707→          <Dialog open={addListingOpen} onOpenChange={setAddListingOpen}>
+  1708→            <DialogTrigger asChild>
+  1709→              <Button className="bg-emerald-600 hover:bg-emerald-500 gap-2">
+  1710→                <Plus className="h-4 w-4" /> Add Listing
+  1711→              </Button>
+  1712→            </DialogTrigger>
+  1713→            <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1714→              <DialogHeader>
+  1715→                <DialogTitle className="text-foreground">Add New Listing</DialogTitle>
+  1716→                <DialogDescription className="text-muted-foreground">
+  1717→                  Create a new product listing
+  1718→                </DialogDescription>
+  1719→              </DialogHeader>
+  1720→              <AddListingForm
+  1721→                formData={formData}
+  1722→                setFormData={setFormData}
+  1723→                onSubmit={handleAddListing}
+  1724→                onCancel={() => setAddListingOpen(false)}
+  1725→                isSubmitting={isSubmitting}
+  1726→              />
+  1727→              <DialogFooter>
+  1728→                <Button
+  1729→                  variant="outline"
+  1730→                  className="border-glass-border"
+  1731→                  onClick={() => setAddListingOpen(false)}
+  1732→                >
+  1733→                  Cancel
+  1734→                </Button>
+  1735→                <Button
+  1736→                  className="bg-emerald-600 hover:bg-emerald-500"
+  1737→                  onClick={handleAddListing}
+  1738→                  disabled={isSubmitting}
+  1739→                >
+  1740→                  {isSubmitting ? (
+  1741→                    <>
+  1742→                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+  1743→                      Creating...
+  1744→                    </>
+  1745→                  ) : (
+  1746→                    'Create Listing'
+  1747→                  )}
+  1748→                </Button>
+  1749→              </DialogFooter>
+  1750→            </DialogContent>
+  1751→          </Dialog>
+  1752→        </div>
+  1753→
+  1754→        {loading ? (
+  1755→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1756→            {[1, 2, 3, 4, 5, 6].map((i) => (
+  1757→              <Skeleton key={i} className="h-48 rounded-2xl" />
+  1758→            ))}
+  1759→          </div>
+  1760→        ) : products.length === 0 ? (
+  1761→          <div className="glass-card p-12 text-center">
+  1762→            <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1763→            <p className="text-muted-foreground">No listings yet. Create your first listing!</p>
+  1764→          </div>
+  1765→        ) : (
+  1766→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1767→            {products.map((product, i) => (
+  1768→              <motion.div
+  1769→                key={product.id}
+  1770→                initial={{ opacity: 0, y: 20 }}
+  1771→                animate={{ opacity: 1, y: 0 }}
+  1772→                transition={{ delay: i * 0.05 }}
+  1773→                className="glass-card p-5 space-y-3 hover:border-emerald-500/30 transition-colors"
+  1774→              >
+  1775→                {/* Product Image */}
+  1776→                {product.imageUrl && (
+  1777→                  <div className="w-full h-32 rounded-xl overflow-hidden border border-glass-border">
+  1778→                    <img
+  1779→                      src={product.imageUrl}
+  1780→                      alt={product.name}
+  1781→                      className="w-full h-full object-cover"
+  1782→                    />
+  1783→                  </div>
+  1784→                )}
+  1785→
+  1786→                {/* Name, Category & Badges */}
+  1787→                <div className="flex items-start justify-between">
+  1788→                  <div>
+  1789→                    <h4 className="font-semibold text-foreground">{product.name}</h4>
+  1790→                    <p className="text-xs text-muted-foreground capitalize">{product.category}</p>
+  1791→                  </div>
+  1792→                  <div className="flex items-center gap-1.5">
+  1793→                    {product.quantity === 0 && (
+  1794→                      <Badge className="bg-red-500/20 text-red-400 border-red-500/30 border text-[9px]">
+  1795→                        Out of Stock
+  1796→                      </Badge>
+  1797→                    )}
+  1798→                    {product.quantity > 0 && product.quantity < 10 && (
+  1799→                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[9px]">
+  1800→                        Low Stock
+  1801→                      </Badge>
+  1802→                    )}
+  1803→                    <Badge
+  1804→                      className={`${
+  1805→                        product.isActive
+  1806→                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+  1807→                          : 'bg-red-500/20 text-red-400 border-red-500/30'
+  1808→                      } border text-xs`}
+  1809→                    >
+  1810→                      {product.isActive ? 'Active' : 'Inactive'}
+  1811→                    </Badge>
+  1812→                  </div>
+  1813→                </div>
+  1814→
+  1815→                {/* Details */}
+  1816→                <div className="space-y-2 text-sm">
+  1817→                  <div className="flex justify-between">
+  1818→                    <span className="text-muted-foreground">Price</span>
+  1819→                    <span className="text-emerald-400 font-medium">
+  1820→                      ₹{product.pricePerUnit}/{product.unit}
+  1821→                    </span>
+  1822→                  </div>
+  1823→
+  1824→                  {/* Inline editable quantity */}
+  1825→                  <div>
+  1826→                    {editingQtyId === product.id ? (
+  1827→                      <div className="flex items-center gap-2">
+  1828→                        <Input
+  1829→                          type="number"
+  1830→                          value={editQtyValue}
+  1831→                          onChange={(e) => setEditQtyValue(e.target.value)}
+  1832→                          className="h-7 text-xs glass-input w-24"
+  1833→                          onKeyDown={(e) => {
+  1834→                            if (e.key === 'Enter') handleSaveQty(product.id)
+  1835→                            if (e.key === 'Escape') handleCancelEditQty()
+  1836→                          }}
+  1837→                          autoFocus
+  1838→                        />
+  1839→                        <Button
+  1840→                          size="icon"
+  1841→                          variant="ghost"
+  1842→                          className="h-6 w-6 text-emerald-400 hover:text-emerald-300"
+  1843→                          onClick={() => handleSaveQty(product.id)}
+  1844→                        >
+  1845→                          <CheckCircle className="h-3.5 w-3.5" />
+  1846→                        </Button>
+  1847→                        <Button
+  1848→                          size="icon"
+  1849→                          variant="ghost"
+  1850→                          className="h-6 w-6 text-red-400 hover:text-red-300"
+  1851→                          onClick={handleCancelEditQty}
+  1852→                        >
+  1853→                          <X className="h-3.5 w-3.5" />
+  1854→                        </Button>
+  1855→                      </div>
+  1856→                    ) : (
+  1857→                      <div className="flex items-center justify-between">
+  1858→                        <span className="text-muted-foreground">Quantity (Stock)</span>
+  1859→                        <span
+  1860→                          className="text-foreground flex items-center gap-1.5 cursor-pointer group"
+  1861→                          onClick={() => handleStartEditQty(product.id, product.quantity)}
+  1862→                        >
+  1863→                          {product.quantity} {product.unit}
+  1864→                          <Pencil className="h-3 w-3 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+  1865→                        </span>
+  1866→                      </div>
+  1867→                    )}
+  1868→                  </div>
+  1869→
+  1870→                  {/* Stock indicator bar */}
+  1871→                  <StockBar quantity={product.quantity} unit={product.unit} minOrderQty={product.minOrderQty} />
+  1872→
+  1873→                  <div className="flex items-center justify-between">
+  1874→                    <span className="text-muted-foreground">Location</span>
+  1875→                    <span className="text-foreground flex items-center gap-1">
+  1876→                      <MapPin className="h-3 w-3" /> {product.location}
+  1877→                    </span>
+  1878→                  </div>
+  1879→                  {product.qualityGrade && (
+  1880→                    <div className="flex justify-between">
+  1881→                      <span className="text-muted-foreground">Grade</span>
+  1882→                      <span className="text-amber-400 font-medium">{product.qualityGrade}</span>
+  1883→                    </div>
+  1884→                  )}
+  1885→                  {product.cropVariety && (
+  1886→                    <div className="flex justify-between">
+  1887→                      <span className="text-muted-foreground">Variety</span>
+  1888→                      <span className="text-foreground">{product.cropVariety}</span>
+  1889→                    </div>
+  1890→                  )}
+  1891→                  {product.isOrganic && (
+  1892→                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px]">
+  1893→                      <Leaf className="h-2.5 w-2.5 mr-0.5" /> Organic
+  1894→                    </Badge>
+  1895→                  )}
+  1896→                </div>
+  1897→
+  1898→                <div className="pt-2 border-t border-glass-border">
+  1899→                  <Button
+  1900→                    variant="ghost"
+  1901→                    size="sm"
+  1902→                    className="text-muted-foreground hover:text-foreground w-full gap-2"
+  1903→                  >
+  1904→                    <Eye className="h-4 w-4" /> View Details
+  1905→                  </Button>
+  1906→                </div>
+  1907→              </motion.div>
+  1908→            ))}
+  1909→          </div>
+  1910→        )}
+  1911→      </div>
+  1912→    )
+  1913→  }
+  1914→
+  1915→  // ═══════════════════════════════════════════════════════════════════════════
+  1916→  // ─── ORDERS TAB ────────────────────────────────────────────────────────────
+  1917→  // ═══════════════════════════════════════════════════════════════════════════
+  1918→  if (tab === 'orders') {
+  1919→    return (
+  1920→      <div className="space-y-6">
+  1921→        <h3 className="text-xl font-semibold text-foreground">Orders</h3>
+  1922→        {loading ? (
+  1923→          <div className="space-y-3">
+  1924→            {[1, 2, 3, 4, 5].map((i) => (
+  1925→              <Skeleton key={i} className="h-16 rounded-xl" />
+  1926→            ))}
+  1927→          </div>
+  1928→        ) : orders.length === 0 ? (
+  1929→          <div className="glass-card p-12 text-center">
+  1930→            <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1931→            <p className="text-muted-foreground">No orders yet</p>
+  1932→          </div>
+  1933→        ) : (
+  1934→          <div className="space-y-4">
+  1935→            {orders.map((order) => {
+  1936→              const shipment = getShipmentForOrder(order.id)
+  1937→              const hasTransport =
+  1938→                shipment &&
+  1939→                (shipment.transporterId || shipment.isExternalTransporter || shipment.isExternal) &&
+  1940→                ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
+  1941→              const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
+  1942→
+  1943→              // Payment breakdown calculation
+  1944→              const productCost = (order.quantity || 0) * (order.unitPrice || order.product?.pricePerUnit || 0)
+  1945→              const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
+  1946→              const totalPrice = order.totalPrice || productCost
+  1947→              const advancePaid = order.advanceAmount || order.advancePayment || Math.round(totalPrice * 0.5 * 100) / 100
+  1948→              const remaining = order.remainingAmount || order.remainingPayment || Math.round((totalPrice - advancePaid) * 100) / 100
+  1949→
+  1950→              return (
+  1951→                <motion.div
+  1952→                  key={order.id}
+  1953→                  initial={{ opacity: 0, y: 15 }}
+  1954→                  animate={{ opacity: 1, y: 0 }}
+  1955→                  className="glass-card p-5 space-y-4"
+  1956→                >
+  1957→                  {/* Order header */}
+  1958→                  <div className="flex items-start justify-between">
+  1959→                    <div>
+  1960→                      <h4 className="font-semibold text-foreground">
+  1961→                        {order.product?.name || 'N/A'}
+  1962→                      </h4>
+  1963→                      <p className="text-xs text-muted-foreground">
+  1964→                        {order.quantity} {order.product?.unit || ''} • ₹
+  1965→                        {order.totalPrice?.toLocaleString()}
+  1966→                      </p>
+  1967→                      <p className="text-xs text-muted-foreground">
+  1968→                        {new Date(order.createdAt).toLocaleDateString()}
+  1969→                      </p>
+  1970→                    </div>
+  1971→                    <div className="flex items-center gap-2">
+  1972→                      <Badge
+  1973→                        className={`${statusColors[order.status] || ''} border text-xs`}
+  1974→                      >
+  1975→                        {order.status}
+  1976→                      </Badge>
+  1977→                      {order.paymentStatus && (
+  1978→                        <Badge
+  1979→                          className={`${paymentStatusColors[order.paymentStatus] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'} border text-[10px]`}
+  1980→                        >
+  1981→                          {order.paymentStatus.replace('_', ' ')}
+  1982→                        </Badge>
+  1983→                      )}
+  1984→                      {order.status === 'negotiating' && (
+  1985→                        <div className="flex gap-1">
+  1986→                          <Button
+  1987→                            size="icon"
+  1988→                            variant="ghost"
+  1989→                            className="h-7 w-7 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+  1990→                            onClick={() => handleOrderAction(order.id, 'confirmed')}
+  1991→                          >
+  1992→                            <Check className="h-3.5 w-3.5" />
+  1993→                          </Button>
+  1994→                          <Button
+  1995→                            size="icon"
+  1996→                            variant="ghost"
+  1997→                            className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+  1998→                            onClick={() => handleOrderAction(order.id, 'cancelled')}
+  1999→                          >
+  2000→                            <X className="h-3.5 w-3.5" />
+
+[showing lines 1-2000 of 2640; use offset=2001 with limit to continue reading]

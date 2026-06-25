@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { computePlatformFee } from '@/lib/razorpay'
 
 export async function GET(request: Request) {
   try {
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
     }
 
     // Product fields to include in order queries
-    const productSelect = 'id, name, category, unit, pricePerUnit, imageUrl, images, qualityGrade, location, state, isOrganic, cropVariety'
+    const productSelect = 'id, name, category, unit, pricePerUnit, imageUrl, images, qualityGrade, location, state, isOrganic, cropVariety, deliveryHandledByProducer, deliveryFee, freeDelivery'
 
     let orders: unknown[] = []
 
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
     } else if (role === 'producer' || role === 'seller') {
       const { data, error } = await supabase
         .from('Order')
-        .select(`*, buyer:User!buyerId(id, name, companyName, phone, city, state, avatar, avatarUrl, address), product:Product!productId(${productSelect})`)
+        .select(`*, buyer:User!buyerId(id, name, companyName, phone, email, city, state, avatar, avatarUrl, address), product:Product!productId(${productSelect})`)
         .eq('sellerId', userId)
         .order('createdAt', { ascending: false })
 
@@ -88,6 +89,12 @@ export async function POST(request: Request) {
       estimatedTransportCost: clientEstimatedTransportCost,
       paymentStatus: clientPaymentStatus,
       status: clientStatus,
+      // V4 delivery fields
+      deliveryType,
+      deliveryFee: clientDeliveryFee,
+      localTransporterName,
+      localTransporterPhone,
+      localTransporterVehicle,
     } = body
 
     if (!buyerId || !sellerId || !productId || !quantity || !unitPrice) {
@@ -96,13 +103,28 @@ export async function POST(request: Request) {
 
     const parsedQuantity = parseFloat(quantity)
     const parsedUnitPrice = parseFloat(unitPrice)
-    const totalPrice = clientTotalPayable || (parsedQuantity * parsedUnitPrice)
+    const productSubtotal = parsedQuantity * parsedUnitPrice
 
-    // Use client-provided payment breakdown or calculate defaults
-    const platformFee = clientPlatformFee || Math.round(parsedQuantity * parsedUnitPrice * 0.02 * 100) / 100
+    // ─── New Revenue Model ────────────────────────────────────────────────
+    // Platform fee: ₹1000 flat if subtotal > ₹10,000, else ₹0
+    const platformFee = clientPlatformFee !== undefined
+      ? Number(clientPlatformFee)
+      : computePlatformFee(productSubtotal)
+
+    // Delivery fee (only when producer handles delivery or assigns local transporter)
+    const deliveryFee = clientDeliveryFee !== undefined ? Number(clientDeliveryFee) : 0
+
+    // Transport booking fee applies only when the platform arranges transport
+    const transportBookingFee = deliveryType && deliveryType !== 'platform'
+      ? 0
+      : (clientTransportBookingFee || 0)
+
+    const totalPrice = clientTotalPayable || (productSubtotal + platformFee + transportBookingFee + deliveryFee)
+
+    // Use client-provided payment breakdown or calculate defaults (50/50 split)
     const advanceAmount = clientAdvancePayment || Math.round(totalPrice * 0.5 * 100) / 100
-    const remainingAmount = clientRemainingPayment || Math.round(totalPrice * 0.5 * 100) / 100
-    const orderStatus = clientStatus || 'negotiating'
+    const remainingAmount = clientRemainingPayment || Math.round((totalPrice - advanceAmount) * 100) / 100
+    const orderStatus = clientStatus || 'confirmed'
 
     const insertData: Record<string, unknown> = {
       buyerId,
@@ -116,7 +138,7 @@ export async function POST(request: Request) {
 
     // Payment fields - try to include them (columns may not exist yet)
     const paymentFields: Record<string, unknown> = {
-      paymentStatus: clientPaymentStatus || 'advance_paid',
+      paymentStatus: clientPaymentStatus || 'pending',
       advanceAmount,
       remainingAmount,
       platformFee,
@@ -135,46 +157,68 @@ export async function POST(request: Request) {
     if (deliveryLng) paymentFields.deliveryLng = deliveryLng
     if (deliveryFullAddress) paymentFields.deliveryFullAddress = deliveryFullAddress
 
+    // V4 fields
+    const v4Fields: Record<string, unknown> = {}
+    if (deliveryType) v4Fields.deliveryType = deliveryType
+    if (deliveryFee !== undefined) v4Fields.deliveryFee = deliveryFee
+    if (localTransporterName) v4Fields.localTransporterName = localTransporterName
+    if (localTransporterPhone) v4Fields.localTransporterPhone = localTransporterPhone
+    if (localTransporterVehicle) v4Fields.localTransporterVehicle = localTransporterVehicle
+
     // Try with all fields first
     let { data: order, error } = await supabase
       .from('Order')
-      .insert({ ...insertData, ...paymentFields })
+      .insert({ ...insertData, ...paymentFields, ...v4Fields })
       .select()
       .single()
 
-    // If payment/delivery columns don't exist, retry without them
-    if (error) {
-      // Try without payment fields
-      const deliveryOnlyFields: Record<string, unknown> = {}
-      if (deliveryAddress) deliveryOnlyFields.deliveryAddress = deliveryAddress
-      if (deliveryCity) deliveryOnlyFields.deliveryCity = deliveryCity
-      if (deliveryState) deliveryOnlyFields.deliveryState = deliveryState
-      if (deliveryPincode) deliveryOnlyFields.deliveryPincode = deliveryPincode
-      if (deliveryLat) deliveryOnlyFields.deliveryLat = deliveryLat
-      if (deliveryLng) deliveryOnlyFields.deliveryLng = deliveryLng
-      if (deliveryFullAddress) deliveryOnlyFields.deliveryFullAddress = deliveryFullAddress
-
-      let fallbackResult = await supabase
+    // If V4 columns don't exist, retry without them
+    if (error && Object.keys(v4Fields).length > 0) {
+      const retryResult = await supabase
         .from('Order')
-        .insert({ ...insertData, ...deliveryOnlyFields })
+        .insert({ ...insertData, ...paymentFields })
         .select()
         .single()
 
-      if (fallbackResult.error && Object.keys(deliveryOnlyFields).length > 0) {
-        // Try without delivery fields too
-        fallbackResult = await supabase
+      if (!retryResult.error) {
+        order = retryResult.data
+        error = null
+      } else if (retryResult.error && Object.keys(paymentFields).length > 0) {
+        // If payment columns also don't exist, try with just delivery fields
+        const deliveryOnlyFields: Record<string, unknown> = {}
+        if (deliveryAddress) deliveryOnlyFields.deliveryAddress = deliveryAddress
+        if (deliveryCity) deliveryOnlyFields.deliveryCity = deliveryCity
+        if (deliveryState) deliveryOnlyFields.deliveryState = deliveryState
+        if (deliveryPincode) deliveryOnlyFields.deliveryPincode = deliveryPincode
+        if (deliveryLat) deliveryOnlyFields.deliveryLat = deliveryLat
+        if (deliveryLng) deliveryOnlyFields.deliveryLng = deliveryLng
+        if (deliveryFullAddress) deliveryOnlyFields.deliveryFullAddress = deliveryFullAddress
+
+        let fallbackResult = await supabase
           .from('Order')
-          .insert(insertData)
+          .insert({ ...insertData, ...deliveryOnlyFields })
           .select()
           .single()
-      }
 
-      if (fallbackResult.error) {
-        console.error('Order create error:', fallbackResult.error)
+        if (fallbackResult.error && Object.keys(deliveryOnlyFields).length > 0) {
+          // Try without delivery fields too
+          fallbackResult = await supabase
+            .from('Order')
+            .insert(insertData)
+            .select()
+            .single()
+        }
+
+        if (fallbackResult.error) {
+          console.error('Order create error:', fallbackResult.error)
+          return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+        }
+        order = fallbackResult.data
+        error = null
+      } else {
+        console.error('Order create error:', retryResult.error)
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
       }
-      order = fallbackResult.data
-      error = null
     }
 
     if (error) {
@@ -197,20 +241,21 @@ export async function POST(request: Request) {
         .eq('id', productId)
     }
 
-    // Create PlatformRevenue entry for the commission
-    try {
-      await supabase
-        .from('PlatformRevenue')
-        .insert({
-          orderId: order.id,
-          type: 'commission',
-          amount: platformFee,
-          userId: sellerId,
-          description: `2% platform commission on order ${order.id}`,
-        })
-    } catch (revenueError) {
-      // Table may not exist yet - log but don't fail the order
-      console.warn('Could not create PlatformRevenue entry (table may not exist):', revenueError)
+    // Create PlatformRevenue entry for the commission (only if fee > 0)
+    if (platformFee > 0) {
+      try {
+        await supabase
+          .from('PlatformRevenue')
+          .insert({
+            orderId: order.id,
+            type: 'platform_fee',
+            amount: platformFee,
+            userId: sellerId,
+            description: `₹${platformFee} platform fee on order ${order.id.slice(-8)} (subtotal ₹${productSubtotal})`,
+          })
+      } catch (revenueError) {
+        console.warn('Could not create PlatformRevenue entry (table may not exist):', revenueError)
+      }
     }
 
     return NextResponse.json({
@@ -218,9 +263,11 @@ export async function POST(request: Request) {
       paymentDetails: {
         totalPrice,
         platformFee,
+        deliveryFee,
+        transportBookingFee,
         advanceAmount,
         remainingAmount,
-        paymentStatus: 'advance_paid',
+        paymentStatus: clientPaymentStatus || 'pending',
       },
     })
   } catch (error) {
@@ -232,7 +279,14 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()
-    const { orderId, status, paymentStatus, remainingPaidAt } = body
+    const {
+      orderId, status, paymentStatus, remainingPaidAt,
+      // V4: producer-driven status updates
+      statusUpdatedBy,
+      // V4: local transporter assignment by producer
+      localTransporterName, localTransporterPhone, localTransporterVehicle,
+      deliveryType,
+    } = body
 
     if (!orderId) {
       return NextResponse.json({ error: 'Missing orderId' }, { status: 400 })
@@ -277,6 +331,38 @@ export async function PATCH(request: Request) {
     }
 
     if (!status) {
+      // Maybe it's a local-transporter-assignment-only update
+      if (localTransporterName !== undefined || localTransporterPhone !== undefined || localTransporterVehicle !== undefined || deliveryType !== undefined) {
+        const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+        if (localTransporterName !== undefined) updateData.localTransporterName = localTransporterName
+        if (localTransporterPhone !== undefined) updateData.localTransporterPhone = localTransporterPhone
+        if (localTransporterVehicle !== undefined) updateData.localTransporterVehicle = localTransporterVehicle
+        if (deliveryType) updateData.deliveryType = deliveryType
+        if (statusUpdatedBy) {
+          updateData.statusUpdatedBy = statusUpdatedBy
+          updateData.statusUpdatedAt = new Date().toISOString()
+        }
+        let { data: order, error } = await supabase
+          .from('Order')
+          .update(updateData)
+          .eq('id', orderId)
+          .select()
+          .single()
+        if (error) {
+          // Fallback without V4 columns - just update the timestamp
+          const fb = await supabase
+            .from('Order')
+            .update({ updatedAt: new Date().toISOString() })
+            .eq('id', orderId)
+            .select()
+            .single()
+          if (fb.error) {
+            return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+          }
+          order = fb.data
+        }
+        return NextResponse.json({ order })
+      }
       return NextResponse.json({ error: 'Missing status field' }, { status: 400 })
     }
 
@@ -297,6 +383,12 @@ export async function PATCH(request: Request) {
       updatedAt: new Date().toISOString(),
     }
 
+    // V4: track who changed the status (producer for delivery-handled orders)
+    if (statusUpdatedBy) {
+      updateData.statusUpdatedBy = statusUpdatedBy
+      updateData.statusUpdatedAt = new Date().toISOString()
+    }
+
     // When status changes to 'cancelled', restore the deducted quantity to the Product
     if (status === 'cancelled') {
       const { data: product } = await supabase
@@ -314,9 +406,8 @@ export async function PATCH(request: Request) {
       }
     }
 
-    // When status changes to 'delivered', update payment and transporter stats
+    // When status changes to 'delivered', update payment and seller's deals count
     if (status === 'delivered') {
-      // Try to update payment status to 'full_paid' and set remainingPaidAt
       try {
         updateData.paymentStatus = 'full_paid'
         updateData.remainingPaidAt = new Date().toISOString()
@@ -324,18 +415,36 @@ export async function PATCH(request: Request) {
         // Columns may not exist yet
       }
 
-      // Update transporter's totalCompletedShipments
-      // Find the shipment for this order
+      // Increment seller's totalTransactions & totalDeals (deals count fix)
+      const { data: seller } = await supabase
+        .from('User')
+        .select('totalTransactions, totalDeals')
+        .eq('id', currentOrder.sellerId)
+        .single()
+
+      if (seller) {
+        const updates: Record<string, unknown> = {
+          totalTransactions: (seller.totalTransactions || 0) + 1,
+          totalDeals: (seller.totalDeals || 0) + 1,
+          updatedAt: new Date().toISOString(),
+        }
+        await supabase
+          .from('User')
+          .update(updates)
+          .eq('id', currentOrder.sellerId)
+      }
+
+      // Also increment transporter's stats if there's a platform shipment
       const { data: shipment } = await supabase
         .from('Shipment')
-        .select('transporterId')
+        .select('transporterId, isExternal, isExternalTransporter')
         .eq('orderId', orderId)
         .single()
 
-      if (shipment?.transporterId) {
+      if (shipment?.transporterId && !shipment.isExternal && !shipment.isExternalTransporter) {
         const { data: transporter } = await supabase
           .from('User')
-          .select('totalTransactions')
+          .select('totalTransactions, totalCompletedShipments, deliverySuccessRate, totalDeals')
           .eq('id', shipment.transporterId)
           .single()
 
@@ -344,12 +453,18 @@ export async function PATCH(request: Request) {
             .from('User')
             .update({
               totalTransactions: (transporter.totalTransactions || 0) + 1,
+              totalCompletedShipments: (transporter.totalCompletedShipments || 0) + 1,
+              totalDeals: (transporter.totalDeals || 0) + 1,
+              deliverySuccessRate: Math.min(100, (transporter.deliverySuccessRate || 100) + 1),
               updatedAt: new Date().toISOString(),
             })
             .eq('id', shipment.transporterId)
         }
       }
     }
+
+    // When status changes to 'shipped' for producer-handled delivery, no shipment record is created
+    // (the producer handles delivery themselves), so we just update the order status
 
     // Try update with new fields
     let { data: order, error } = await supabase
@@ -359,12 +474,15 @@ export async function PATCH(request: Request) {
       .select()
       .single()
 
-    // If update fails due to missing columns, retry without payment fields
-    if (error && (updateData.paymentStatus || updateData.remainingPaidAt)) {
+    // If update fails due to missing columns, retry without V4 fields
+    if (error && (updateData.paymentStatus || updateData.remainingPaidAt || updateData.statusUpdatedBy || updateData.statusUpdatedAt)) {
       const fallbackData: Record<string, unknown> = {
         status,
         updatedAt: new Date().toISOString(),
       }
+      if (updateData.paymentStatus) fallbackData.paymentStatus = updateData.paymentStatus
+      if (updateData.remainingPaidAt) fallbackData.remainingPaidAt = updateData.remainingPaidAt
+
       const fallbackResult = await supabase
         .from('Order')
         .update(fallbackData)

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/lib/store'
+import { computePlatformFee } from '@/lib/razorpay'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
@@ -79,6 +80,10 @@ interface Product {
   isActive: boolean
   createdAt: string
   seller: Seller
+  // V4 delivery handling
+  deliveryHandledByProducer?: boolean
+  deliveryFee?: number
+  freeDelivery?: boolean
 }
 
 interface ProducerInfo {
@@ -723,6 +728,9 @@ export function ProductPage() {
       maxQuantity: product.quantity,
       location: product.location,
       state: product.state,
+      deliveryHandledByProducer: product.deliveryHandledByProducer || false,
+      deliveryFee: product.deliveryFee || 0,
+      freeDelivery: product.freeDelivery || false,
     })
     toast.success(`${product.name} added to cart`)
   }, [user, product, orderQty, addToCart, setView])
@@ -753,6 +761,9 @@ export function ProductPage() {
       maxQuantity: p.quantity,
       location: p.location,
       state: p.state,
+      deliveryHandledByProducer: p.deliveryHandledByProducer || false,
+      deliveryFee: p.deliveryFee || 0,
+      freeDelivery: p.freeDelivery || false,
     })
     toast.success(`${p.name} added to cart`)
   }, [user, addToCart, setView])
@@ -847,6 +858,10 @@ export function ProductPage() {
 
   // Compute total price
   const totalPrice = product ? orderQty * product.pricePerUnit : 0
+  // V4: compute platform fee using the new revenue model (₹1000 flat if subtotal > ₹10,000 else ₹0)
+  const computedPlatformFee = product ? computePlatformFee(totalPrice) : 0
+  // V4: producer-handled delivery fee (waived when freeDelivery)
+  const producerDeliveryFee = product && product.deliveryHandledByProducer && !product.freeDelivery ? (product.deliveryFee || 0) : 0
 
   // Category helpers
   const catColor = CATEGORY_COLORS[product?.category || ''] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
@@ -1041,12 +1056,101 @@ export function ProductPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Platform Fee</span>
                   <div className="text-right">
-                    <span className="text-foreground font-medium">2%</span>
-                    <p className="text-[10px] text-muted-foreground/60">Calculated at checkout</p>
+                    {computedPlatformFee === 0 ? (
+                      <>
+                        <span className="text-emerald-400 font-semibold">FREE</span>
+                        <p className="text-[10px] text-muted-foreground/60">No fee on orders ≤ ₹10,000</p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-foreground font-semibold">₹{computedPlatformFee.toLocaleString('en-IN')}</span>
+                        <p className="text-[10px] text-muted-foreground/60">Flat fee on orders &gt; ₹10,000</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Truck className="w-3 h-3 text-emerald-400" /> Delivery Fee
+                  </span>
+                  <div className="text-right">
+                    {product.deliveryHandledByProducer ? (
+                      product.freeDelivery ? (
+                        <>
+                          <span className="text-emerald-400 font-semibold">FREE</span>
+                          <p className="text-[10px] text-muted-foreground/60">Producer offers free delivery</p>
+                        </>
+                      ) : producerDeliveryFee > 0 ? (
+                        <>
+                          <span className="text-foreground font-semibold">₹{producerDeliveryFee.toLocaleString('en-IN')}</span>
+                          <p className="text-[10px] text-muted-foreground/60">Set by producer</p>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )
+                    ) : (
+                      <>
+                        <span className="text-sky-400/80 font-medium text-xs">Arranged by AgroBridge</span>
+                        <p className="text-[10px] text-muted-foreground/60">₹30 booking fee at checkout</p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground/60">Transport & platform fees are estimates. Final cost calculated at checkout.</p>
+            </div>
+
+            {/* Delivery Options Card - V4 */}
+            <div className={`glass-card p-4 space-y-2 border ${
+              product.deliveryHandledByProducer
+                ? product.freeDelivery
+                  ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+                  : 'border-teal-500/30 bg-teal-500/[0.04]'
+                : 'border-sky-500/20 bg-sky-500/[0.03]'
+            }`}>
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Truck className={`w-4 h-4 ${
+                  product.deliveryHandledByProducer
+                    ? product.freeDelivery ? 'text-emerald-400' : 'text-teal-400'
+                    : 'text-sky-400'
+                }`} />
+                Delivery Options
+              </h3>
+              {product.deliveryHandledByProducer ? (
+                product.freeDelivery ? (
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">🚚</span>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-400">FREE Delivery by Producer</p>
+                      <p className="text-[11px] text-muted-foreground">This producer handles delivery at no extra cost to you.</p>
+                    </div>
+                  </div>
+                ) : (product.deliveryFee || 0) > 0 ? (
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">🚚</span>
+                    <div>
+                      <p className="text-sm font-semibold text-teal-400">Delivery by Producer — ₹{(product.deliveryFee || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-[11px] text-muted-foreground">The producer will deliver this order directly for the fee shown above.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">🚚</span>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-400">Delivery by Producer</p>
+                      <p className="text-[11px] text-muted-foreground">The producer will handle delivery directly.</p>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <div className="flex items-start gap-2">
+                  <span className="text-base">🚚</span>
+                  <div>
+                    <p className="text-sm font-semibold text-sky-400">Transport arranged via AgroBridge</p>
+                    <p className="text-[11px] text-muted-foreground">A ₹30 booking fee applies. AgroBridge connects you with verified transporters.</p>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
 

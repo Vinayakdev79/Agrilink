@@ -18,6 +18,7 @@ import {
   IndianRupee,
   Filter,
   RotateCcw,
+  Truck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,6 +66,10 @@ interface Product {
   isActive: boolean
   createdAt: string
   seller: Seller
+  // V4 delivery handling
+  deliveryHandledByProducer?: boolean
+  deliveryFee?: number
+  freeDelivery?: boolean
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -235,6 +240,9 @@ function ProductCard({
       maxQuantity: product.quantity,
       location: product.location,
       state: product.state,
+      deliveryHandledByProducer: product.deliveryHandledByProducer || false,
+      deliveryFee: product.deliveryFee || 0,
+      freeDelivery: product.freeDelivery || false,
     })
     toast.success(`${product.name} added to cart`)
   }
@@ -276,13 +284,25 @@ function ProductCard({
 
         {/* Top badges overlay */}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
               {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
             </span>
             {isSponsored && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-amber-500/20 text-amber-400 border-amber-500/30">
                 Featured
+              </span>
+            )}
+            {product.deliveryHandledByProducer && product.freeDelivery && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-emerald-500/20 text-emerald-400 border-emerald-500/30 flex items-center gap-0.5">
+                <Truck className="w-2.5 h-2.5" />
+                FREE Delivery
+              </span>
+            )}
+            {product.deliveryHandledByProducer && !product.freeDelivery && (product.deliveryFee || 0) > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-teal-500/20 text-teal-400 border-teal-500/30 flex items-center gap-0.5">
+                <Truck className="w-2.5 h-2.5" />
+                Delivery ₹{product.deliveryFee}
               </span>
             )}
           </div>

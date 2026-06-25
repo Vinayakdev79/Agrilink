@@ -17,11 +17,6 @@ import {
   Building2,
   ArrowLeft,
   Loader2,
-  Sparkles,
-  Sprout,
-  ShoppingBag,
-  Truck,
-  Shield,
 } from 'lucide-react'
 import type { AppUser, UserRole } from '@/lib/store'
 
@@ -161,184 +156,6 @@ export function AuthPage() {
       setView('role-select')
     } catch {
       toast.error('Something went wrong. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleRoleDemo = async (email: string, roleName: string) => {
-    setIsLoading(true)
-    try {
-      const roleToType: Record<string, string> = {
-        'producer1@agrilink.in': 'producer',
-        'buyer1@agrilink.in': 'buyer',
-        'transport1@agrilink.in': 'transporter',
-        'admin@agrilink.in': 'admin',
-      }
-      const desiredRole = (roleToType[email] || roleName.toLowerCase()) as UserRole
-
-      // Try to get existing user and update their role if needed
-      const getRes = await fetch(`/api/auth?email=${encodeURIComponent(email)}`)
-      if (getRes.ok) {
-        const data = await getRes.json()
-        let userData = data.user
-
-        // If role doesn't match, update it via POST
-        if (userData.role !== desiredRole) {
-          const roleMap: Record<string, { name: string; company: string; phone: string; state: string; city: string }> = {
-            'producer1@agrilink.in': { name: 'Rajesh Farmer', company: 'Green Harvest Farms', phone: '+91-9876500001', state: 'Punjab', city: 'Ludhiana' },
-            'buyer1@agrilink.in': { name: 'Priya Buyer', company: 'Spice Route Trading', phone: '+91-9876500002', state: 'Maharashtra', city: 'Mumbai' },
-            'transport1@agrilink.in': { name: 'Amit Transporter', company: 'Swift Cargo Movers', phone: '+91-9876500003', state: 'Gujarat', city: 'Ahmedabad' },
-            'admin@agrilink.in': { name: 'Admin User', company: 'AgriLink Platform', phone: '+91-9876500000', state: 'Delhi', city: 'New Delhi' },
-          }
-          const info = roleMap[email] || { name: userData.name, company: userData.companyName, phone: userData.phone, state: userData.state, city: userData.city }
-          const updateRes = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email,
-              name: info.name,
-              role: desiredRole,
-              companyName: info.company,
-              phone: info.phone,
-              state: info.state,
-              city: info.city,
-            }),
-          })
-          if (updateRes.ok) {
-            const updateData = await updateRes.json()
-            userData = updateData.user
-          }
-        }
-
-        const user: AppUser = {
-          id: userData.id,
-          name: userData.name || '',
-          email: userData.email,
-          role: (userData.role || desiredRole) as UserRole,
-          companyName: userData.companyName || undefined,
-          phone: userData.phone || undefined,
-          state: userData.state || undefined,
-          city: userData.city || undefined,
-          verificationStatus: userData.verificationStatus,
-          avatar: userData.avatar || undefined,
-        }
-        setUser(user)
-        toast.success(`Welcome! You're now signed in as a ${roleName}.`)
-        setView('dashboard')
-        return
-      }
-
-      // If not found, create user (use already-defined roleMap from the if block above)
-      const createRes = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          name: roleName,
-          role: desiredRole,
-          companyName: '',
-          phone: '',
-          state: '',
-          city: '',
-        }),
-      })
-
-      const data = await createRes.json()
-
-      if (!createRes.ok) {
-        toast.error(data.error || `Failed to sign in as ${roleName}`)
-        return
-      }
-
-      const user: AppUser = {
-        id: data.user.id,
-        name: data.user.name || '',
-        email: data.user.email,
-        role: data.user.role as UserRole,
-        companyName: data.user.companyName || undefined,
-        phone: data.user.phone || undefined,
-        state: data.user.state || undefined,
-        city: data.user.city || undefined,
-        verificationStatus: data.user.verificationStatus,
-        avatar: data.user.avatar || undefined,
-      }
-
-      setUser(user)
-      toast.success(`Welcome! You're now signed in as a ${roleName}.`)
-      setView('dashboard')
-    } catch {
-      toast.error(`Failed to sign in as ${roleName}. Please try again.`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleDemoLogin = async () => {
-    setIsLoading(true)
-    try {
-      // First try to get existing demo user
-      const getRes = await fetch(`/api/auth?email=${encodeURIComponent('demo@agrilink.in')}`)
-      if (getRes.ok) {
-        const data = await getRes.json()
-        const user: AppUser = {
-          id: data.user.id,
-          name: data.user.name || '',
-          email: data.user.email,
-          role: data.user.role as UserRole,
-          companyName: data.user.companyName || undefined,
-          phone: data.user.phone || undefined,
-          state: data.user.state || undefined,
-          city: data.user.city || undefined,
-          verificationStatus: data.user.verificationStatus,
-          avatar: data.user.avatar || undefined,
-        }
-        setUser(user)
-        toast.success('Welcome to the AgriLink Demo!')
-        setView('dashboard')
-        return
-      }
-
-      // If not found, create demo user
-      const createRes = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'demo@agrilink.in',
-          name: 'Demo User',
-          role: 'buyer',
-          companyName: 'AgriLink Demo Corp',
-          phone: '+91-9876543210',
-          state: 'Maharashtra',
-          city: 'Mumbai',
-        }),
-      })
-
-      const data = await createRes.json()
-
-      if (!createRes.ok) {
-        toast.error(data.error || 'Demo login failed')
-        return
-      }
-
-      const user: AppUser = {
-        id: data.user.id,
-        name: data.user.name || '',
-        email: data.user.email,
-        role: data.user.role as UserRole,
-        companyName: data.user.companyName || undefined,
-        phone: data.user.phone || undefined,
-        state: data.user.state || undefined,
-        city: data.user.city || undefined,
-        verificationStatus: data.user.verificationStatus,
-        avatar: data.user.avatar || undefined,
-      }
-
-      setUser(user)
-      toast.success('Welcome to the AgriLink Demo!')
-      setView('dashboard')
-    } catch {
-      toast.error('Demo login failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -488,75 +305,16 @@ export function AuthPage() {
                     )}
                   </Button>
 
-                  {/* Demo Login */}
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-white/10" />
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <span className="px-3 bg-card text-muted-foreground">or</span>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleDemoLogin}
-                    disabled={isLoading}
-                    variant="outline"
-                    className="w-full h-11 border-amber-500/30 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 font-semibold rounded-xl transition-all"
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Try Demo Account
-                  </Button>
-
-                  {/* Quick Role Demo */}
-                  <div className="space-y-3 mt-4">
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-white/10" />
-                      </div>
-                      <div className="relative flex justify-center text-xs">
-                        <span className="px-3 bg-card text-muted-foreground">Quick Role Demo</span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        onClick={() => handleRoleDemo('producer1@agrilink.in', 'Producer')}
-                        disabled={isLoading}
-                        variant="outline"
-                        className="h-auto py-3 flex-col gap-1.5 border-emerald-500/30 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 font-medium rounded-xl transition-all"
-                      >
-                        <Sprout className="w-5 h-5" />
-                        <span className="text-xs">Producer</span>
-                      </Button>
-                      <Button
-                        onClick={() => handleRoleDemo('buyer1@agrilink.in', 'Buyer')}
-                        disabled={isLoading}
-                        variant="outline"
-                        className="h-auto py-3 flex-col gap-1.5 border-amber-500/30 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 font-medium rounded-xl transition-all"
-                      >
-                        <ShoppingBag className="w-5 h-5" />
-                        <span className="text-xs">Buyer</span>
-                      </Button>
-                      <Button
-                        onClick={() => handleRoleDemo('transport1@agrilink.in', 'Transporter')}
-                        disabled={isLoading}
-                        variant="outline"
-                        className="h-auto py-3 flex-col gap-1.5 border-teal-500/30 bg-teal-500/5 text-teal-400 hover:bg-teal-500/15 hover:border-teal-500/40 font-medium rounded-xl transition-all"
-                      >
-                        <Truck className="w-5 h-5" />
-                        <span className="text-xs">Transporter</span>
-                      </Button>
-                      <Button
-                        onClick={() => handleRoleDemo('admin@agrilink.in', 'Admin')}
-                        disabled={isLoading}
-                        variant="outline"
-                        className="h-auto py-3 flex-col gap-1.5 border-purple-500/30 bg-purple-500/5 text-purple-400 hover:bg-purple-500/15 hover:border-purple-500/40 font-medium rounded-xl transition-all"
-                      >
-                        <Shield className="w-5 h-5" />
-                        <span className="text-xs">Admin</span>
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-center text-xs text-muted-foreground pt-2">
+                    New to AgriLink?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('register')}
+                      className="text-emerald-400 hover:underline font-medium"
+                    >
+                      Create an account
+                    </button>
+                  </p>
                 </motion.div>
               </AnimatePresence>
             </TabsContent>

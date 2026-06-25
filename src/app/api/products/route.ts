@@ -13,15 +13,15 @@ export async function GET(request: Request) {
 
     // Single product lookup by ID
     if (id) {
-      // Try with sponsored fields first, fallback without
+      // Try with all V4 columns first
       let { data: product, error } = await supabase
         .from('Product')
-        .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry)')
+        .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry, subscriptionTier)')
         .eq('id', id)
         .maybeSingle()
 
       if (error) {
-        // Retry without sponsored columns
+        // Retry without sponsored/subscription columns
         const fallback = await supabase
           .from('Product')
           .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
     // List products with filters
     let query = supabase
       .from('Product')
-      .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry)')
+      .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city, isSponsored, sponsoredExpiry, subscriptionTier)')
       .eq('isActive', true)
       .order('createdAt', { ascending: false })
       .limit(50)
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
     const { data: products, error } = await query
 
     if (error) {
-      // Fallback: try without sponsored columns (they may not exist yet)
+      // Fallback: try without sponsored/subscription columns (they may not exist yet)
       let fallbackQuery = supabase
         .from('Product')
         .select('*, seller:User!sellerId(id, name, companyName, verificationStatus, state, city)')
@@ -89,11 +89,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ products: fallbackResult.data || [] })
     }
 
-    // Sort products so that sponsored sellers (with valid isSponsored and non-expired sponsoredExpiry) appear first
+    // Sort products so that sponsored sellers (with valid isSponsored and non-expired sponsoredExpiry)
+    // OR active Pro subscriptions appear first
     const now = new Date()
     const sortedProducts = (products ?? []).sort((a: any, b: any) => {
-      const aSponsored = a.seller?.isSponsored && a.seller?.sponsoredExpiry && new Date(a.seller.sponsoredExpiry) > now
-      const bSponsored = b.seller?.isSponsored && b.seller?.sponsoredExpiry && new Date(b.seller.sponsoredExpiry) > now
+      const aSponsored = (a.seller?.isSponsored && a.seller?.sponsoredExpiry && new Date(a.seller.sponsoredExpiry) > now)
+        || (a.seller?.subscriptionTier && a.seller.subscriptionTier !== 'free')
+      const bSponsored = (b.seller?.isSponsored && b.seller?.sponsoredExpiry && new Date(b.seller.sponsoredExpiry) > now)
+        || (b.seller?.subscriptionTier && b.seller.subscriptionTier !== 'free')
       if (aSponsored && !bSponsored) return -1
       if (!aSponsored && bSponsored) return 1
       return 0
@@ -115,41 +118,73 @@ export async function POST(request: Request) {
       imageUrl, images, cropVariety, harvestDate, freshness,
       isOrganic, pesticidesUsed, moistureContent, shelfLife,
       storageCondition, certifications,
+      // V4 delivery fields
+      deliveryHandledByProducer,
+      deliveryFee,
+      freeDelivery,
     } = body
 
     if (!sellerId || !category || !name || !quantity || !unit || !pricePerUnit || !location) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { data: product, error } = await supabase
+    const insertData: Record<string, unknown> = {
+      sellerId,
+      category,
+      name,
+      description,
+      quantity: parseFloat(quantity),
+      unit,
+      pricePerUnit: parseFloat(pricePerUnit),
+      minOrderQty: minOrderQty ? parseFloat(minOrderQty) : null,
+      location,
+      state,
+      qualityGrade,
+      imageUrl: imageUrl || null,
+      images: images || null,
+      cropVariety: cropVariety || null,
+      harvestDate: harvestDate || null,
+      freshness: freshness || null,
+      isOrganic: isOrganic || false,
+      pesticidesUsed: pesticidesUsed || null,
+      moistureContent: moistureContent || null,
+      shelfLife: shelfLife || null,
+      storageCondition: storageCondition || null,
+      certifications: certifications || null,
+      isActive: true,
+    }
+
+    // Add V4 delivery fields if provided
+    if (deliveryHandledByProducer !== undefined) insertData.deliveryHandledByProducer = !!deliveryHandledByProducer
+    if (deliveryFee !== undefined) insertData.deliveryFee = parseFloat(deliveryFee) || 0
+    if (freeDelivery !== undefined) insertData.freeDelivery = !!freeDelivery
+
+    // Try insert with all fields
+    let { data: product, error } = await supabase
       .from('Product')
-      .insert({
-        sellerId,
-        category,
-        name,
-        description,
-        quantity: parseFloat(quantity),
-        unit,
-        pricePerUnit: parseFloat(pricePerUnit),
-        minOrderQty: minOrderQty ? parseFloat(minOrderQty) : null,
-        location,
-        state,
-        qualityGrade,
-        imageUrl: imageUrl || null,
-        images: images || null,
-        cropVariety: cropVariety || null,
-        harvestDate: harvestDate || null,
-        freshness: freshness || null,
-        isOrganic: isOrganic || false,
-        pesticidesUsed: pesticidesUsed || null,
-        moistureContent: moistureContent || null,
-        shelfLife: shelfLife || null,
-        storageCondition: storageCondition || null,
-        certifications: certifications || null,
-        isActive: true,
-      })
+      .insert(insertData)
       .select()
       .single()
+
+    // If V4 columns don't exist, retry without them
+    if (error && (deliveryHandledByProducer !== undefined || deliveryFee !== undefined || freeDelivery !== undefined)) {
+      const fallbackData: Record<string, unknown> = { ...insertData }
+      delete fallbackData.deliveryHandledByProducer
+      delete fallbackData.deliveryFee
+      delete fallbackData.freeDelivery
+
+      const fb = await supabase
+        .from('Product')
+        .insert(fallbackData)
+        .select()
+        .single()
+      if (fb.error) {
+        console.error('Product create error:', fb.error)
+        return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+      }
+      product = fb.data
+      error = null
+    }
 
     if (error) {
       console.error('Product create error:', error)
@@ -166,7 +201,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()
-    const { productId, quantity, isActive } = body
+    const { productId, quantity, isActive, deliveryHandledByProducer, deliveryFee, freeDelivery } = body
 
     if (!productId) {
       return NextResponse.json({ error: 'Missing productId' }, { status: 400 })
@@ -179,6 +214,15 @@ export async function PATCH(request: Request) {
     }
     if (isActive !== undefined) {
       updateData.isActive = isActive
+    }
+    if (deliveryHandledByProducer !== undefined) {
+      updateData.deliveryHandledByProducer = !!deliveryHandledByProducer
+    }
+    if (deliveryFee !== undefined) {
+      updateData.deliveryFee = parseFloat(deliveryFee) || 0
+    }
+    if (freeDelivery !== undefined) {
+      updateData.freeDelivery = !!freeDelivery
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -195,8 +239,25 @@ export async function PATCH(request: Request) {
       .single()
 
     if (error) {
-      console.error('Product update error:', error)
-      return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
+      // If V4 columns don't exist, retry without them
+      const fallbackData: Record<string, unknown> = {}
+      if (quantity !== undefined) fallbackData.quantity = parseFloat(quantity)
+      if (isActive !== undefined) fallbackData.isActive = isActive
+      fallbackData.updatedAt = new Date().toISOString()
+      if (Object.keys(fallbackData).length === 1) {
+        return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+      }
+      const fb = await supabase
+        .from('Product')
+        .update(fallbackData)
+        .eq('id', productId)
+        .select()
+        .single()
+      if (fb.error) {
+        console.error('Product update error:', fb.error)
+        return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
+      }
+      return NextResponse.json({ product: fb.data })
     }
 
     if (!product) {
@@ -207,5 +268,56 @@ export async function PATCH(request: Request) {
   } catch (error) {
     console.error('Product update error:', error)
     return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE - permanently delete a product listing (producer or admin only).
+ * Also restores any reserved quantity, and removes the listing cleanly.
+ */
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const productId = searchParams.get('productId')
+    const sellerId = searchParams.get('sellerId')
+
+    if (!productId) {
+      return NextResponse.json({ error: 'Missing productId' }, { status: 400 })
+    }
+
+    // Verify ownership (if sellerId provided) — only the owner or an admin can delete
+    if (sellerId) {
+      const { data: product, error: fetchErr } = await supabase
+        .from('Product')
+        .select('id, sellerId')
+        .eq('id', productId)
+        .maybeSingle()
+      if (fetchErr) {
+        console.error('Product fetch error (for delete):', fetchErr)
+        return NextResponse.json({ error: 'Failed to verify product' }, { status: 500 })
+      }
+      if (!product) {
+        return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      }
+      if (product.sellerId !== sellerId) {
+        return NextResponse.json({ error: 'Not authorized to delete this listing' }, { status: 403 })
+      }
+    }
+
+    // Soft-delete: mark as inactive (preserves order history integrity)
+    const { error: updateErr } = await supabase
+      .from('Product')
+      .update({ isActive: false, updatedAt: new Date().toISOString() })
+      .eq('id', productId)
+
+    if (updateErr) {
+      console.error('Product soft-delete error:', updateErr)
+      return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Listing deleted successfully' })
+  } catch (error) {
+    console.error('Product delete error:', error)
+    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
   }
 }

@@ -9,7 +9,7 @@ import {
   Truck, Phone, Clock, Crosshair, CalendarDays,
   Upload, Image as ImageIcon, Leaf, FileText, Shield,
   AlertTriangle, Pencil, CheckCircle, Building2, Mail,
-  ArrowRightLeft, Receipt
+  ArrowRightLeft, Receipt, Trash2, UserPlus
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +24,10 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel
+} from '@/components/ui/alert-dialog'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table'
@@ -370,6 +374,91 @@ function AddListingForm({
             />
           </div>
         </div>
+      </div>
+
+      <div className="border-t border-glass-border" />
+
+      {/* Delivery Options */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+          <Truck className="h-4 w-4" /> Delivery Options
+        </h4>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+              formData.deliveryOption === 'platform'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+            }`}
+            onClick={() => setField('deliveryOption', 'platform')}
+          >
+            <Building2 className="h-4 w-4 mx-auto mb-1" />
+            Platform Transport
+          </button>
+          <button
+            type="button"
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+              formData.deliveryOption === 'self'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+            }`}
+            onClick={() => setField('deliveryOption', 'self')}
+          >
+            <User className="h-4 w-4 mx-auto mb-1" />
+            I Will Handle
+          </button>
+          <button
+            type="button"
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+              formData.deliveryOption === 'local'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+            }`}
+            onClick={() => setField('deliveryOption', 'local')}
+          >
+            <Truck className="h-4 w-4 mx-auto mb-1" />
+            Local Transporter
+          </button>
+        </div>
+
+        {formData.deliveryOption === 'platform' && (
+          <p className="text-xs text-muted-foreground bg-white/[0.03] p-2 rounded-lg border border-white/10">
+            Buyer arranges shipment via AgroBridge transporters. Standard logistics fees apply.
+          </p>
+        )}
+
+        {(formData.deliveryOption === 'self' || formData.deliveryOption === 'local') && (
+          <div className="space-y-3 glass-card p-3 border border-emerald-500/15">
+            <div className="flex items-center justify-between">
+              <Label className="text-foreground text-xs">Free Delivery</Label>
+              <Switch
+                checked={formData.freeDelivery}
+                onCheckedChange={(checked) => setField('freeDelivery', checked)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-foreground text-xs">Delivery Fee (₹)</Label>
+              <Input
+                type="number"
+                className="glass-input text-foreground"
+                placeholder="0"
+                value={formData.freeDelivery ? '0' : formData.deliveryFee}
+                disabled={formData.freeDelivery}
+                onChange={(e) => setField('deliveryFee', e.target.value)}
+              />
+              {formData.freeDelivery ? (
+                <p className="text-[10px] text-emerald-400">Buyer will not be charged a delivery fee.</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  {formData.deliveryOption === 'self'
+                    ? 'This fee is charged to the buyer for delivery.'
+                    : 'This fee is charged to the buyer. You will assign your local transporter after the order is confirmed.'}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-glass-border" />
@@ -1182,6 +1271,117 @@ function ReassignTransporterDialogContent({
   )
 }
 
+// ─── Assign Local Transporter Dialog Content ─────────────────────────────────
+function AssignLocalTransporterDialogContent({
+  order,
+  user,
+  onClose,
+  onSubmit,
+  submitting,
+}: {
+  order: any
+  user: any
+  onClose: () => void
+  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+  submitting: boolean
+}) {
+  const [form, setForm] = useState({
+    transporterName: order?.localTransporterName || '',
+    phone: order?.localTransporterPhone || '',
+    vehicleNumber: order?.localTransporterVehicle || '',
+  })
+
+  const isReassign = !!(order?.localTransporterName)
+
+  const handleSubmit = async () => {
+    if (!form.transporterName || !form.phone || !form.vehicleNumber) {
+      toast.error('Please fill all required fields')
+      return
+    }
+    await onSubmit({
+      orderId: order.id,
+      deliveryType: 'local',
+      localTransporterName: form.transporterName,
+      localTransporterPhone: form.phone,
+      localTransporterVehicle: form.vehicleNumber,
+      statusUpdatedBy: user.id,
+    })
+    onClose()
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="text-foreground flex items-center gap-2">
+          <UserPlus className="h-5 w-5 text-emerald-400" />
+          {isReassign ? 'Reassign Local Transporter' : 'Assign Local Transporter'}
+        </DialogTitle>
+        <DialogDescription className="text-muted-foreground">
+          {order && (
+            <>
+              Order: {order.product?.name || 'N/A'} &bull; Qty: {order.quantity} {order.product?.unit || ''}
+            </>
+          )}
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="grid gap-5 py-4">
+        <div className="space-y-3">
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Transporter Name *</Label>
+            <Input
+              className="glass-input text-foreground"
+              placeholder="e.g. Sharma Transport"
+              value={form.transporterName}
+              onChange={(e) => setForm((p) => ({ ...p, transporterName: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Phone Number *</Label>
+            <Input
+              className="glass-input text-foreground"
+              placeholder="e.g. 9876543210"
+              value={form.phone}
+              onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-foreground text-xs">Vehicle Number *</Label>
+            <Input
+              className="glass-input text-foreground"
+              placeholder="e.g. MH12AB1234"
+              value={form.vehicleNumber}
+              onChange={(e) => setForm((p) => ({ ...p, vehicleNumber: e.target.value }))}
+            />
+          </div>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          className="bg-emerald-600 hover:bg-emerald-500"
+          onClick={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <>
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+              {isReassign ? 'Reassigning...' : 'Assigning...'}
+            </>
+          ) : (
+            <>
+              <UserPlus className="h-4 w-4 mr-1" /> {isReassign ? 'Reassign' : 'Assign Transporter'}
+            </>
+          )}
+        </Button>
+      </DialogFooter>
+    </>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── Main Producer Dashboard Component ────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1217,6 +1417,9 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     shelfLife: '',
     storageCondition: '',
     certifications: '',
+    deliveryOption: 'platform',
+    deliveryFee: '',
+    freeDelivery: false,
   })
 
   // Shipment tracking state
@@ -1293,6 +1496,9 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
       shelfLife: '',
       storageCondition: '',
       certifications: '',
+      deliveryOption: 'platform',
+      deliveryFee: '',
+      freeDelivery: false,
     })
   }
 
@@ -1300,10 +1506,24 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     if (!user) return
     setIsSubmitting(true)
     try {
+      const deliveryHandledByProducer =
+        formData.deliveryOption === 'self' || formData.deliveryOption === 'local'
+      const freeDelivery = !!formData.freeDelivery
+      const deliveryFee = freeDelivery
+        ? 0
+        : formData.deliveryFee
+          ? parseFloat(formData.deliveryFee)
+          : 0
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sellerId: user.id, ...formData }),
+        body: JSON.stringify({
+          sellerId: user.id,
+          ...formData,
+          deliveryHandledByProducer,
+          freeDelivery,
+          deliveryFee,
+        }),
       })
       if (res.ok) {
         toast.success('Listing created successfully!')
@@ -1435,6 +1655,79 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     }
   }
 
+  // Delete listing (soft-delete via API)
+  const [deleteListingId, setDeleteListingId] = useState<string | null>(null)
+  const handleDeleteListing = async (productId: string) => {
+    if (!user) return
+    try {
+      const res = await fetch(`/api/products?productId=${productId}&sellerId=${user.id}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        toast.success('Listing deleted successfully')
+        setDeleteListingId(null)
+        fetchData()
+      } else {
+        toast.error('Failed to delete listing')
+      }
+    } catch {
+      toast.error('Failed to delete listing')
+    }
+  }
+
+  // Producer-driven order status updates (Mark as Shipped / Delivered)
+  const handleMarkOrderStatus = async (orderId: string, status: string) => {
+    if (!user) return
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status, statusUpdatedBy: user.id }),
+      })
+      if (res.ok) {
+        toast.success(`Order marked as ${status}`)
+        fetchData()
+      } else {
+        toast.error('Failed to update order status')
+      }
+    } catch {
+      toast.error('Failed to update order status')
+    }
+  }
+
+  // Assign / Reassign local transporter for producer-handled orders
+  const [assignLocalOpen, setAssignLocalOpen] = useState(false)
+  const [selectedOrderForLocal, setSelectedOrderForLocal] = useState<any>(null)
+  const [localSubmitting, setLocalSubmitting] = useState(false)
+
+  const openAssignLocalTransporter = (order: any) => {
+    setSelectedOrderForLocal(order)
+    setAssignLocalOpen(true)
+  }
+
+  const handleAssignLocalTransporter = async (data: Record<string, unknown>) => {
+    setLocalSubmitting(true)
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (res.ok) {
+        toast.success('Local transporter assigned')
+        setAssignLocalOpen(false)
+        setSelectedOrderForLocal(null)
+        fetchData()
+      } else {
+        toast.error('Failed to assign local transporter')
+      }
+    } catch {
+      toast.error('Failed to assign local transporter')
+    } finally {
+      setLocalSubmitting(false)
+    }
+  }
+
   // Check if shipment deadline has passed
   const isDeadlinePassed = (shipment: any) => {
     if (!shipment.assignedAt && !shipment.pickupDeadline) return false
@@ -1446,7 +1739,6 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
 
   // ─── Computed Values ────────────────────────────────────────────────────────
   const activeListings = products.filter((p) => p.isActive).length
-  const totalOrders = orders.length
   const revenue = orders
     .filter((o) => o.status === 'delivered')
     .reduce((s, o) => s + (o.totalPrice || 0), 0)
@@ -1491,6 +1783,26 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     </Dialog>
   )
 
+  // ─── Shared Assign Local Transporter Dialog ────────────────────────────────
+  const renderAssignLocalTransporterDialog = () => (
+    <Dialog open={assignLocalOpen} onOpenChange={setAssignLocalOpen}>
+      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+        {selectedOrderForLocal && (
+          <AssignLocalTransporterDialogContent
+            order={selectedOrderForLocal}
+            user={user}
+            onClose={() => {
+              setAssignLocalOpen(false)
+              setSelectedOrderForLocal(null)
+            }}
+            onSubmit={handleAssignLocalTransporter}
+            submitting={localSubmitting}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+
   // ─── Shared Shipment Tracker Dialog ─────────────────────────────────────────
   const renderShipmentTracker = () => (
     <ShipmentTracker
@@ -1517,8 +1829,8 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
           />
           <StatCard
             icon={<ShoppingCart className="h-5 w-5" />}
-            value={String(totalOrders)}
-            label="Total Orders"
+            value={String((user as Record<string, any>)?.totalDeals || 0)}
+            label="Total Deals"
             trend="+8%"
             trendUp
           />
@@ -1888,26 +2200,82 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                       <span className="text-foreground">{product.cropVariety}</span>
                     </div>
                   )}
-                  {product.isOrganic && (
-                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px]">
-                      <Leaf className="h-2.5 w-2.5 mr-0.5" /> Organic
-                    </Badge>
+                  {(product.isOrganic ||
+                    product.deliveryHandledByProducer ||
+                    product.freeDelivery ||
+                    (!product.freeDelivery && product.deliveryFee > 0)) && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {product.isOrganic && (
+                        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 border text-[9px]">
+                          <Leaf className="h-2.5 w-2.5 mr-0.5" /> Organic
+                        </Badge>
+                      )}
+                      {product.deliveryHandledByProducer && (
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-[9px]">
+                          🚚 Producer Delivery
+                        </Badge>
+                      )}
+                      {product.freeDelivery && (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 border text-[9px]">
+                          FREE DELIVERY
+                        </Badge>
+                      )}
+                      {!product.freeDelivery && product.deliveryFee > 0 && (
+                        <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30 border text-[9px]">
+                          Delivery: ₹{product.deliveryFee}
+                        </Badge>
+                      )}
+                    </div>
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-glass-border">
+                <div className="pt-2 border-t border-glass-border flex gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-muted-foreground hover:text-foreground w-full gap-2"
+                    className="text-muted-foreground hover:text-foreground flex-1 gap-2"
                   >
                     <Eye className="h-4 w-4" /> View Details
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 gap-2"
+                    onClick={() => setDeleteListingId(product.id)}
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete
                   </Button>
                 </div>
               </motion.div>
             ))}
           </div>
         )}
+
+        {/* Delete Listing Confirmation */}
+        <AlertDialog
+          open={!!deleteListingId}
+          onOpenChange={(open) => !open && setDeleteListingId(null)}
+        >
+          <AlertDialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-foreground">Delete Listing?</AlertDialogTitle>
+              <AlertDialogDescription className="text-muted-foreground">
+                Delete this listing? This action cannot be undone. Existing orders for this product will be preserved.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="border-glass-border">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-red-600 hover:bg-red-500 text-white"
+                onClick={() => {
+                  if (deleteListingId) handleDeleteListing(deleteListingId)
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     )
   }
@@ -1942,7 +2310,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
 
               // Payment breakdown calculation
               const productCost = (order.quantity || 0) * (order.unitPrice || order.product?.pricePerUnit || 0)
-              const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
+              const platformFee = order.platformFee || 0
               const totalPrice = order.totalPrice || productCost
               const advancePaid = order.advanceAmount || order.advancePayment || Math.round(totalPrice * 0.5 * 100) / 100
               const remaining = order.remainingAmount || order.remainingPayment || Math.round((totalPrice - advancePaid) * 100) / 100
@@ -2114,7 +2482,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                             <span className="text-amber-400 font-medium">₹{productCost.toLocaleString('en-IN')}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Platform Fee (2%)</span>
+                            <span className="text-muted-foreground">Platform Fee</span>
                             <span className="text-amber-400 font-medium">₹{platformFee.toLocaleString('en-IN')}</span>
                           </div>
                           {order.transportBookingFee && (
@@ -2276,15 +2644,121 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                     </div>
                   )}
 
-                  {/* Create Shipment Button */}
-                  {(order.status === 'confirmed' || order.status === 'negotiating') && !shipment && (
-                    <Button
-                      size="sm"
-                      className="bg-teal-600 hover:bg-teal-500 text-white gap-1.5 text-xs"
-                      onClick={() => openCreateShipment(order)}
-                    >
-                      <Truck className="h-3.5 w-3.5" /> Create Shipment
-                    </Button>
+                  {/* Create Shipment Button (Platform transport only) */}
+                  {(order.status === 'confirmed' || order.status === 'negotiating') &&
+                    !shipment &&
+                    !order.product?.deliveryHandledByProducer && (
+                      <Button
+                        size="sm"
+                        className="bg-teal-600 hover:bg-teal-500 text-white gap-1.5 text-xs"
+                        onClick={() => openCreateShipment(order)}
+                      >
+                        <Truck className="h-3.5 w-3.5" /> Create Shipment
+                      </Button>
+                    )}
+
+                  {/* Producer-Handled Delivery (no local transporter assigned yet) */}
+                  {order.product?.deliveryHandledByProducer &&
+                    order.deliveryType !== 'local' &&
+                    (order.status === 'confirmed' || order.status === 'shipped') && (
+                      <div className="glass-card p-4 border border-emerald-500/20 bg-emerald-500/[0.02] space-y-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
+                            🚚 Producer-Handled Delivery
+                          </Badge>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600/80 hover:bg-emerald-500 text-white gap-1.5 text-xs"
+                            onClick={() => openAssignLocalTransporter(order)}
+                          >
+                            <UserPlus className="h-3.5 w-3.5" /> Assign Local Transporter
+                          </Button>
+                        </div>
+                        <div className="pt-2 border-t border-glass-border">
+                          {order.status === 'confirmed' && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs"
+                              onClick={() => handleMarkOrderStatus(order.id, 'shipped')}
+                            >
+                              <Truck className="h-3.5 w-3.5" /> Mark as Shipped
+                            </Button>
+                          )}
+                          {order.status === 'shipped' && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs"
+                              onClick={() => handleMarkOrderStatus(order.id, 'delivered')}
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" /> Mark as Delivered
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Local Transporter (assigned) */}
+                  {order.deliveryType === 'local' && order.localTransporterName && (
+                    <div className="glass-card p-4 border border-emerald-500/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <UserPlus className="h-4 w-4 text-emerald-400" />
+                        <h5 className="text-sm font-semibold text-foreground">Local Transporter</h5>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1.5 text-xs ml-auto"
+                          onClick={() => openAssignLocalTransporter(order)}
+                        >
+                          <ArrowRightLeft className="h-3.5 w-3.5" /> Reassign
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Name</p>
+                          <p className="text-foreground font-medium text-xs">{order.localTransporterName}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Phone</p>
+                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-emerald-400" />
+                            <a href={`tel:${order.localTransporterPhone}`} className="hover:underline">
+                              {order.localTransporterPhone}
+                            </a>
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-[10px]">Vehicle</p>
+                          <p className="text-foreground font-medium text-xs flex items-center gap-1">
+                            <Truck className="h-3 w-3 text-teal-400" />
+                            {order.localTransporterVehicle}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-3 bg-white/[0.03] p-2 rounded-lg border border-white/5">
+                        This order is being delivered by the producer's local transporter. Status updates are managed by the producer.
+                      </p>
+                      {(order.status === 'confirmed' || order.status === 'shipped') && (
+                        <div className="mt-3 pt-3 border-t border-glass-border">
+                          {order.status === 'confirmed' ? (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs"
+                              onClick={() => handleMarkOrderStatus(order.id, 'shipped')}
+                            >
+                              <Truck className="h-3.5 w-3.5" /> Mark Shipped
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 text-xs"
+                              onClick={() => handleMarkOrderStatus(order.id, 'delivered')}
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" /> Mark Delivered
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </motion.div>
               )
@@ -2298,6 +2772,8 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
         {renderCreateShipmentDialog()}
         {/* Reassign Transporter Dialog */}
         {renderReassignDialog()}
+        {/* Assign Local Transporter Dialog */}
+        {renderAssignLocalTransporterDialog()}
       </div>
     )
   }
@@ -2316,7 +2792,8 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
               const confirmedWithoutShipment = orders.find(
                 (o) =>
                   (o.status === 'confirmed' || o.status === 'negotiating') &&
-                  !getShipmentForOrder(o.id)
+                  !getShipmentForOrder(o.id) &&
+                  !o.product?.deliveryHandledByProducer
               )
               if (confirmedWithoutShipment) {
                 openCreateShipment(confirmedWithoutShipment)

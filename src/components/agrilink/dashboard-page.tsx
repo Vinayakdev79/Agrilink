@@ -4,7 +4,7 @@ import { useAppStore, type UserRole } from '@/lib/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Leaf, LayoutDashboard, Package, ShoppingCart, MessageSquare, User,
-  Store, ClipboardList, Truck, Gavel, Users, ShieldCheck, BarChart3,
+  Store, Truck, Gavel, Users, ShieldCheck, BarChart3,
   Bell, Menu, X, LogOut, ChevronRight, Sprout, CreditCard
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -34,7 +34,6 @@ const navItemsByRole: Record<UserRole, NavItem[]> = {
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-5 w-5" /> },
     { id: 'marketplace', label: 'Marketplace', icon: <Store className="h-5 w-5" /> },
     { id: 'producers', label: 'Producers', icon: <Sprout className="h-5 w-5" /> },
-    { id: 'procurement', label: 'Sourcing', icon: <ClipboardList className="h-5 w-5" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingCart className="h-5 w-5" /> },
     { id: 'messages', label: 'Messages', icon: <MessageSquare className="h-5 w-5" /> },
     { id: 'profile', label: 'Profile', icon: <User className="h-5 w-5" /> },
