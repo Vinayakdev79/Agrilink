@@ -81,6 +81,7 @@ export async function GET(request: Request) {
 
 // Helper to map avatar -> avatarUrl for frontend compatibility
 // Also provides safe defaults for V4 columns that may not exist yet
+// Ensures all numeric fields are proper numbers (Supabase NUMERIC can return strings)
 function mapOrderAvatar(order: any) {
   if (order.seller?.avatar) {
     order.seller.avatarUrl = order.seller.avatar
@@ -91,11 +92,20 @@ function mapOrderAvatar(order: any) {
   // Provide defaults for V4 columns so frontend optional-chaining always works
   if (order.product) {
     order.product.deliveryHandledByProducer = order.product.deliveryHandledByProducer ?? false
-    order.product.deliveryFee = order.product.deliveryFee ?? 0
+    order.product.deliveryFee = Number(order.product.deliveryFee ?? 0)
     order.product.freeDelivery = order.product.freeDelivery ?? false
+    order.product.pricePerUnit = Number(order.product.pricePerUnit ?? 0)
   }
   order.deliveryType = order.deliveryType ?? 'platform'
-  order.deliveryFee = order.deliveryFee ?? 0
+  order.deliveryFee = Number(order.deliveryFee ?? 0)
+  // Ensure all monetary fields are proper numbers (not strings from Supabase NUMERIC)
+  order.totalPrice = Number(order.totalPrice ?? 0)
+  order.unitPrice = Number(order.unitPrice ?? 0)
+  order.quantity = Number(order.quantity ?? 0)
+  order.platformFee = order.platformFee != null ? Number(order.platformFee) : null
+  order.advanceAmount = order.advanceAmount != null ? Number(order.advanceAmount) : null
+  order.remainingAmount = order.remainingAmount != null ? Number(order.remainingAmount) : null
+  order.transportBookingFee = order.transportBookingFee != null ? Number(order.transportBookingFee) : null
   return order
 }
 
@@ -143,13 +153,16 @@ export async function POST(request: Request) {
     // Transport booking fee applies only when the platform arranges transport
     const transportBookingFee = deliveryType && deliveryType !== 'platform'
       ? 0
-      : (clientTransportBookingFee || 0)
+      : Number(clientTransportBookingFee || 0)
 
-    const totalPrice = clientTotalPayable || (productSubtotal + platformFee + transportBookingFee + deliveryFee)
+    // Ensure totalPrice is always a proper number (never a string from concatenation)
+    const totalPrice = clientTotalPayable != null
+      ? Number(clientTotalPayable)
+      : (productSubtotal + platformFee + transportBookingFee + deliveryFee)
 
     // Use client-provided payment breakdown or calculate defaults (50/50 split)
-    const advanceAmount = clientAdvancePayment || Math.round(totalPrice * 0.5 * 100) / 100
-    const remainingAmount = clientRemainingPayment || Math.round((totalPrice - advanceAmount) * 100) / 100
+    const advanceAmount = clientAdvancePayment != null ? Number(clientAdvancePayment) : Math.round(totalPrice * 0.5 * 100) / 100
+    const remainingAmount = clientRemainingPayment != null ? Number(clientRemainingPayment) : Math.round((totalPrice - advanceAmount) * 100) / 100
     const orderStatus = clientStatus || 'confirmed'
 
     const insertData: Record<string, unknown> = {

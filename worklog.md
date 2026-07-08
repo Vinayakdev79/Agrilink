@@ -562,3 +562,59 @@ Stage Summary:
 - Pricing bug fixed: PaymentBreakdown now uses correct ₹1000/₹0 platform fee model
 - Pay Remaining option already existed and works correctly with the fixed calculations
 - Browser verification passed for all three flows
+---
+Task ID: 1
+Agent: Main
+Task: Fix price calculation bug (₹15,000 showing as ₹150,050)
+
+Work Log:
+- Investigated order creation API and buyer dashboard display logic
+- Found potential string concatenation bug in orders API POST handler where transportBookingFee was not wrapped in Number()
+- Fixed orders API: wrapped all client-provided numeric values in Number() to prevent string concatenation
+- Fixed orders API: changed totalPrice computation from `clientTotalPayable || (...)` to `clientTotalPayable != null ? Number(clientTotalPayable) : (...)`
+- Fixed orders API: changed advanceAmount/remainingAmount to use != null checks with Number() wrapping
+- Fixed mapOrderAvatar backend helper to ensure all NUMERIC fields are converted to proper JS numbers
+- Fixed buyer dashboard PaymentBreakdown component to use Number() on all order fields
+- Fixed buyer dashboard order display to use Number(order.totalPrice || 0).toLocaleString()
+- Fixed buyer dashboard remaining amount calculation to use Number() consistently
+- Fixed producer dashboard payment breakdown calculation to use Number() consistently
+
+Stage Summary:
+- All numeric fields from Supabase NUMERIC columns are now explicitly converted with Number()
+- No more risk of string concatenation in price calculations
+- Both buyer and producer dashboards now display prices correctly
+
+---
+Task ID: 2
+Agent: Main
+Task: Add shipment management section to producer dashboard
+
+Work Log:
+- Analyzed existing shipments tab - it only showed platform shipments
+- Added "My Deliveries" section to shipments tab showing all producer-handled delivery orders
+- Each delivery order card includes: order info, buyer details, delivery address, local transporter info
+- Added visual status progress bar (confirmed → shipped → delivered)
+- Added action buttons: Mark as Shipped, Mark as Delivered, Assign Local Transporter, Chat with Buyer
+- Added "Platform Shipments" section header to distinguish from producer deliveries
+- Updated Create Shipment button to exclude producer-handled orders
+
+Stage Summary:
+- Producer dashboard Shipments tab now has two sections: "My Deliveries" and "Platform Shipments"
+- Producer can control order status (confirmed → shipped → delivered) for self-delivery and local transporter orders
+- Local transporter details are shown with option to reassign
+
+---
+Task ID: 3
+Agent: Main
+Task: Fix Supabase migration SQL and verify
+
+Work Log:
+- Fixed CREATE POLICY statements in supabase-migration-final.sql to use DO $$ BEGIN ... EXCEPTION blocks
+- User successfully applied the migration to Supabase
+- V4 column errors (deliveryHandledByProducer does not exist) are now resolved
+- Browser verification confirms page loads without errors
+
+Stage Summary:
+- Migration applied successfully
+- No more V4 column fallback errors in dev logs
+- Application running cleanly

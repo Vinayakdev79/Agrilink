@@ -106,23 +106,23 @@ function StatCard({ icon, value, label, trend, trendUp }: {
 
 // Payment Breakdown Component
 function PaymentBreakdown({ order }: { order: any }) {
-  const quantity = order.quantity || 0
-  const unitPrice = order.unitPrice || order.product?.pricePerUnit || 0
+  const quantity = Number(order.quantity) || 0
+  const unitPrice = Number(order.unitPrice) || Number(order.product?.pricePerUnit) || 0
   const productCost = quantity * unitPrice
   // Platform fee: ₹1000 if subtotal > ₹10,000, else ₹0 (use order value if available)
-  const platformFee = order.platformFee !== undefined && order.platformFee !== null
+  const platformFee = order.platformFee != null
     ? Number(order.platformFee)
     : (productCost > 10000 ? 1000 : 0)
   // Transport booking fee: only when platform arranges transport (not producer/local)
   const isProducerDelivery = order.deliveryType === 'producer' || order.deliveryType === 'local' || order.product?.deliveryHandledByProducer
-  const transportBookingFee = order.transportBookingFee !== undefined && order.transportBookingFee !== null
+  const transportBookingFee = order.transportBookingFee != null
     ? Number(order.transportBookingFee)
     : (isProducerDelivery ? 0 : 30)
   const isFreeDelivery = order.freeDelivery || order.product?.freeDelivery
-  const deliveryFee = (order.deliveryFee !== undefined && order.deliveryFee !== null) ? Number(order.deliveryFee) : 0
-  const total = order.totalPayable || order.totalPrice || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
-  const advancePaid = order.advanceAmount || Math.round(total * 0.5 * 100) / 100
-  const remaining = order.remainingAmount || Math.round((total - advancePaid) * 100) / 100
+  const deliveryFee = order.deliveryFee != null ? Number(order.deliveryFee) : 0
+  const total = Number(order.totalPrice) || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
+  const advancePaid = order.advanceAmount != null ? Number(order.advanceAmount) : Math.round(total * 0.5 * 100) / 100
+  const remaining = order.remainingAmount != null ? Number(order.remainingAmount) : Math.round((total - advancePaid) * 100) / 100
 
   return (
     <motion.div
@@ -531,7 +531,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         <p className="text-xs text-muted-foreground">{order.seller?.name || order.seller?.companyName || 'Unknown'}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-amber-400 font-medium">₹{order.totalPrice?.toLocaleString()}</p>
+                        <p className="text-sm text-amber-400 font-medium">₹{Number(order.totalPrice || 0).toLocaleString()}</p>
                         <div className="flex items-center gap-1.5 justify-end">
                           <Badge className={`${statusColors[order.status] || ''} border text-[10px]`}>{order.status}</Badge>
                           {shipment && ['picked_up', 'in_transit'].includes(shipment.status) && (
@@ -587,9 +587,9 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
               const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
               const isExternalTransport = shipment?.isExternal || shipment?.isExternalTransporter
               // Calculate remaining amount properly - use order values if available, else compute
-              const orderTotalForRemaining = order.totalPayable || order.totalPrice || 0
-              const orderAdvance = order.advanceAmount || Math.round(orderTotalForRemaining * 0.5 * 100) / 100
-              const remainingAmount = order.remainingAmount || Math.round((orderTotalForRemaining - orderAdvance) * 100) / 100
+              const orderTotalForRemaining = Number(order.totalPrice) || 0
+              const orderAdvance = order.advanceAmount != null ? Number(order.advanceAmount) : Math.round(orderTotalForRemaining * 0.5 * 100) / 100
+              const remainingAmount = order.remainingAmount != null ? Number(order.remainingAmount) : Math.round((orderTotalForRemaining - orderAdvance) * 100) / 100
               const canPayRemaining = order.paymentStatus === 'advance_paid' && remainingAmount > 0 && order.status !== 'cancelled'
               const isExpanded = expandedOrders.has(order.id)
 
@@ -655,7 +655,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                         </div>
                         <div>
                           <p className="text-muted-foreground text-[10px]">Total</p>
-                          <p className="text-amber-400 font-bold">₹{order.totalPrice?.toLocaleString()}</p>
+                          <p className="text-amber-400 font-bold">₹{Number(order.totalPrice || 0).toLocaleString()}</p>
                         </div>
                       </div>
                     </div>
