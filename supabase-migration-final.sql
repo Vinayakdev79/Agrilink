@@ -454,9 +454,20 @@ EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
 
-CREATE POLICY "Public read PlatformRevenue" ON "PlatformRevenue" FOR SELECT USING (true);
-CREATE POLICY "Insert PlatformRevenue" ON "PlatformRevenue" FOR INSERT WITH CHECK (true);
-CREATE POLICY "Update PlatformRevenue" ON "PlatformRevenue" FOR UPDATE USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Public read PlatformRevenue" ON "PlatformRevenue" FOR SELECT USING (true);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Insert PlatformRevenue" ON "PlatformRevenue" FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Update PlatformRevenue" ON "PlatformRevenue" FOR UPDATE USING (true);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS "PlatformRevenue_type_idx" ON "PlatformRevenue"("type");
@@ -490,7 +501,10 @@ EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
 
-CREATE POLICY "Allow all on Subscription" ON "Subscription" FOR ALL USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Allow all on Subscription" ON "Subscription" FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- =============================================================
 -- PART 8: STORAGE BUCKET (v1)
