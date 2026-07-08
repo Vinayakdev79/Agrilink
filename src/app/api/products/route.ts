@@ -2,11 +2,17 @@ import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 // Helper to provide safe defaults for V4 columns that may not exist yet
+// Also ensures all NUMERIC fields from Supabase are proper JS numbers (not strings)
 function withProductDefaults(product: any) {
   return {
     ...product,
+    // Core numeric fields — Supabase NUMERIC returns strings
+    pricePerUnit: Number(product.pricePerUnit ?? 0),
+    quantity: Number(product.quantity ?? 0),
+    minOrderQty: product.minOrderQty != null ? Number(product.minOrderQty) : null,
+    // V4 delivery columns
     deliveryHandledByProducer: product.deliveryHandledByProducer ?? false,
-    deliveryFee: product.deliveryFee ?? 0,
+    deliveryFee: Number(product.deliveryFee ?? 0),
     freeDelivery: product.freeDelivery ?? false,
     deliveryType: product.deliveryType ?? 'platform',
     localTransporterName: product.localTransporterName ?? null,

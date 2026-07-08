@@ -128,12 +128,12 @@ function CheckoutDialog({
       // Create an order for each cart item with payment breakdown
       const results = await Promise.allSettled(
         cart.map((item) => {
-          const itemSubtotal = item.quantity * item.pricePerUnit
+          const itemSubtotal = Number(item.quantity) * Number(item.pricePerUnit)
           const itemPlatformFee = computePlatformFee(itemSubtotal)
           // Transport booking fee only applies when the platform arranges transport
           const itemTransportBookingFee = item.deliveryHandledByProducer ? 0 : TRANSPORT_BOOKING_FEE
           // Producer-handled delivery may charge a delivery fee (waived if free)
-          const itemDeliveryFee = item.deliveryHandledByProducer && !item.freeDelivery ? (item.deliveryFee || 0) : 0
+          const itemDeliveryFee = item.deliveryHandledByProducer && !item.freeDelivery ? (Number(item.deliveryFee) || 0) : 0
           const itemTotal = itemSubtotal + itemPlatformFee + itemTransportBookingFee + itemDeliveryFee
           const itemAdvance = Math.round(itemTotal * 0.5)
           const itemRemaining = itemTotal - itemAdvance
@@ -145,8 +145,8 @@ function CheckoutDialog({
               buyerId: user.id,
               sellerId: item.sellerId,
               productId: item.productId,
-              quantity: item.quantity,
-              unitPrice: item.pricePerUnit,
+              quantity: Number(item.quantity),
+              unitPrice: Number(item.pricePerUnit),
               deliveryAddress: `${address.addressLine1}${address.addressLine2 ? ', ' + address.addressLine2 : ''}`,
               deliveryCity: address.city,
               deliveryState: address.state,
@@ -485,12 +485,12 @@ export function CartPanel() {
   //  - Platform fee: ₹1000 flat if subtotal > ₹10,000 else ₹0
   //  - Transport booking fee: ₹30 flat, but only when at least one item is platform-delivered
   //  - Delivery fee: sum of producer-set delivery fees (waived when freeDelivery), only for producer-handled items
-  const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.pricePerUnit, 0)
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.quantity) * Number(item.pricePerUnit), 0)
   const platformFee = computePlatformFee(subtotal)
   const deliveryFeeTotal = cart.reduce((sum, item) => {
     if (!item.deliveryHandledByProducer) return sum
     if (item.freeDelivery) return sum
-    return sum + (item.deliveryFee || 0)
+    return sum + (Number(item.deliveryFee) || 0)
   }, 0)
   const transportBookingFee = cart.some((item) => !item.deliveryHandledByProducer) ? TRANSPORT_BOOKING_FEE : 0
   const estimatedTransportCost = Math.round(subtotal * TRANSPORT_ESTIMATE_RATE)

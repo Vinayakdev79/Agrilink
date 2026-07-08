@@ -618,3 +618,29 @@ Stage Summary:
 - Migration applied successfully
 - No more V4 column fallback errors in dev logs
 - Application running cleanly
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Fix image upload 404 error, fix price calculation bug, and Vercel readiness check
+
+Work Log:
+- Diagnosed POST /api/upload 404 error — the upload API route was missing
+- Created /api/upload/route.ts with Supabase Storage integration (upload to agrilink-images bucket)
+- Tested upload with real image file — works correctly, returns public URL
+- Fixed price calculation bug: Supabase NUMERIC columns return strings, causing concatenation instead of addition
+- Updated withProductDefaults() in products API to convert pricePerUnit, quantity, minOrderQty, deliveryFee to proper numbers
+- Updated cart-panel.tsx to use Number() coercion for all numeric cart item fields (quantity, pricePerUnit, deliveryFee)
+- Verified producer dashboard already has shipment management section (Mark as Shipped / Mark as Delivered buttons)
+- Cleaned up next.config.ts for Vercel (removed sandbox-specific allowedDevOrigins)
+- Verified no hardcoded localhost URLs in source code
+- Verified all API routes use Supabase client (not Prisma/SQLite) for production
+- Agent Browser verification: landing page renders correctly with no errors
+- All API routes returning 200 status codes
+
+Stage Summary:
+- Image upload now works via POST /api/upload → Supabase Storage (agrilink-images bucket)
+- Price calculation bug fixed — all numeric values from Supabase are now properly converted to JS numbers
+- App is Vercel-ready with these required env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, NEXT_PUBLIC_RAZORPAY_KEY_ID
+- Producer dashboard shipment management already implemented
+- next.config.ts cleaned up for production deployment
