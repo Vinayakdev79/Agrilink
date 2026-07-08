@@ -109,13 +109,20 @@ function PaymentBreakdown({ order }: { order: any }) {
   const quantity = order.quantity || 0
   const unitPrice = order.unitPrice || order.product?.pricePerUnit || 0
   const productCost = quantity * unitPrice
-  const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
-  const transportBookingFee = order.transportBookingFee || 30
+  // Platform fee: ₹1000 if subtotal > ₹10,000, else ₹0 (use order value if available)
+  const platformFee = order.platformFee !== undefined && order.platformFee !== null
+    ? Number(order.platformFee)
+    : (productCost > 10000 ? 1000 : 0)
+  // Transport booking fee: only when platform arranges transport (not producer/local)
+  const isProducerDelivery = order.deliveryType === 'producer' || order.deliveryType === 'local' || order.product?.deliveryHandledByProducer
+  const transportBookingFee = order.transportBookingFee !== undefined && order.transportBookingFee !== null
+    ? Number(order.transportBookingFee)
+    : (isProducerDelivery ? 0 : 30)
   const isFreeDelivery = order.freeDelivery || order.product?.freeDelivery
-  const deliveryFee = order.deliveryFee || 0
-  const total = order.totalPayable || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
+  const deliveryFee = (order.deliveryFee !== undefined && order.deliveryFee !== null) ? Number(order.deliveryFee) : 0
+  const total = order.totalPayable || order.totalPrice || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
   const advancePaid = order.advanceAmount || Math.round(total * 0.5 * 100) / 100
-  const remaining = order.remainingAmount || Math.round(total * 0.5 * 100) / 100
+  const remaining = order.remainingAmount || Math.round((total - advancePaid) * 100) / 100
 
   return (
     <motion.div
@@ -139,8 +146,8 @@ function PaymentBreakdown({ order }: { order: any }) {
           <span className="text-foreground font-medium">₹{productCost.toLocaleString()}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Platform Fee (2%)</span>
-          <span className="text-foreground font-medium">₹{platformFee.toLocaleString()}</span>
+          <span className="text-muted-foreground">Platform Fee {platformFee === 0 ? '(FREE)' : ''}</span>
+          <span className={`font-medium ${platformFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>{platformFee === 0 ? 'FREE' : `₹${platformFee.toLocaleString()}`}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted-foreground">Transport Booking Fee</span>
@@ -579,7 +586,10 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
               const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
               const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
               const isExternalTransport = shipment?.isExternal || shipment?.isExternalTransporter
-              const remainingAmount = order.remainingAmount || Math.round((order.totalPayable || order.totalPrice || 0) * 0.5 * 100) / 100
+              // Calculate remaining amount properly - use order values if available, else compute
+              const orderTotalForRemaining = order.totalPayable || order.totalPrice || 0
+              const orderAdvance = order.advanceAmount || Math.round(orderTotalForRemaining * 0.5 * 100) / 100
+              const remainingAmount = order.remainingAmount || Math.round((orderTotalForRemaining - orderAdvance) * 100) / 100
               const canPayRemaining = order.paymentStatus === 'advance_paid' && remainingAmount > 0 && order.status !== 'cancelled'
               const isExpanded = expandedOrders.has(order.id)
 

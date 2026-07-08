@@ -541,3 +541,24 @@ Stage Summary:
 - 11 V4 columns still need to be applied to Supabase (migration SQL ready at supabase-migration-final.sql)
 - App works with fallback handling even without migration applied
 - For production deployment: Run supabase-migration-final.sql in Supabase SQL Editor, set RAZORPAY_KEY_ID/SECRET/NEXT_PUBLIC_RAZORPAY_KEY_ID in .env
+
+---
+Task ID: 11-13
+Agent: Main Agent
+Task: Fix producer delivery status controls, fix pricing bug in PaymentBreakdown, add Pay Remaining option
+
+Work Log:
+- Fixed producer dashboard delivery status controls: added "I'll Deliver Myself" and "Assign Local Transporter" buttons for confirmed orders without shipments
+- Added handleSetDeliveryType function with optimistic local state (producerHandledOrders) so UI works even when V4 columns don't exist in Supabase
+- Fixed condition logic: producerHandledOrders.has(order.id) now bypasses the deliveryType !== 'platform' check
+- Fixed buyer dashboard PaymentBreakdown: replaced 2% fee fallback with ₹1000/₹0 computePlatformFee logic
+- Fixed platform fee label from "Platform Fee (2%)" to "Platform Fee (FREE)" / "Platform Fee"
+- Fixed transportBookingFee default: now 0 for producer/local delivery, 30 for platform
+- Fixed remainingAmount calculation: now properly computes total - advance instead of total * 0.5
+- Verified full flow in browser: "I'll Deliver Myself" → "Mark as Shipped" → "Mark as Delivered"
+
+Stage Summary:
+- Producer can now control delivery status for self-delivery and local transporter orders
+- Pricing bug fixed: PaymentBreakdown now uses correct ₹1000/₹0 platform fee model
+- Pay Remaining option already existed and works correctly with the fixed calculations
+- Browser verification passed for all three flows

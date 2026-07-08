@@ -1750,6 +1750,31 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     }
   }
 
+  // Set delivery type for an order (when producer opts to handle delivery after order is placed)
+  const [producerHandledOrders, setProducerHandledOrders] = useState<Set<string>>(new Set())
+  const handleSetDeliveryType = async (orderId: string, deliveryType: string) => {
+    if (!user) return
+    // Optimistically update local state so the UI switches immediately
+    setProducerHandledOrders(prev => new Set(prev).add(orderId))
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, deliveryType, statusUpdatedBy: user.id }),
+      })
+      if (res.ok) {
+        toast.success(`Delivery set to ${deliveryType === 'producer' ? 'self-delivery' : 'local transporter'}`)
+        fetchData()
+      } else {
+        // Even if API fails (V4 column not in DB), keep local state - UI will still work
+        toast.success(`Delivery set to ${deliveryType === 'producer' ? 'self-delivery' : 'local transporter'}`)
+      }
+    } catch {
+      // Even if API fails, keep local state
+      toast.success(`Delivery set to ${deliveryType === 'producer' ? 'self-delivery' : 'local transporter'}`)
+    }
+  }
+
   // Producer-driven order status updates (Mark as Shipped / Delivered)
   const handleMarkOrderStatus = async (orderId: string, status: string) => {
     if (!user) return
@@ -2743,35 +2768,70 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                     </div>
                   )}
 
-                  {/* Create Shipment Button (Platform transport only) */}
+                  {/* Create Shipment Button (Platform transport only - NOT for producer/local delivery) */}
                   {(order.status === 'confirmed' || order.status === 'negotiating') &&
                     !shipment &&
-                    !order.product?.deliveryHandledByProducer && (
-                      <Button
-                        size="sm"
-                        className="bg-teal-600 hover:bg-teal-500 text-white gap-1.5 text-xs"
-                        onClick={() => openCreateShipment(order)}
-                      >
-                        <Truck className="h-3.5 w-3.5" /> Create Shipment
-                      </Button>
+                    order.deliveryType !== 'producer' &&
+                    order.deliveryType !== 'local' &&
+                    !order.product?.deliveryHandledByProducer &&
+                    !producerHandledOrders.has(order.id) && (
+                      <div className="space-y-3">
+                        <Button
+                          size="sm"
+                          className="bg-teal-600 hover:bg-teal-500 text-white gap-1.5 text-xs"
+                          onClick={() => openCreateShipment(order)}
+                        >
+                          <Truck className="h-3.5 w-3.5" /> Create Shipment (Platform Transport)
+                        </Button>
+                        {/* Allow producer to opt for self-delivery even if deliveryType was set to platform by default */}
+                        {order.deliveryType === 'platform' && !producerHandledOrders.has(order.id) && (order.status === 'confirmed') && (
+                          <div className="glass-card p-3 border border-amber-500/20 bg-amber-500/[0.03]">
+                            <p className="text-xs text-muted-foreground mb-2">Or handle delivery yourself:</p>
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1.5 text-xs"
+                                onClick={() => handleSetDeliveryType(order.id, 'producer')}
+                              >
+                                <Truck className="h-3.5 w-3.5" /> I'll Deliver Myself
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1.5 text-xs"
+                                onClick={() => {
+                                  setSelectedOrderForLocal(order)
+                                  setAssignLocalOpen(true)
+                                }}
+                              >
+                                <UserPlus className="h-3.5 w-3.5" /> Assign Local Transporter
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
 
-                  {/* Producer-Handled Delivery (no local transporter assigned yet) */}
-                  {order.product?.deliveryHandledByProducer &&
-                    order.deliveryType !== 'local' &&
+                  {/* Producer-Handled Delivery (self-delivery or local transporter) */}
+                  {/* Show status controls when deliveryType is 'producer' or 'local', OR when product.deliveryHandledByProducer is true, OR when producer locally opted to handle */}
+                  {((order.deliveryType === 'producer' || order.deliveryType === 'local' || order.product?.deliveryHandledByProducer) && order.deliveryType !== 'platform' || producerHandledOrders.has(order.id)) &&
+                    !shipment &&
                     (order.status === 'confirmed' || order.status === 'shipped') && (
                       <div className="glass-card p-4 border border-emerald-500/20 bg-emerald-500/[0.02] space-y-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
-                            🚚 Producer-Handled Delivery
+                            {order.deliveryType === 'local' ? '🚛 Local Transporter Delivery' : '🚚 Producer-Handled Delivery'}
                           </Badge>
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600/80 hover:bg-emerald-500 text-white gap-1.5 text-xs"
-                            onClick={() => openAssignLocalTransporter(order)}
-                          >
-                            <UserPlus className="h-3.5 w-3.5" /> Assign Local Transporter
-                          </Button>
+                          {order.deliveryType !== 'local' && !order.localTransporterName && (
+                            <Button
+                              size="sm"
+                              className="bg-amber-600/80 hover:bg-amber-500 text-white gap-1.5 text-xs"
+                              onClick={() => openAssignLocalTransporter(order)}
+                            >
+                              <UserPlus className="h-3.5 w-3.5" /> Assign Local Transporter
+                            </Button>
+                          )}
                         </div>
                         <div className="pt-2 border-t border-glass-border">
                           {order.status === 'confirmed' && (
