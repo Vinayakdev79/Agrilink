@@ -228,18 +228,28 @@ function Navbar() {
 
           {/* Desktop Nav Links */}
           <div className="hidden md:flex items-center gap-1">
-            {['Marketplace', 'Logistics', 'About'].map((item) => (
-              <button
-                key={item}
-                onClick={() => {
-                  if (item === 'Marketplace') setView('marketplace')
-                  else if (item === 'Logistics') setView('logistics')
-                }}
-                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5"
-              >
-                {item}
-              </button>
-            ))}
+            <button
+              onClick={() => setView('marketplace')}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5"
+            >
+              Marketplace
+            </button>
+            <button
+              onClick={() => setView('logistics')}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5"
+            >
+              Logistics
+            </button>
+            <a
+              href="#trust"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById('trust')?.scrollIntoView({ behavior: 'smooth' })
+              }}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5"
+            >
+              About
+            </a>
           </div>
 
           {/* Desktop CTA */}
@@ -276,19 +286,29 @@ function Navbar() {
             className="glass-card-strong mt-2 p-4 md:hidden"
           >
             <div className="flex flex-col gap-2">
-              {['Marketplace', 'Logistics', 'About'].map((item) => (
-                <button
-                  key={item}
-                  onClick={() => {
-                    if (item === 'Marketplace') setView('marketplace')
-                    else if (item === 'Logistics') setView('logistics')
-                    setMobileOpen(false)
-                  }}
-                  className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5 text-left"
-                >
-                  {item}
-                </button>
-              ))}
+              <button
+                onClick={() => { setView('marketplace'); setMobileOpen(false) }}
+                className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5 text-left"
+              >
+                Marketplace
+              </button>
+              <button
+                onClick={() => { setView('logistics'); setMobileOpen(false) }}
+                className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5 text-left"
+              >
+                Logistics
+              </button>
+              <a
+                href="#trust"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMobileOpen(false)
+                  document.getElementById('trust')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+                className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5 text-left"
+              >
+                About
+              </a>
               <div className="border-t border-white/10 my-2" />
               <button
                 onClick={() => {
@@ -881,14 +901,40 @@ function Footer() {
               logistics across 28 states with transparent, verified, and secure trading.
             </p>
             <div className="flex items-center gap-3 mt-6">
-              {[Twitter, Linkedin, Github, Mail].map((Icon, i) => (
-                <button
-                  key={i}
-                  className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all"
-                >
-                  <Icon className="w-4 h-4" />
-                </button>
-              ))}
+              <a
+                href="https://twitter.com/agrilink_in"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all"
+                aria-label="Twitter"
+              >
+                <Twitter className="w-4 h-4" />
+              </a>
+              <a
+                href="https://linkedin.com/company/agrilink"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all"
+                aria-label="LinkedIn"
+              >
+                <Linkedin className="w-4 h-4" />
+              </a>
+              <a
+                href="https://github.com/agrilink"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all"
+                aria-label="GitHub"
+              >
+                <Github className="w-4 h-4" />
+              </a>
+              <a
+                href="mailto:hello@agrilink.in"
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all"
+                aria-label="Email"
+              >
+                <Mail className="w-4 h-4" />
+              </a>
             </div>
           </div>
 
@@ -928,7 +974,7 @@ function Footer() {
 
         <div className="border-t border-white/5 mt-10 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} AgriLink Technologies Pvt. Ltd. All rights reserved.
+            &copy; 2025 AgriLink. All rights reserved.
           </p>
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             Made with <Leaf className="w-3 h-3 text-emerald-400" /> in India

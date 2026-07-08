@@ -37,6 +37,7 @@ import {
 } from 'recharts'
 import { toast } from 'sonner'
 import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
+import { SubscriptionCard } from '@/components/agrilink/subscription-card'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ProducerDashboardProps {
@@ -457,6 +458,47 @@ function AddListingForm({
                 </p>
               )}
             </div>
+
+            {/* Local Transporter Details — shown only for 'local' option */}
+            {formData.deliveryOption === 'local' && (
+              <div className="border-t border-glass-border pt-3 mt-1 space-y-3">
+                <h5 className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                  <UserPlus className="h-3.5 w-3.5" /> Local Transporter Details
+                </h5>
+                <p className="text-[10px] text-muted-foreground">
+                  Provide your local transporter's details. You can update these later from the order.
+                </p>
+                <div className="grid gap-2">
+                  <Label className="text-foreground text-xs">Transporter Name</Label>
+                  <Input
+                    className="glass-input text-foreground"
+                    placeholder="e.g. Sharma Transport"
+                    value={formData.localTransporterName || ''}
+                    onChange={(e) => setField('localTransporterName', e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label className="text-foreground text-xs">Phone Number</Label>
+                    <Input
+                      className="glass-input text-foreground"
+                      placeholder="e.g. 9876543210"
+                      value={formData.localTransporterPhone || ''}
+                      onChange={(e) => setField('localTransporterPhone', e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-foreground text-xs">Vehicle Number</Label>
+                    <Input
+                      className="glass-input text-foreground"
+                      placeholder="e.g. MH12AB1234"
+                      value={formData.localTransporterVehicle || ''}
+                      onChange={(e) => setField('localTransporterVehicle', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1392,6 +1434,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
   const [orders, setOrders] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [dealsCount, setDealsCount] = useState<number>(0)
 
   // Add listing dialog state
   const [addListingOpen, setAddListingOpen] = useState(false)
@@ -1420,6 +1463,9 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     deliveryOption: 'platform',
     deliveryFee: '',
     freeDelivery: false,
+    localTransporterName: '',
+    localTransporterPhone: '',
+    localTransporterVehicle: '',
   })
 
   // Shipment tracking state
@@ -1446,14 +1492,26 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
     if (!user) return
     setLoading(true)
     try {
-      const [ordersRes, productsRes] = await Promise.all([
+      const [ordersRes, productsRes, userRes] = await Promise.all([
         fetch(`/api/orders?userId=${user.id}&role=producer`),
         fetch(`/api/products?sellerId=${user.id}`),
+        fetch(`/api/users?id=${user.id}`),
       ])
       const ordersData = await ordersRes.json()
       const productsData = await productsRes.json()
+      const userData = await userRes.json()
       if (ordersData.orders) setOrders(ordersData.orders)
       if (productsData.products) setProducts(productsData.products)
+
+      // Compute deals count: prefer totalDeals from User table, fallback to delivered orders count
+      const userTotalDeals = userData?.user?.totalDeals
+      if (typeof userTotalDeals === 'number' && userTotalDeals > 0) {
+        setDealsCount(userTotalDeals)
+      } else {
+        // Fallback: count delivered orders for this seller
+        const deliveredCount = (ordersData.orders || []).filter((o: any) => o.status === 'delivered').length
+        setDealsCount(deliveredCount)
+      }
 
       // Fetch shipments for this producer's orders
       const shipRes = await fetch('/api/shipments')
@@ -1499,6 +1557,9 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
       deliveryOption: 'platform',
       deliveryFee: '',
       freeDelivery: false,
+      localTransporterName: '',
+      localTransporterPhone: '',
+      localTransporterVehicle: '',
     })
   }
 
@@ -1514,6 +1575,12 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
         : formData.deliveryFee
           ? parseFloat(formData.deliveryFee)
           : 0
+      // Map form deliveryOption to API deliveryType
+      const deliveryType = formData.deliveryOption === 'self'
+        ? 'producer'
+        : formData.deliveryOption === 'local'
+          ? 'local'
+          : 'platform'
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1523,6 +1590,10 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
           deliveryHandledByProducer,
           freeDelivery,
           deliveryFee,
+          deliveryType,
+          localTransporterName: formData.deliveryOption === 'local' ? formData.localTransporterName : undefined,
+          localTransporterPhone: formData.deliveryOption === 'local' ? formData.localTransporterPhone : undefined,
+          localTransporterVehicle: formData.deliveryOption === 'local' ? formData.localTransporterVehicle : undefined,
         }),
       })
       if (res.ok) {
@@ -1656,22 +1727,26 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
   }
 
   // Delete listing (soft-delete via API)
-  const [deleteListingId, setDeleteListingId] = useState<string | null>(null)
-  const handleDeleteListing = async (productId: string) => {
-    if (!user) return
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const handleDeleteListing = async () => {
+    if (!user || !deleteTarget) return
+    setIsDeleting(true)
     try {
-      const res = await fetch(`/api/products?productId=${productId}&sellerId=${user.id}`, {
+      const res = await fetch(`/api/products?productId=${deleteTarget.id}&sellerId=${user.id}`, {
         method: 'DELETE',
       })
       if (res.ok) {
         toast.success('Listing deleted successfully')
-        setDeleteListingId(null)
-        fetchData()
+        setProducts((prev) => prev.filter((p) => p.id !== deleteTarget.id))
+        setDeleteTarget(null)
       } else {
         toast.error('Failed to delete listing')
       }
     } catch {
       toast.error('Failed to delete listing')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -1829,7 +1904,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
           />
           <StatCard
             icon={<ShoppingCart className="h-5 w-5" />}
-            value={String((user as Record<string, any>)?.totalDeals || 0)}
+            value={String(dealsCount)}
             label="Total Deals"
             trend="+8%"
             trendUp
@@ -1850,43 +1925,60 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
           />
         </div>
 
-        {/* Revenue chart */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Revenue Trend</h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="rgba(255,255,255,0.4)" fontSize={12} />
-                <YAxis
-                  stroke="rgba(255,255,255,0.4)"
-                  fontSize={12}
-                  tickFormatter={(v) => `₹${v / 1000}K`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(15,15,30,0.9)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '12px',
-                    color: '#fff',
-                  }}
-                  formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Revenue']}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#10b981"
-                  fill="url(#revenueGrad)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+        {/* Subscription + Revenue chart */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1">
+            <SubscriptionCard
+              userId={user?.id || ''}
+              userName={user?.name}
+              userEmail={user?.email}
+              rolePlanId="producer_pro"
+              accentColor="emerald"
+              onSubscriptionChanged={() => {
+                // Refresh user data if needed
+                if (user?.id) {
+                  fetch(`/api/users?id=${user.id}`).then(r => r.json()).then(() => {}).catch(() => {})
+                }
+              }}
+            />
+          </div>
+          <div className="lg:col-span-2 glass-card p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Revenue Trend</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueData}>
+                  <defs>
+                    <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="month" stroke="rgba(255,255,255,0.4)" fontSize={12} />
+                  <YAxis
+                    stroke="rgba(255,255,255,0.4)"
+                    fontSize={12}
+                    tickFormatter={(v) => `₹${v / 1000}K`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(15,15,30,0.9)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '12px',
+                      color: '#fff',
+                    }}
+                    formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Revenue']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#10b981"
+                    fill="url(#revenueGrad)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
@@ -2082,7 +2174,7 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="glass-card p-5 space-y-3 hover:border-emerald-500/30 transition-colors"
+                className="glass-card p-5 space-y-3 hover:border-emerald-500/30 transition-colors group relative"
               >
                 {/* Product Image */}
                 {product.imageUrl && (
@@ -2239,11 +2331,12 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
                   </Button>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 gap-2"
-                    onClick={() => setDeleteListingId(product.id)}
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground/50 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                    onClick={() => setDeleteTarget({ id: product.id, name: product.name })}
+                    aria-label={`Delete ${product.name}`}
                   >
-                    <Trash2 className="h-4 w-4" /> Delete
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </motion.div>
@@ -2253,25 +2346,31 @@ export function ProducerDashboard({ tab }: ProducerDashboardProps) {
 
         {/* Delete Listing Confirmation */}
         <AlertDialog
-          open={!!deleteListingId}
-          onOpenChange={(open) => !open && setDeleteListingId(null)}
+          open={!!deleteTarget}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
         >
           <AlertDialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl">
             <AlertDialogHeader>
               <AlertDialogTitle className="text-foreground">Delete Listing?</AlertDialogTitle>
               <AlertDialogDescription className="text-muted-foreground">
-                Delete this listing? This action cannot be undone. Existing orders for this product will be preserved.
+                Are you sure you want to delete <span className="text-foreground font-medium">{deleteTarget?.name}</span>? This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="border-glass-border">Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="border-glass-border" disabled={isDeleting}>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-red-600 hover:bg-red-500 text-white"
-                onClick={() => {
-                  if (deleteListingId) handleDeleteListing(deleteListingId)
-                }}
+                onClick={handleDeleteListing}
+                disabled={isDeleting}
               >
-                Delete
+                {isDeleting ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </span>
+                ) : (
+                  'Delete'
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

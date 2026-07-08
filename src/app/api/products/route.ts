@@ -1,6 +1,20 @@
 import { supabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
+// Helper to provide safe defaults for V4 columns that may not exist yet
+function withProductDefaults(product: any) {
+  return {
+    ...product,
+    deliveryHandledByProducer: product.deliveryHandledByProducer ?? false,
+    deliveryFee: product.deliveryFee ?? 0,
+    freeDelivery: product.freeDelivery ?? false,
+    deliveryType: product.deliveryType ?? 'platform',
+    localTransporterName: product.localTransporterName ?? null,
+    localTransporterPhone: product.localTransporterPhone ?? null,
+    localTransporterVehicle: product.localTransporterVehicle ?? null,
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -36,7 +50,8 @@ export async function GET(request: Request) {
       if (!product) {
         return NextResponse.json({ error: 'Product not found' }, { status: 404 })
       }
-      return NextResponse.json({ product })
+      // Provide safe defaults for V4 columns that may not exist yet
+      return NextResponse.json({ product: withProductDefaults(product) })
     }
 
     // List products with filters
@@ -86,7 +101,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
       }
 
-      return NextResponse.json({ products: fallbackResult.data || [] })
+      return NextResponse.json({ products: (fallbackResult.data || []).map(withProductDefaults) })
     }
 
     // Sort products so that sponsored sellers (with valid isSponsored and non-expired sponsoredExpiry)
@@ -102,7 +117,7 @@ export async function GET(request: Request) {
       return 0
     })
 
-    return NextResponse.json({ products: sortedProducts })
+    return NextResponse.json({ products: sortedProducts.map(withProductDefaults) })
   } catch (error) {
     console.error('Products error:', error)
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
@@ -122,6 +137,10 @@ export async function POST(request: Request) {
       deliveryHandledByProducer,
       deliveryFee,
       freeDelivery,
+      deliveryType,
+      localTransporterName,
+      localTransporterPhone,
+      localTransporterVehicle,
     } = body
 
     if (!sellerId || !category || !name || !quantity || !unit || !pricePerUnit || !location) {
@@ -158,6 +177,10 @@ export async function POST(request: Request) {
     if (deliveryHandledByProducer !== undefined) insertData.deliveryHandledByProducer = !!deliveryHandledByProducer
     if (deliveryFee !== undefined) insertData.deliveryFee = parseFloat(deliveryFee) || 0
     if (freeDelivery !== undefined) insertData.freeDelivery = !!freeDelivery
+    if (deliveryType) insertData.deliveryType = deliveryType
+    if (localTransporterName) insertData.localTransporterName = localTransporterName
+    if (localTransporterPhone) insertData.localTransporterPhone = localTransporterPhone
+    if (localTransporterVehicle) insertData.localTransporterVehicle = localTransporterVehicle
 
     // Try insert with all fields
     let { data: product, error } = await supabase
@@ -167,11 +190,15 @@ export async function POST(request: Request) {
       .single()
 
     // If V4 columns don't exist, retry without them
-    if (error && (deliveryHandledByProducer !== undefined || deliveryFee !== undefined || freeDelivery !== undefined)) {
+    if (error && (deliveryHandledByProducer !== undefined || deliveryFee !== undefined || freeDelivery !== undefined || deliveryType !== undefined)) {
       const fallbackData: Record<string, unknown> = { ...insertData }
       delete fallbackData.deliveryHandledByProducer
       delete fallbackData.deliveryFee
       delete fallbackData.freeDelivery
+      delete fallbackData.deliveryType
+      delete fallbackData.localTransporterName
+      delete fallbackData.localTransporterPhone
+      delete fallbackData.localTransporterVehicle
 
       const fb = await supabase
         .from('Product')
@@ -201,7 +228,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()
-    const { productId, quantity, isActive, deliveryHandledByProducer, deliveryFee, freeDelivery } = body
+    const { productId, quantity, isActive, deliveryHandledByProducer, deliveryFee, freeDelivery, deliveryType, localTransporterName, localTransporterPhone, localTransporterVehicle } = body
 
     if (!productId) {
       return NextResponse.json({ error: 'Missing productId' }, { status: 400 })
@@ -223,6 +250,18 @@ export async function PATCH(request: Request) {
     }
     if (freeDelivery !== undefined) {
       updateData.freeDelivery = !!freeDelivery
+    }
+    if (deliveryType) {
+      updateData.deliveryType = deliveryType
+    }
+    if (localTransporterName !== undefined) {
+      updateData.localTransporterName = localTransporterName
+    }
+    if (localTransporterPhone !== undefined) {
+      updateData.localTransporterPhone = localTransporterPhone
+    }
+    if (localTransporterVehicle !== undefined) {
+      updateData.localTransporterVehicle = localTransporterVehicle
     }
 
     if (Object.keys(updateData).length === 0) {

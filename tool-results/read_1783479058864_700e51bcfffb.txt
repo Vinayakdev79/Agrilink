@@ -1,0 +1,829 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { useAppStore } from '@/lib/store'
+     6→import { toast } from 'sonner'
+     7→import {
+     8→  ArrowLeft,
+     9→  Search,
+    10→  SlidersHorizontal,
+    11→  MapPin,
+    12→  Shield,
+    13→  BadgeCheck,
+    14→  MessageSquare,
+    15→  ShoppingCart,
+    16→  Package,
+    17→  X,
+    18→  IndianRupee,
+    19→  Filter,
+    20→  RotateCcw,
+    21→  Truck,
+    22→} from 'lucide-react'
+    23→import { Button } from '@/components/ui/button'
+    24→import { Input } from '@/components/ui/input'
+    25→import { Label } from '@/components/ui/label'
+    26→import { Badge } from '@/components/ui/badge'
+    27→import { Card } from '@/components/ui/card'
+    28→import {
+    29→  Select,
+    30→  SelectContent,
+    31→  SelectItem,
+    32→  SelectTrigger,
+    33→  SelectValue,
+    34→} from '@/components/ui/select'
+    35→import { Slider } from '@/components/ui/slider'
+    36→import { Switch } from '@/components/ui/switch'
+    37→import { Skeleton } from '@/components/ui/skeleton'
+    38→
+    39→// ─── Types ────────────────────────────────────────────────────────────────────
+    40→interface Seller {
+    41→  id: string
+    42→  name: string
+    43→  companyName?: string
+    44→  verificationStatus: string
+    45→  state?: string
+    46→  city?: string
+    47→  isSponsored?: boolean
+    48→  sponsoredExpiry?: string
+    49→}
+    50→
+    51→interface Product {
+    52→  id: string
+    53→  sellerId: string
+    54→  category: string
+    55→  name: string
+    56→  description?: string
+    57→  quantity: number
+    58→  unit: string
+    59→  pricePerUnit: number
+    60→  minOrderQty?: number
+    61→  location: string
+    62→  state?: string
+    63→  qualityGrade?: string
+    64→  images?: string
+    65→  imageUrl?: string
+    66→  isActive: boolean
+    67→  createdAt: string
+    68→  seller: Seller
+    69→  // V4 delivery handling
+    70→  deliveryHandledByProducer?: boolean
+    71→  deliveryFee?: number
+    72→  freeDelivery?: boolean
+    73→}
+    74→
+    75→// ─── Constants ────────────────────────────────────────────────────────────────
+    76→const CATEGORIES = [
+    77→  { key: 'all', label: 'All' },
+    78→  { key: 'grains', label: 'Grains' },
+    79→  { key: 'vegetables', label: 'Vegetables' },
+    80→  { key: 'fruits', label: 'Fruits' },
+    81→  { key: 'spices', label: 'Spices' },
+    82→  { key: 'dairy', label: 'Dairy' },
+    83→  { key: 'poultry', label: 'Poultry' },
+    84→  { key: 'pulses', label: 'Pulses' },
+    85→  { key: 'oilseeds', label: 'Oilseeds' },
+    86→] as const
+    87→
+    88→const CATEGORY_COLORS: Record<string, string> = {
+    89→  grains: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+    90→  vegetables: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+    91→  fruits: 'bg-rose-500/15 text-rose-400 border-rose-500/25',
+    92→  spices: 'bg-orange-500/15 text-orange-400 border-orange-500/25',
+    93→  dairy: 'bg-sky-500/15 text-sky-400 border-sky-500/25',
+    94→  poultry: 'bg-lime-500/15 text-lime-400 border-lime-500/25',
+    95→  pulses: 'bg-violet-500/15 text-violet-400 border-violet-500/25',
+    96→  oilseeds: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
+    97→}
+    98→
+    99→const GRADE_COLORS: Record<string, string> = {
+   100→  A: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+   101→  B: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+   102→  C: 'bg-red-500/15 text-red-400 border-red-500/25',
+   103→}
+   104→
+   105→const CATEGORY_GRADIENTS: Record<string, string> = {
+   106→  grains: 'from-amber-900/40 to-amber-700/20',
+   107→  vegetables: 'from-emerald-900/40 to-emerald-700/20',
+   108→  fruits: 'from-rose-900/40 to-rose-700/20',
+   109→  spices: 'from-orange-900/40 to-orange-700/20',
+   110→  dairy: 'from-sky-900/40 to-sky-700/20',
+   111→  poultry: 'from-lime-900/40 to-lime-700/20',
+   112→  pulses: 'from-violet-900/40 to-violet-700/20',
+   113→  oilseeds: 'from-yellow-900/40 to-yellow-700/20',
+   114→}
+   115→
+   116→const CATEGORY_ICONS: Record<string, string> = {
+   117→  grains: '🌾',
+   118→  vegetables: '🥬',
+   119→  fruits: '🥭',
+   120→  spices: '🌶️',
+   121→  dairy: '🥛',
+   122→  poultry: '🍗',
+   123→  pulses: '🫘',
+   124→  oilseeds: '🌻',
+   125→}
+   126→
+   127→const INDIAN_STATES = [
+   128→  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+   129→  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+   130→  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+   131→  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+   132→  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+   133→  'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi',
+   134→]
+   135→
+   136→// ─── Animation Variants ───────────────────────────────────────────────────────
+   137→const staggerContainer = {
+   138→  hidden: { opacity: 0 },
+   139→  visible: {
+   140→    opacity: 1,
+   141→    transition: { staggerChildren: 0.06, delayChildren: 0.1 },
+   142→  },
+   143→}
+   144→
+   145→const fadeUp = {
+   146→  hidden: { opacity: 0, y: 24 },
+   147→  visible: {
+   148→    opacity: 1,
+   149→    y: 0,
+   150→    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+   151→  },
+   152→}
+   153→
+   154→const scaleIn = {
+   155→  hidden: { opacity: 0, scale: 0.92 },
+   156→  visible: {
+   157→    opacity: 1,
+   158→    scale: 1,
+   159→    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+   160→  },
+   161→}
+   162→
+   163→// ─── Product Card Skeleton ────────────────────────────────────────────────────
+   164→function ProductCardSkeleton() {
+   165→  return (
+   166→    <div className="glass-card overflow-hidden">
+   167→      <Skeleton className="aspect-[4/3] w-full rounded-none" />
+   168→      <div className="p-4 space-y-3">
+   169→        <div className="flex items-start justify-between">
+   170→          <Skeleton className="h-5 w-20 rounded-lg" />
+   171→          <Skeleton className="h-5 w-8 rounded-lg" />
+   172→        </div>
+   173→        <Skeleton className="h-6 w-3/4 rounded-lg" />
+   174→        <div className="space-y-2">
+   175→          <Skeleton className="h-5 w-24 rounded-lg" />
+   176→          <Skeleton className="h-4 w-32 rounded-lg" />
+   177→        </div>
+   178→        <div className="flex items-center gap-2">
+   179→          <Skeleton className="h-4 w-20 rounded" />
+   180→          <Skeleton className="h-4 w-16 rounded" />
+   181→        </div>
+   182→        <div className="flex gap-2 pt-2">
+   183→          <Skeleton className="h-9 flex-1 rounded-xl" />
+   184→          <Skeleton className="h-9 flex-1 rounded-xl" />
+   185→        </div>
+   186→      </div>
+   187→    </div>
+   188→  )
+   189→}
+   190→
+   191→// ─── Product Card ─────────────────────────────────────────────────────────────
+   192→function ProductCard({
+   193→  product,
+   194→  onContact,
+   195→}: {
+   196→  product: Product
+   197→  onContact: (p: Product) => void
+   198→}) {
+   199→  const { setSelectedProductId, setView, addToCart, cart, setCartOpen, user } = useAppStore()
+   200→  const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   201→  const gradeColor = GRADE_COLORS[product.qualityGrade || ''] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   202→  const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
+   203→  const emoji = CATEGORY_ICONS[product.category] || '📦'
+   204→
+   205→  // Parse product image
+   206→  const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+   207→
+   208→  // Stock bar logic
+   209→  const isOutOfStock = product.quantity === 0
+   210→  const isLowStock = product.quantity > 0 && product.quantity < 10
+   211→  const maxQty = product.minOrderQty ? Math.max(product.minOrderQty * 20, product.quantity) : product.quantity
+   212→  const stockPercent = maxQty > 0 ? Math.min((product.quantity / maxQty) * 100, 100) : 0
+   213→  const stockBarColor = isOutOfStock ? 'bg-red-500' : isLowStock ? 'bg-yellow-500' : stockPercent > 50 ? 'bg-emerald-500' : 'bg-yellow-500'
+   214→
+   215→  // Sponsored check
+   216→  const isSponsored = product.seller?.isSponsored && product.seller?.sponsoredExpiry && new Date(product.seller.sponsoredExpiry) > new Date()
+   217→
+   218→  const handleAddToCart = (e: React.MouseEvent) => {
+   219→    e.stopPropagation()
+   220→    if (isOutOfStock) return
+   221→    if (!user) {
+   222→      toast.error('Please sign in to add items to cart')
+   223→      return
+   224→    }
+   225→    if (user.role !== 'buyer' && user.role !== 'admin') {
+   226→      toast.error('Only buyers can add items to cart')
+   227→      return
+   228→    }
+   229→
+   230→    addToCart({
+   231→      productId: product.id,
+   232→      productName: product.name,
+   233→      productImage: productImage || undefined,
+   234→      sellerId: product.sellerId,
+   235→      sellerName: product.seller.companyName || product.seller.name,
+   236→      quantity: product.minOrderQty || 1,
+   237→      unit: product.unit,
+   238→      pricePerUnit: product.pricePerUnit,
+   239→      minOrderQty: product.minOrderQty || 1,
+   240→      maxQuantity: product.quantity,
+   241→      location: product.location,
+   242→      state: product.state,
+   243→      deliveryHandledByProducer: product.deliveryHandledByProducer || false,
+   244→      deliveryFee: product.deliveryFee || 0,
+   245→      freeDelivery: product.freeDelivery || false,
+   246→    })
+   247→    toast.success(`${product.name} added to cart`)
+   248→  }
+   249→
+   250→  return (
+   251→    <motion.div
+   252→      variants={fadeUp}
+   253→      whileHover={{ y: -4, transition: { duration: 0.25 } }}
+   254→      className="glass-card overflow-hidden hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer flex flex-col"
+   255→      onClick={() => {
+   256→        setSelectedProductId(product.id)
+   257→        setView('product')
+   258→      }}
+   259→    >
+   260→      {/* Product Image / Placeholder */}
+   261→      <div className="aspect-[4/3] relative overflow-hidden">
+   262→        {productImage ? (
+   263→          <img
+   264→            src={productImage}
+   265→            alt={product.name}
+   266→            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+   267→            onError={(e) => {
+   268→              (e.target as HTMLImageElement).style.display = 'none'
+   269→              const parent = (e.target as HTMLImageElement).parentElement
+   270→              if (parent) {
+   271→                parent.classList.add('bg-gradient-to-br', gradient)
+   272→                parent.innerHTML = `<span class="text-5xl">${emoji}</span>`
+   273→                parent.style.display = 'flex'
+   274→                parent.style.alignItems = 'center'
+   275→                parent.style.justifyContent = 'center'
+   276→              }
+   277→            }}
+   278→          />
+   279→        ) : (
+   280→          <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+   281→            <span className="text-5xl">{emoji}</span>
+   282→          </div>
+   283→        )}
+   284→
+   285→        {/* Top badges overlay */}
+   286→        <div className="absolute top-2 left-2 right-2 flex items-start justify-between">
+   287→          <div className="flex items-center gap-1.5 flex-wrap">
+   288→            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border backdrop-blur-sm ${catColor}`}>
+   289→              {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+   290→            </span>
+   291→            {isSponsored && (
+   292→              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-amber-500/20 text-amber-400 border-amber-500/30">
+   293→                Featured
+   294→              </span>
+   295→            )}
+   296→            {product.deliveryHandledByProducer && product.freeDelivery && (
+   297→              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-emerald-500/20 text-emerald-400 border-emerald-500/30 flex items-center gap-0.5">
+   298→                <Truck className="w-2.5 h-2.5" />
+   299→                FREE Delivery
+   300→              </span>
+   301→            )}
+   302→            {product.deliveryHandledByProducer && !product.freeDelivery && (product.deliveryFee || 0) > 0 && (
+   303→              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-teal-500/20 text-teal-400 border-teal-500/30 flex items-center gap-0.5">
+   304→                <Truck className="w-2.5 h-2.5" />
+   305→                Delivery ₹{product.deliveryFee}
+   306→              </span>
+   307→            )}
+   308→          </div>
+   309→          <div className="flex items-center gap-1.5">
+   310→            {isOutOfStock && (
+   311→              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-red-500/20 text-red-400 border-red-500/30">
+   312→                Out of Stock
+   313→              </span>
+   314→            )}
+   315→            {isLowStock && (
+   316→              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-orange-500/20 text-orange-400 border-orange-500/30">
+   317→                Low Stock
+   318→              </span>
+   319→            )}
+   320→            {product.qualityGrade && (
+   321→              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm ${gradeColor}`}>
+   322→                {product.qualityGrade}
+   323→              </span>
+   324→            )}
+   325→          </div>
+   326→        </div>
+   327→      </div>
+   328→
+   329→      {/* Card Content */}
+   330→      <div className="p-4 flex flex-col flex-1">
+   331→        {/* Name */}
+   332→        <h3 className="text-sm font-semibold text-foreground leading-tight group-hover:text-emerald-400 transition-colors mb-2">
+   333→          {product.name}
+   334→        </h3>
+   335→
+   336→        {/* Price */}
+   337→        <div className="flex items-baseline gap-1 mb-2">
+   338→          <IndianRupee className="w-3.5 h-3.5 text-emerald-400" />
+   339→          <span className="text-lg font-bold text-foreground">
+   340→            {product.pricePerUnit.toLocaleString('en-IN')}
+   341→          </span>
+   342→          <span className="text-xs text-muted-foreground">/ {product.unit}</span>
+   343→        </div>
+   344→
+   345→        {/* Quantity + Stock Bar */}
+   346→        <div className="space-y-1.5 mb-1.5">
+   347→          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   348→            <Package className="w-3 h-3" />
+   349→            <span>{isOutOfStock ? 'Out of stock' : `${product.quantity.toLocaleString('en-IN')} ${product.unit} available`}</span>
+   350→            {isLowStock && (
+   351→              <span className="text-[10px] font-semibold text-orange-400">Low Stock</span>
+   352→            )}
+   353→          </div>
+   354→          {/* Stock indicator bar */}
+   355→          {!isOutOfStock && (
+   356→            <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+   357→              <div
+   358→                className={`h-full rounded-full transition-all duration-500 ${stockBarColor}`}
+   359→                style={{ width: `${stockPercent}%` }}
+   360→              />
+   361→            </div>
+   362→          )}
+   363→        </div>
+   364→
+   365→        {/* Location */}
+   366→        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+   367→          <MapPin className="w-3 h-3 text-emerald-400" />
+   368→          <span>{product.location}{product.state ? `, ${product.state}` : ''}</span>
+   369→        </div>
+   370→
+   371→        {/* Seller */}
+   372→        <div className="flex items-center gap-2 pt-2 border-t border-white/5 mb-3">
+   373→          <div className="w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+   374→            <span className="text-[10px] font-bold text-emerald-400">
+   375→              {(product.seller.name || product.seller.companyName || '?')[0].toUpperCase()}
+   376→            </span>
+   377→          </div>
+   378→          <p className="text-xs font-medium text-foreground truncate flex-1">
+   379→            {product.seller.companyName || product.seller.name}
+   380→          </p>
+   381→          {product.seller.verificationStatus === 'verified' && (
+   382→            <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+   383→          )}
+   384→        </div>
+   385→
+   386→        {/* Action buttons */}
+   387→        <div className="flex gap-2 mt-auto">
+   388→          <Button
+   389→            size="sm"
+   390→            variant="outline"
+   391→            className="flex-1 h-8 text-xs border-white/10 hover:bg-white/5 hover:border-white/20"
+   392→            onClick={(e) => {
+   393→              e.stopPropagation()
+   394→              onContact(product)
+   395→            }}
+   396→          >
+   397→            <MessageSquare className="w-3 h-3 mr-1" />
+   398→            Contact
+   399→          </Button>
+   400→          <Button
+   401→            size="sm"
+   402→            className="flex-1 h-8 text-xs bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+   403→            onClick={handleAddToCart}
+   404→            disabled={isOutOfStock}
+   405→          >
+   406→            <ShoppingCart className="w-3 h-3 mr-1" />
+   407→            {isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+   408→          </Button>
+   409→        </div>
+   410→      </div>
+   411→    </motion.div>
+   412→  )
+   413→}
+   414→
+   415→// ─── Filter Sidebar ───────────────────────────────────────────────────────────
+   416→function FilterSidebar({
+   417→  filters,
+   418→  setFilters,
+   419→  onApply,
+   420→  onReset,
+   421→}: {
+   422→  filters: { state: string; grade: string; priceRange: number[]; verifiedOnly: boolean }
+   423→  setFilters: React.Dispatch<React.SetStateAction<typeof filters>>
+   424→  onApply: () => void
+   425→  onReset: () => void
+   426→}) {
+   427→  return (
+   428→    <motion.div
+   429→      initial={{ opacity: 0, x: -20 }}
+   430→      animate={{ opacity: 1, x: 0 }}
+   431→      transition={{ duration: 0.4 }}
+   432→      className="glass-card p-5 space-y-6 sticky top-24"
+   433→    >
+   434→      <div className="flex items-center justify-between">
+   435→        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+   436→          <Filter className="w-4 h-4 text-emerald-400" />
+   437→          Filters
+   438→        </h3>
+   439→        <Button
+   440→          variant="ghost"
+   441→          size="sm"
+   442→          className="h-7 text-xs text-muted-foreground hover:text-foreground"
+   443→          onClick={onReset}
+   444→        >
+   445→          <RotateCcw className="w-3 h-3 mr-1" />
+   446→          Reset
+   447→        </Button>
+   448→      </div>
+   449→
+   450→      {/* State filter */}
+   451→      <div className="space-y-2">
+   452→        <Label className="text-xs text-muted-foreground">Location / State</Label>
+   453→        <Select
+   454→          value={filters.state}
+   455→          onValueChange={(v) => setFilters((f) => ({ ...f, state: v === '_all' ? '' : v }))}
+   456→        >
+   457→          <SelectTrigger className="h-9 text-xs bg-white/5 border-white/10">
+   458→            <SelectValue placeholder="All States" />
+   459→          </SelectTrigger>
+   460→          <SelectContent className="bg-popover border-white/10">
+   461→            <SelectItem value="_all" className="text-xs">All States</SelectItem>
+   462→            {INDIAN_STATES.map((s) => (
+   463→              <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
+   464→            ))}
+   465→          </SelectContent>
+   466→        </Select>
+   467→      </div>
+   468→
+   469→      {/* Grade filter */}
+   470→      <div className="space-y-2">
+   471→        <Label className="text-xs text-muted-foreground">Quality Grade</Label>
+   472→        <Select
+   473→          value={filters.grade}
+   474→          onValueChange={(v) => setFilters((f) => ({ ...f, grade: v === '_all' ? '' : v }))}
+   475→        >
+   476→          <SelectTrigger className="h-9 text-xs bg-white/5 border-white/10">
+   477→            <SelectValue placeholder="All Grades" />
+   478→          </SelectTrigger>
+   479→          <SelectContent className="bg-popover border-white/10">
+   480→            <SelectItem value="_all" className="text-xs">All Grades</SelectItem>
+   481→            <SelectItem value="A" className="text-xs">Grade A</SelectItem>
+   482→            <SelectItem value="B" className="text-xs">Grade B</SelectItem>
+   483→            <SelectItem value="C" className="text-xs">Grade C</SelectItem>
+   484→          </SelectContent>
+   485→        </Select>
+   486→      </div>
+   487→
+   488→      {/* Price range */}
+   489→      <div className="space-y-2">
+   490→        <Label className="text-xs text-muted-foreground">
+   491→          Max Price: ₹{filters.priceRange[0].toLocaleString('en-IN')}
+   492→        </Label>
+   493→        <Slider
+   494→          value={filters.priceRange}
+   495→          onValueChange={(v) => setFilters((f) => ({ ...f, priceRange: v }))}
+   496→          max={50000}
+   497→          min={0}
+   498→          step={500}
+   499→          className="py-2"
+   500→        />
+   501→        <div className="flex justify-between text-xs text-muted-foreground">
+   502→          <span>₹0</span>
+   503→          <span>₹50,000</span>
+   504→        </div>
+   505→      </div>
+   506→
+   507→      {/* Verified only */}
+   508→      <div className="flex items-center justify-between">
+   509→        <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+   510→          <Shield className="w-3.5 h-3.5 text-emerald-400" />
+   511→          Verified Sellers Only
+   512→        </Label>
+   513→        <Switch
+   514→          checked={filters.verifiedOnly}
+   515→          onCheckedChange={(v) => setFilters((f) => ({ ...f, verifiedOnly: v }))}
+   516→        />
+   517→      </div>
+   518→
+   519→      <Button
+   520→        onClick={onApply}
+   521→        className="w-full bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+   522→      >
+   523→        Apply Filters
+   524→      </Button>
+   525→    </motion.div>
+   526→  )
+   527→}
+   528→
+   529→// ─── Main Marketplace Page ────────────────────────────────────────────────────
+   530→export function MarketplacePage() {
+   531→  const { setView, user, marketplaceCategory, setMarketplaceCategory, marketplaceSearch, setMarketplaceSearch, setChatOpen, setActiveChatUser, setCartOpen, cart } = useAppStore()
+   532→
+   533→  const [products, setProducts] = useState<Product[]>([])
+   534→  const [loading, setLoading] = useState(true)
+   535→  const [showFilters, setShowFilters] = useState(false)
+   536→  const [searchInput, setSearchInput] = useState(marketplaceSearch)
+   537→
+   538→  const [filters, setFilters] = useState({
+   539→    state: '',
+   540→    grade: '',
+   541→    priceRange: [50000] as number[],
+   542→    verifiedOnly: false,
+   543→  })
+   544→
+   545→  // Cart item count
+   546→  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+   547→
+   548→  // Fetch products
+   549→  const fetchProducts = useCallback(async () => {
+   550→    setLoading(true)
+   551→    try {
+   552→      const params = new URLSearchParams()
+   553→      if (marketplaceCategory !== 'all') params.set('category', marketplaceCategory)
+   554→      if (marketplaceSearch) params.set('search', marketplaceSearch)
+   555→      if (filters.state) params.set('state', filters.state)
+   556→      if (filters.grade) params.set('grade', filters.grade)
+   557→
+   558→      const res = await fetch(`/api/products?${params.toString()}`)
+   559→      const data = await res.json()
+   560→
+   561→      let filtered = data.products || []
+   562→
+   563→      // Client-side price range filter
+   564→      if (filters.priceRange[0] < 50000) {
+   565→        filtered = filtered.filter((p: Product) => p.pricePerUnit <= filters.priceRange[0])
+   566→      }
+   567→
+   568→      // Client-side verified-only filter
+   569→      if (filters.verifiedOnly) {
+   570→        filtered = filtered.filter((p: Product) => p.seller.verificationStatus === 'verified')
+   571→      }
+   572→
+   573→      setProducts(filtered)
+   574→    } catch {
+   575→      toast.error('Failed to load products')
+   576→      setProducts([])
+   577→    } finally {
+   578→      setLoading(false)
+   579→    }
+   580→  }, [marketplaceCategory, marketplaceSearch, filters])
+   581→
+   582→  useEffect(() => {
+   583→    fetchProducts()
+   584→  }, [fetchProducts])
+   585→
+   586→  // Handle search
+   587→  const handleSearch = () => {
+   588→    setMarketplaceSearch(searchInput)
+   589→  }
+   590→
+   591→  // Handle contact supplier
+   592→  const handleContact = (product: Product) => {
+   593→    setActiveChatUser(product.seller.id)
+   594→    setChatOpen(true)
+   595→    toast.success(`Chat opened with ${product.seller.companyName || product.seller.name}`)
+   596→  }
+   597→
+   598→  const resetFilters = () => {
+   599→    setFilters({ state: '', grade: '', priceRange: [50000], verifiedOnly: false })
+   600→  }
+   601→
+   602→  return (
+   603→    <div className="min-h-screen bg-background">
+   604→      {/* Background decorations */}
+   605→      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+   606→        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-[120px]" />
+   607→        <div className="absolute top-1/3 -left-20 w-72 h-72 bg-amber-500/4 rounded-full blur-[100px]" />
+   608→      </div>
+   609→
+   610→      <div className="relative z-10">
+   611→        {/* Header */}
+   612→        <motion.div
+   613→          initial={{ opacity: 0, y: -20 }}
+   614→          animate={{ opacity: 1, y: 0 }}
+   615→          transition={{ duration: 0.5 }}
+   616→          className="sticky top-0 z-40 glass-card-strong mx-4 sm:mx-6 mt-4 px-4 sm:px-6 py-3 flex items-center gap-4"
+   617→        >
+   618→          <Button
+   619→            variant="ghost"
+   620→            size="sm"
+   621→            className="text-muted-foreground hover:text-foreground shrink-0"
+   622→            onClick={() => setView('dashboard')}
+   623→          >
+   624→            <ArrowLeft className="w-4 h-4 mr-1.5" />
+   625→            <span className="hidden sm:inline">Back</span>
+   626→          </Button>
+   627→
+   628→          <div className="flex-1">
+   629→            <h1 className="text-lg font-bold text-foreground">Agricultural Marketplace</h1>
+   630→          </div>
+   631→
+   632→          {/* Search bar */}
+   633→          <div className="hidden sm:flex items-center gap-2 flex-1 max-w-md">
+   634→            <div className="relative flex-1">
+   635→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   636→              <Input
+   637→                value={searchInput}
+   638→                onChange={(e) => setSearchInput(e.target.value)}
+   639→                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+   640→                placeholder="Search products..."
+   641→                className="pl-9 h-9 bg-white/5 border-white/10 text-sm"
+   642→              />
+   643→            </div>
+   644→            <Button
+   645→              size="sm"
+   646→              className="h-9 bg-emerald-500 hover:bg-emerald-400 text-white"
+   647→              onClick={handleSearch}
+   648→            >
+   649→              <Search className="w-4 h-4" />
+   650→            </Button>
+   651→          </div>
+   652→
+   653→          <Button
+   654→            variant="outline"
+   655→            size="sm"
+   656→            className="hidden lg:flex border-white/10 hover:bg-white/5 h-9"
+   657→            onClick={() => setShowFilters(!showFilters)}
+   658→          >
+   659→            <SlidersHorizontal className="w-4 h-4 mr-1.5" />
+   660→            Filters
+   661→          </Button>
+   662→
+   663→          {/* Cart Icon Button */}
+   664→          <Button
+   665→            variant="outline"
+   666→            size="sm"
+   667→            className="relative border-white/10 hover:bg-white/5 hover:border-white/20 h-9 w-9 p-0"
+   668→            onClick={() => setCartOpen(true)}
+   669→          >
+   670→            <ShoppingCart className="w-4 h-4" />
+   671→            {cartItemCount > 0 && (
+   672→              <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold">
+   673→                {cartItemCount > 99 ? '99+' : cartItemCount}
+   674→              </span>
+   675→            )}
+   676→          </Button>
+   677→        </motion.div>
+   678→
+   679→        {/* Mobile search */}
+   680→        <div className="sm:hidden px-4 mt-3 flex gap-2">
+   681→          <div className="relative flex-1">
+   682→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   683→            <Input
+   684→              value={searchInput}
+   685→              onChange={(e) => setSearchInput(e.target.value)}
+   686→              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+   687→              placeholder="Search products..."
+   688→              className="pl-9 h-9 bg-white/5 border-white/10 text-sm"
+   689→            />
+   690→          </div>
+   691→          <Button
+   692→            variant="outline"
+   693→            size="sm"
+   694→            className="h-9 border-white/10 hover:bg-white/5"
+   695→            onClick={() => setShowFilters(!showFilters)}
+   696→          >
+   697→            <SlidersHorizontal className="w-4 h-4" />
+   698→          </Button>
+   699→        </div>
+   700→
+   701→        {/* Category Tabs */}
+   702→        <motion.div
+   703→          initial={{ opacity: 0 }}
+   704→          animate={{ opacity: 1 }}
+   705→          transition={{ delay: 0.2, duration: 0.4 }}
+   706→          className="px-4 sm:px-6 mt-4 overflow-x-auto"
+   707→        >
+   708→          <div className="flex items-center gap-2 pb-2 min-w-max">
+   709→            {CATEGORIES.map((cat) => (
+   710→              <button
+   711→                key={cat.key}
+   712→                onClick={() => setMarketplaceCategory(cat.key)}
+   713→                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+   714→                  marketplaceCategory === cat.key
+   715→                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+   716→                    : 'bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10 hover:text-foreground'
+   717→                }`}
+   718→              >
+   719→                {cat.label}
+   720→              </button>
+   721→            ))}
+   722→          </div>
+   723→        </motion.div>
+   724→
+   725→        {/* Main Content */}
+   726→        <div className="px-4 sm:px-6 mt-6 flex gap-6">
+   727→          {/* Filter Sidebar (desktop) */}
+   728→          {showFilters && (
+   729→            <div className="hidden lg:block w-72 shrink-0">
+   730→              <FilterSidebar
+   731→                filters={filters}
+   732→                setFilters={setFilters}
+   733→                onApply={fetchProducts}
+   734→                onReset={resetFilters}
+   735→              />
+   736→            </div>
+   737→          )}
+   738→
+   739→          {/* Mobile Filter Sheet */}
+   740→          <AnimatePresence>
+   741→            {showFilters && (
+   742→              <motion.div
+   743→                initial={{ opacity: 0 }}
+   744→                animate={{ opacity: 1 }}
+   745→                exit={{ opacity: 0 }}
+   746→                className="fixed inset-0 z-50 lg:hidden"
+   747→              >
+   748→                <div className="absolute inset-0 bg-black/60" onClick={() => setShowFilters(false)} />
+   749→                <motion.div
+   750→                  initial={{ x: '100%' }}
+   751→                  animate={{ x: 0 }}
+   752→                  exit={{ x: '100%' }}
+   753→                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+   754→                  className="absolute right-0 top-0 bottom-0 w-80 bg-background border-l border-white/10 p-4 overflow-y-auto"
+   755→                >
+   756→                  <div className="flex items-center justify-between mb-4">
+   757→                    <h3 className="text-sm font-semibold text-foreground">Filters</h3>
+   758→                    <Button variant="ghost" size="sm" onClick={() => setShowFilters(false)}>
+   759→                      <X className="w-4 h-4" />
+   760→                    </Button>
+   761→                  </div>
+   762→                  <FilterSidebar
+   763→                    filters={filters}
+   764→                    setFilters={setFilters}
+   765→                    onApply={() => {
+   766→                      fetchProducts()
+   767→                      setShowFilters(false)
+   768→                    }}
+   769→                    onReset={resetFilters}
+   770→                  />
+   771→                </motion.div>
+   772→              </motion.div>
+   773→            )}
+   774→          </AnimatePresence>
+   775→
+   776→          {/* Product Grid */}
+   777→          <div className="flex-1 min-w-0">
+   778→            {/* Results count */}
+   779→            <div className="flex items-center justify-between mb-4">
+   780→              <p className="text-sm text-muted-foreground">
+   781→                {loading ? 'Loading...' : `${products.length} product${products.length !== 1 ? 's' : ''} found`}
+   782→              </p>
+   783→            </div>
+   784→
+   785→            {loading ? (
+   786→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   787→                {Array.from({ length: 6 }).map((_, i) => (
+   788→                  <ProductCardSkeleton key={i} />
+   789→                ))}
+   790→              </div>
+   791→            ) : products.length === 0 ? (
+   792→              <motion.div
+   793→                initial={{ opacity: 0, y: 20 }}
+   794→                animate={{ opacity: 1, y: 0 }}
+   795→                className="glass-card p-12 text-center"
+   796→              >
+   797→                <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+   798→                <h3 className="text-lg font-semibold text-foreground mb-2">No Products Found</h3>
+   799→                <p className="text-sm text-muted-foreground">
+   800→                  Try adjusting your filters or search query.
+   801→                </p>
+   802→              </motion.div>
+   803→            ) : (
+   804→              <motion.div
+   805→                variants={staggerContainer}
+   806→                initial="hidden"
+   807→                animate="visible"
+   808→                key={`${marketplaceCategory}-${marketplaceSearch}`}
+   809→                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+   810→              >
+   811→                {products.map((product) => (
+   812→                  <ProductCard
+   813→                    key={product.id}
+   814→                    product={product}
+   815→                    onContact={handleContact}
+   816→                  />
+   817→                ))}
+   818→              </motion.div>
+   819→            )}
+   820→          </div>
+   821→        </div>
+   822→
+   823→        {/* Bottom spacing */}
+   824→        <div className="h-16" />
+   825→      </div>
+   826→    </div>
+   827→  )
+   828→}
+   829→

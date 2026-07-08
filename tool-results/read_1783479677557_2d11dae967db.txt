@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import { useAppStore } from '@/lib/store'
+     4→import { useEffect, useState, useCallback, useRef } from 'react'
+     5→import { motion } from 'framer-motion'
+     6→import {
+     7→  Package, ShoppingCart, IndianRupee, Star, Plus, MessageSquare,
+     8→  TrendingUp, TrendingDown, MapPin, Eye, Check, X, User,
+     9→  Truck, Phone, Clock, Crosshair, CalendarDays,
+    10→  Upload, Image as ImageIcon, Leaf, FileText, Shield,
+    11→  AlertTriangle, Pencil, CheckCircle, Building2, Mail,
+    12→  ArrowRightLeft, Receipt, Trash2, UserPlus
+    13→} from 'lucide-react'
+    14→import { Button } from '@/components/ui/button'
+    15→import { Badge } from '@/components/ui/badge'
+    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→import { Input } from '@/components/ui/input'
+    18→import { Label } from '@/components/ui/label'
+    19→import { Textarea } from '@/components/ui/textarea'
+    20→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    21→import { Switch } from '@/components/ui/switch'
+    22→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    23→import {
+    24→  Dialog, DialogContent, DialogDescription, DialogFooter,
+    25→  DialogHeader, DialogTitle, DialogTrigger
+    26→} from '@/components/ui/dialog'
+    27→import {
+    28→  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+    29→  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel
+    30→} from '@/components/ui/alert-dialog'
+    31→import {
+    32→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    33→} from '@/components/ui/table'
+    34→import {
+    35→  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+    36→  ResponsiveContainer
+    37→} from 'recharts'
+    38→import { toast } from 'sonner'
+    39→import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
+    40→
+    41→// ─── Types ────────────────────────────────────────────────────────────────────
+    42→interface ProducerDashboardProps {
+    43→  tab: string
+    44→}
+    45→
+    46→// ─── Constants ────────────────────────────────────────────────────────────────
+    47→const revenueData = [
+    48→  { month: 'Jul', revenue: 125000, orders: 12 },
+    49→  { month: 'Aug', revenue: 178000, orders: 16 },
+    50→  { month: 'Sep', revenue: 145000, orders: 14 },
+    51→  { month: 'Oct', revenue: 210000, orders: 20 },
+    52→  { month: 'Nov', revenue: 195000, orders: 18 },
+    53→  { month: 'Dec', revenue: 245000, orders: 22 },
+    54→]
+    55→
+    56→const statusColors: Record<string, string> = {
+    57→  negotiating: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    58→  confirmed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    59→  shipped: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    60→  delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
+    61→  cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+    62→  disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    63→}
+    64→
+    65→const paymentStatusColors: Record<string, string> = {
+    66→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    67→  advance_paid: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    68→  full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    69→  refunded: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    70→}
+    71→
+    72→const shipmentStatusColors: Record<string, string> = {
+    73→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    74→  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    75→  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    76→  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    77→  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    78→  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    79→}
+    80→
+    81→const categories = ['grains', 'vegetables', 'fruits', 'spices', 'dairy', 'poultry', 'pulses', 'oilseeds']
+    82→
+    83→// ─── Stock Bar ────────────────────────────────────────────────────────────────
+    84→function StockBar({ quantity, unit, minOrderQty }: { quantity: number; unit: string; minOrderQty?: number }) {
+    85→  const isOutOfStock = quantity === 0
+    86→  const isLowStock = quantity > 0 && quantity < 10
+    87→  const maxQty = minOrderQty ? Math.max(minOrderQty * 20, quantity) : quantity
+    88→  const stockPercent = maxQty > 0 ? Math.min((quantity / maxQty) * 100, 100) : 0
+    89→  const stockBarColor = isOutOfStock
+    90→    ? 'bg-red-500'
+    91→    : isLowStock
+    92→      ? 'bg-yellow-500'
+    93→      : stockPercent > 50
+    94→        ? 'bg-emerald-500'
+    95→        : 'bg-yellow-500'
+    96→
+    97→  return (
+    98→    <div className="space-y-1">
+    99→      <div className="flex items-center justify-between text-xs">
+   100→        <span className="text-muted-foreground flex items-center gap-1">
+   101→          <Package className="h-3 w-3" />
+   102→          Stock Remaining
+   103→        </span>
+   104→        <span
+   105→          className={`font-medium ${
+   106→            isOutOfStock ? 'text-red-400' : isLowStock ? 'text-yellow-400' : 'text-foreground'
+   107→          }`}
+   108→        >
+   109→          {isOutOfStock ? 'Out of Stock' : `${quantity.toLocaleString('en-IN')} ${unit}`}
+   110→        </span>
+   111→      </div>
+   112→      {!isOutOfStock && (
+   113→        <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+   114→          <div
+   115→            className={`h-full rounded-full transition-all duration-500 ${stockBarColor}`}
+   116→            style={{ width: `${stockPercent}%` }}
+   117→          />
+   118→        </div>
+   119→      )}
+   120→      {isLowStock && (
+   121→        <div className="flex items-center gap-1">
+   122→          <AlertTriangle className="h-3 w-3 text-orange-400" />
+   123→          <span className="text-[10px] font-semibold text-orange-400">Low Stock</span>
+   124→        </div>
+   125→      )}
+   126→    </div>
+   127→  )
+   128→}
+   129→
+   130→// ─── Stat Card ────────────────────────────────────────────────────────────────
+   131→function StatCard({
+   132→  icon,
+   133→  value,
+   134→  label,
+   135→  trend,
+   136→  trendUp,
+   137→}: {
+   138→  icon: React.ReactNode
+   139→  value: string
+   140→  label: string
+   141→  trend?: string
+   142→  trendUp?: boolean
+   143→}) {
+   144→  return (
+   145→    <motion.div
+   146→      initial={{ opacity: 0, y: 20 }}
+   147→      animate={{ opacity: 1, y: 0 }}
+   148→      className="glass-card p-5 flex flex-col gap-3"
+   149→    >
+   150→      <div className="flex items-center justify-between">
+   151→        <div className="h-10 w-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+   152→          {icon}
+   153→        </div>
+   154→        {trend && (
+   155→          <div
+   156→            className={`flex items-center gap-1 text-xs font-medium ${
+   157→              trendUp ? 'text-emerald-400' : 'text-red-400'
+   158→            }`}
+   159→          >
+   160→            {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+   161→            {trend}
+   162→          </div>
+   163→        )}
+   164→      </div>
+   165→      <div>
+   166→        <p className="text-2xl font-bold text-foreground">{value}</p>
+   167→        <p className="text-sm text-muted-foreground">{label}</p>
+   168→      </div>
+   169→    </motion.div>
+   170→  )
+   171→}
+   172→
+   173→// ─── Add Listing Form ─────────────────────────────────────────────────────────
+   174→function AddListingForm({
+   175→  formData,
+   176→  setFormData,
+   177→}: {
+   178→  formData: Record<string, any>
+   179→  setFormData: React.Dispatch<React.SetStateAction<Record<string, any>>>
+   180→  onSubmit?: () => void
+   181→  onCancel?: () => void
+   182→  isSubmitting?: boolean
+   183→}) {
+   184→  const [uploading, setUploading] = useState(false)
+   185→  const [imagePreview, setImagePreview] = useState<string | null>(null)
+   186→  const fileInputRef = useRef<HTMLInputElement>(null)
+   187→
+   188→  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   189→    const file = e.target.files?.[0]
+   190→    if (!file) return
+   191→
+   192→    setUploading(true)
+   193→    try {
+   194→      const uploadForm = new FormData()
+   195→      uploadForm.append('file', file)
+   196→      uploadForm.append('folder', 'products')
+   197→      const res = await fetch('/api/upload', { method: 'POST', body: uploadForm })
+   198→      if (res.ok) {
+   199→        const data = await res.json()
+   200→        setFormData((prev) => ({ ...prev, imageUrl: data.url }))
+   201→        setImagePreview(data.url)
+   202→        toast.success('Image uploaded!')
+   203→      } else {
+   204→        toast.error('Failed to upload image')
+   205→      }
+   206→    } catch {
+   207→      toast.error('Failed to upload image')
+   208→    } finally {
+   209→      setUploading(false)
+   210→    }
+   211→  }
+   212→
+   213→  const setField = (key: string, value: any) => {
+   214→    setFormData((prev) => ({ ...prev, [key]: value }))
+   215→  }
+   216→
+   217→  return (
+   218→    <div className="grid gap-5 py-4">
+   219→      {/* Basic Details */}
+   220→      <div className="space-y-3">
+   221→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   222→          <Package className="h-4 w-4" /> Basic Details
+   223→        </h4>
+   224→        <div className="grid gap-3">
+   225→          <div className="grid gap-2">
+   226→            <Label className="text-foreground text-xs">Product Name *</Label>
+   227→            <Input
+   228→              className="glass-input text-foreground"
+   229→              placeholder="e.g. Basmati Rice"
+   230→              value={formData.name}
+   231→              onChange={(e) => setField('name', e.target.value)}
+   232→            />
+   233→          </div>
+   234→          <div className="grid grid-cols-2 gap-3">
+   235→            <div className="grid gap-2">
+   236→              <Label className="text-foreground text-xs">Category *</Label>
+   237→              <Select value={formData.category} onValueChange={(v) => setField('category', v)}>
+   238→                <SelectTrigger className="glass-input text-foreground">
+   239→                  <SelectValue placeholder="Select" />
+   240→                </SelectTrigger>
+   241→                <SelectContent>
+   242→                  {categories.map((c) => (
+   243→                    <SelectItem key={c} value={c}>
+   244→                      {c.charAt(0).toUpperCase() + c.slice(1)}
+   245→                    </SelectItem>
+   246→                  ))}
+   247→                </SelectContent>
+   248→              </Select>
+   249→            </div>
+   250→            <div className="grid gap-2">
+   251→              <Label className="text-foreground text-xs">Quality Grade</Label>
+   252→              <Select value={formData.qualityGrade} onValueChange={(v) => setField('qualityGrade', v)}>
+   253→                <SelectTrigger className="glass-input text-foreground">
+   254→                  <SelectValue />
+   255→                </SelectTrigger>
+   256→                <SelectContent>
+   257→                  <SelectItem value="A">Grade A</SelectItem>
+   258→                  <SelectItem value="B">Grade B</SelectItem>
+   259→                  <SelectItem value="C">Grade C</SelectItem>
+   260→                </SelectContent>
+   261→              </Select>
+   262→            </div>
+   263→          </div>
+   264→        </div>
+   265→      </div>
+   266→
+   267→      <div className="border-t border-glass-border" />
+   268→
+   269→      {/* Product Image */}
+   270→      <div className="space-y-3">
+   271→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   272→          <ImageIcon className="h-4 w-4" /> Product Image
+   273→        </h4>
+   274→        <div className="grid gap-3">
+   275→          {imagePreview || formData.imageUrl ? (
+   276→            <div className="relative w-full h-40 rounded-xl overflow-hidden border border-glass-border">
+   277→              <img
+   278→                src={imagePreview || formData.imageUrl}
+   279→                alt="Product preview"
+   280→                className="w-full h-full object-cover"
+   281→              />
+   282→              <Button
+   283→                size="sm"
+   284→                variant="outline"
+   285→                className="absolute top-2 right-2 border-glass-border bg-black/50 text-white hover:bg-black/70 h-7 text-xs"
+   286→                onClick={() => fileInputRef.current?.click()}
+   287→              >
+   288→                Change
+   289→              </Button>
+   290→            </div>
+   291→          ) : (
+   292→            <button
+   293→              type="button"
+   294→              onClick={() => fileInputRef.current?.click()}
+   295→              disabled={uploading}
+   296→              className="w-full h-32 rounded-xl border-2 border-dashed border-glass-border hover:border-emerald-500/40 flex flex-col items-center justify-center gap-2 transition-colors bg-white/[0.02]"
+   297→            >
+   298→              {uploading ? (
+   299→                <>
+   300→                  <span className="h-6 w-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+   301→                  <p className="text-xs text-muted-foreground">Uploading...</p>
+   302→                </>
+   303→              ) : (
+   304→                <>
+   305→                  <Upload className="h-6 w-6 text-muted-foreground" />
+   306→                  <p className="text-xs text-muted-foreground">Click to upload product image</p>
+   307→                  <p className="text-[10px] text-muted-foreground/60">JPEG, PNG, WebP — Max 5MB</p>
+   308→                </>
+   309→              )}
+   310→            </button>
+   311→          )}
+   312→          <input
+   313→            ref={fileInputRef}
+   314→            type="file"
+   315→            accept="image/jpeg,image/png,image/webp"
+   316→            className="hidden"
+   317→            onChange={handleImageUpload}
+   318→          />
+   319→        </div>
+   320→      </div>
+   321→
+   322→      <div className="border-t border-glass-border" />
+   323→
+   324→      {/* Pricing & Quantity */}
+   325→      <div className="space-y-3">
+   326→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   327→          <IndianRupee className="h-4 w-4" /> Pricing & Quantity
+   328→        </h4>
+   329→        <div className="grid grid-cols-2 gap-3">
+   330→          <div className="grid gap-2">
+   331→            <Label className="text-foreground text-xs">Price per Unit (₹) *</Label>
+   332→            <Input
+   333→              type="number"
+   334→              className="glass-input text-foreground"
+   335→              placeholder="500"
+   336→              value={formData.pricePerUnit}
+   337→              onChange={(e) => setField('pricePerUnit', e.target.value)}
+   338→            />
+   339→          </div>
+   340→          <div className="grid gap-2">
+   341→            <Label className="text-foreground text-xs">Unit *</Label>
+   342→            <Select value={formData.unit} onValueChange={(v) => setField('unit', v)}>
+   343→              <SelectTrigger className="glass-input text-foreground">
+   344→                <SelectValue />
+   345→              </SelectTrigger>
+   346→              <SelectContent>
+   347→                <SelectItem value="kg">Kg</SelectItem>
+   348→                <SelectItem value="quintal">Quintal</SelectItem>
+   349→                <SelectItem value="tonne">Tonne</SelectItem>
+   350→                <SelectItem value="litre">Litre</SelectItem>
+   351→              </SelectContent>
+   352→            </Select>
+   353→          </div>
+   354→        </div>
+   355→        <div className="grid grid-cols-2 gap-3">
+   356→          <div className="grid gap-2">
+   357→            <Label className="text-foreground text-xs">Quantity *</Label>
+   358→            <Input
+   359→              type="number"
+   360→              className="glass-input text-foreground"
+   361→              placeholder="100"
+   362→              value={formData.quantity}
+   363→              onChange={(e) => setField('quantity', e.target.value)}
+   364→            />
+   365→          </div>
+   366→          <div className="grid gap-2">
+   367→            <Label className="text-foreground text-xs">Min Order Qty</Label>
+   368→            <Input
+   369→              type="number"
+   370→              className="glass-input text-foreground"
+   371→              placeholder="10"
+   372→              value={formData.minOrderQty}
+   373→              onChange={(e) => setField('minOrderQty', e.target.value)}
+   374→            />
+   375→          </div>
+   376→        </div>
+   377→      </div>
+   378→
+   379→      <div className="border-t border-glass-border" />
+   380→
+   381→      {/* Delivery Options */}
+   382→      <div className="space-y-3">
+   383→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   384→          <Truck className="h-4 w-4" /> Delivery Options
+   385→        </h4>
+   386→        <div className="flex gap-2">
+   387→          <button
+   388→            type="button"
+   389→            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   390→              formData.deliveryOption === 'platform'
+   391→                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+   392→                : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   393→            }`}
+   394→            onClick={() => setField('deliveryOption', 'platform')}
+   395→          >
+   396→            <Building2 className="h-4 w-4 mx-auto mb-1" />
+   397→            Platform Transport
+   398→          </button>
+   399→          <button
+   400→            type="button"
+   401→            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   402→              formData.deliveryOption === 'self'
+   403→                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+   404→                : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   405→            }`}
+   406→            onClick={() => setField('deliveryOption', 'self')}
+   407→          >
+   408→            <User className="h-4 w-4 mx-auto mb-1" />
+   409→            I Will Handle
+   410→          </button>
+   411→          <button
+   412→            type="button"
+   413→            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   414→              formData.deliveryOption === 'local'
+   415→                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+   416→                : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   417→            }`}
+   418→            onClick={() => setField('deliveryOption', 'local')}
+   419→          >
+   420→            <Truck className="h-4 w-4 mx-auto mb-1" />
+   421→            Local Transporter
+   422→          </button>
+   423→        </div>
+   424→
+   425→        {formData.deliveryOption === 'platform' && (
+   426→          <p className="text-xs text-muted-foreground bg-white/[0.03] p-2 rounded-lg border border-white/10">
+   427→            Buyer arranges shipment via AgroBridge transporters. Standard logistics fees apply.
+   428→          </p>
+   429→        )}
+   430→
+   431→        {(formData.deliveryOption === 'self' || formData.deliveryOption === 'local') && (
+   432→          <div className="space-y-3 glass-card p-3 border border-emerald-500/15">
+   433→            <div className="flex items-center justify-between">
+   434→              <Label className="text-foreground text-xs">Free Delivery</Label>
+   435→              <Switch
+   436→                checked={formData.freeDelivery}
+   437→                onCheckedChange={(checked) => setField('freeDelivery', checked)}
+   438→              />
+   439→            </div>
+   440→            <div className="grid gap-2">
+   441→              <Label className="text-foreground text-xs">Delivery Fee (₹)</Label>
+   442→              <Input
+   443→                type="number"
+   444→                className="glass-input text-foreground"
+   445→                placeholder="0"
+   446→                value={formData.freeDelivery ? '0' : formData.deliveryFee}
+   447→                disabled={formData.freeDelivery}
+   448→                onChange={(e) => setField('deliveryFee', e.target.value)}
+   449→              />
+   450→              {formData.freeDelivery ? (
+   451→                <p className="text-[10px] text-emerald-400">Buyer will not be charged a delivery fee.</p>
+   452→              ) : (
+   453→                <p className="text-[10px] text-muted-foreground">
+   454→                  {formData.deliveryOption === 'self'
+   455→                    ? 'This fee is charged to the buyer for delivery.'
+   456→                    : 'This fee is charged to the buyer. You will assign your local transporter after the order is confirmed.'}
+   457→                </p>
+   458→              )}
+   459→            </div>
+   460→
+   461→            {/* Local Transporter Details — shown only for 'local' option */}
+   462→            {formData.deliveryOption === 'local' && (
+   463→              <div className="border-t border-glass-border pt-3 mt-1 space-y-3">
+   464→                <h5 className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+   465→                  <UserPlus className="h-3.5 w-3.5" /> Local Transporter Details
+   466→                </h5>
+   467→                <p className="text-[10px] text-muted-foreground">
+   468→                  Provide your local transporter's details. You can update these later from the order.
+   469→                </p>
+   470→                <div className="grid gap-2">
+   471→                  <Label className="text-foreground text-xs">Transporter Name</Label>
+   472→                  <Input
+   473→                    className="glass-input text-foreground"
+   474→                    placeholder="e.g. Sharma Transport"
+   475→                    value={formData.localTransporterName || ''}
+   476→                    onChange={(e) => setField('localTransporterName', e.target.value)}
+   477→                  />
+   478→                </div>
+   479→                <div className="grid grid-cols-2 gap-3">
+   480→                  <div className="grid gap-2">
+   481→                    <Label className="text-foreground text-xs">Phone Number</Label>
+   482→                    <Input
+   483→                      className="glass-input text-foreground"
+   484→                      placeholder="e.g. 9876543210"
+   485→                      value={formData.localTransporterPhone || ''}
+   486→                      onChange={(e) => setField('localTransporterPhone', e.target.value)}
+   487→                    />
+   488→                  </div>
+   489→                  <div className="grid gap-2">
+   490→                    <Label className="text-foreground text-xs">Vehicle Number</Label>
+   491→                    <Input
+   492→                      className="glass-input text-foreground"
+   493→                      placeholder="e.g. MH12AB1234"
+   494→                      value={formData.localTransporterVehicle || ''}
+   495→                      onChange={(e) => setField('localTransporterVehicle', e.target.value)}
+   496→                    />
+   497→                  </div>
+   498→                </div>
+   499→              </div>
+   500→            )}
+   501→          </div>
+   502→        )}
+   503→      </div>
+   504→
+   505→      <div className="border-t border-glass-border" />
+   506→
+   507→      {/* Location */}
+   508→      <div className="space-y-3">
+   509→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   510→          <MapPin className="h-4 w-4" /> Location
+   511→        </h4>
+   512→        <div className="grid grid-cols-2 gap-3">
+   513→          <div className="grid gap-2">
+   514→            <Label className="text-foreground text-xs">Location *</Label>
+   515→            <Input
+   516→              className="glass-input text-foreground"
+   517→              placeholder="e.g. Nashik"
+   518→              value={formData.location}
+   519→              onChange={(e) => setField('location', e.target.value)}
+   520→            />
+   521→          </div>
+   522→          <div className="grid gap-2">
+   523→            <Label className="text-foreground text-xs">State</Label>
+   524→            <Input
+   525→              className="glass-input text-foreground"
+   526→              placeholder="e.g. Maharashtra"
+   527→              value={formData.state}
+   528→              onChange={(e) => setField('state', e.target.value)}
+   529→            />
+   530→          </div>
+   531→        </div>
+   532→      </div>
+   533→
+   534→      <div className="border-t border-glass-border" />
+   535→
+   536→      {/* Crop Details */}
+   537→      <div className="space-y-3">
+   538→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   539→          <Leaf className="h-4 w-4" /> Crop Details
+   540→        </h4>
+   541→        <div className="grid grid-cols-2 gap-3">
+   542→          <div className="grid gap-2">
+   543→            <Label className="text-foreground text-xs">Crop Variety</Label>
+   544→            <Input
+   545→              className="glass-input text-foreground"
+   546→              placeholder="e.g. 1121, Alphonso"
+   547→              value={formData.cropVariety}
+   548→              onChange={(e) => setField('cropVariety', e.target.value)}
+   549→            />
+   550→          </div>
+   551→          <div className="grid gap-2">
+   552→            <Label className="text-foreground text-xs">Harvest Date</Label>
+   553→            <Input
+   554→              type="date"
+   555→              className="glass-input text-foreground"
+   556→              value={formData.harvestDate}
+   557→              onChange={(e) => setField('harvestDate', e.target.value)}
+   558→            />
+   559→          </div>
+   560→        </div>
+   561→        <div className="grid grid-cols-2 gap-3">
+   562→          <div className="grid gap-2">
+   563→            <Label className="text-foreground text-xs">Freshness</Label>
+   564→            <Select value={formData.freshness} onValueChange={(v) => setField('freshness', v)}>
+   565→              <SelectTrigger className="glass-input text-foreground">
+   566→                <SelectValue placeholder="Select" />
+   567→              </SelectTrigger>
+   568→              <SelectContent>
+   569→                <SelectItem value="Fresh">Fresh</SelectItem>
+   570→                <SelectItem value="Recently Harvested">Recently Harvested</SelectItem>
+   571→                <SelectItem value="Stored">Stored</SelectItem>
+   572→              </SelectContent>
+   573→            </Select>
+   574→          </div>
+   575→          <div className="grid gap-2">
+   576→            <Label className="text-foreground text-xs">Is Organic</Label>
+   577→            <div className="flex items-center gap-3 h-10">
+   578→              <Switch
+   579→                checked={formData.isOrganic}
+   580→                onCheckedChange={(checked) => setField('isOrganic', checked)}
+   581→              />
+   582→              <span className="text-sm text-foreground">{formData.isOrganic ? 'Yes' : 'No'}</span>
+   583→            </div>
+   584→          </div>
+   585→        </div>
+   586→        <div className="grid grid-cols-2 gap-3">
+   587→          <div className="grid gap-2">
+   588→            <Label className="text-foreground text-xs">Pesticides Used</Label>
+   589→            <Input
+   590→              className="glass-input text-foreground"
+   591→              placeholder="e.g. Neem-based"
+   592→              value={formData.pesticidesUsed}
+   593→              onChange={(e) => setField('pesticidesUsed', e.target.value)}
+   594→            />
+   595→          </div>
+   596→          <div className="grid gap-2">
+   597→            <Label className="text-foreground text-xs">Moisture Content</Label>
+   598→            <Input
+   599→              className="glass-input text-foreground"
+   600→              placeholder="e.g. 12%"
+   601→              value={formData.moistureContent}
+   602→              onChange={(e) => setField('moistureContent', e.target.value)}
+   603→            />
+   604→          </div>
+   605→        </div>
+   606→        <div className="grid grid-cols-2 gap-3">
+   607→          <div className="grid gap-2">
+   608→            <Label className="text-foreground text-xs">Shelf Life</Label>
+   609→            <Input
+   610→              className="glass-input text-foreground"
+   611→              placeholder="e.g. 6 months"
+   612→              value={formData.shelfLife}
+   613→              onChange={(e) => setField('shelfLife', e.target.value)}
+   614→            />
+   615→          </div>
+   616→          <div className="grid gap-2">
+   617→            <Label className="text-foreground text-xs">Storage Condition</Label>
+   618→            <Input
+   619→              className="glass-input text-foreground"
+   620→              placeholder="e.g. Cool, dry place"
+   621→              value={formData.storageCondition}
+   622→              onChange={(e) => setField('storageCondition', e.target.value)}
+   623→            />
+   624→          </div>
+   625→        </div>
+   626→      </div>
+   627→
+   628→      <div className="border-t border-glass-border" />
+   629→
+   630→      {/* Certifications */}
+   631→      <div className="space-y-3">
+   632→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   633→          <Shield className="h-4 w-4" /> Certifications
+   634→        </h4>
+   635→        <div className="grid gap-2">
+   636→          <Label className="text-foreground text-xs">Product Certifications</Label>
+   637→          <Input
+   638→            className="glass-input text-foreground"
+   639→            placeholder="e.g. FSSAI, APEDA, Organic India (comma separated)"
+   640→            value={formData.certifications}
+   641→            onChange={(e) => setField('certifications', e.target.value)}
+   642→          />
+   643→        </div>
+   644→      </div>
+   645→
+   646→      <div className="border-t border-glass-border" />
+   647→
+   648→      {/* Description */}
+   649→      <div className="space-y-3">
+   650→        <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   651→          <FileText className="h-4 w-4" /> Description
+   652→        </h4>
+   653→        <div className="grid gap-2">
+   654→          <Textarea
+   655→            className="glass-input text-foreground min-h-[80px]"
+   656→            placeholder="Describe your product..."
+   657→            value={formData.description}
+   658→            onChange={(e) => setField('description', e.target.value)}
+   659→          />
+   660→        </div>
+   661→      </div>
+   662→    </div>
+   663→  )
+   664→}
+   665→
+   666→// ─── Inline Create Shipment Dialog Content ───────────────────────────────────
+   667→function CreateShipmentDialogContent({
+   668→  selectedOrder,
+   669→  user,
+   670→  onClose,
+   671→  onSubmit,
+   672→  submitting,
+   673→}: {
+   674→  selectedOrder: any
+   675→  user: any
+   676→  onClose: () => void
+   677→  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+   678→  submitting: boolean
+   679→}) {
+   680→  const [transporterOption, setTransporterOption] = useState<'platform' | 'external'>('platform')
+   681→  const [transporters, setTransporters] = useState<any[]>([])
+   682→  const [selectedTransporterId, setSelectedTransporterId] = useState<string>('')
+   683→  const [budgetRange, setBudgetRange] = useState({ min: '', max: '' })
+   684→  const [externalForm, setExternalForm] = useState({
+   685→    transporterName: '',
+   686→    companyName: '',
+   687→    driverName: '',
+   688→    vehicleNumber: '',
+   689→    mobileNumber: '',
+   690→    estimatedPickupDate: '',
+   691→    estimatedDeliveryDate: '',
+   692→  })
+   693→
+   694→  // Fetch transporters on mount
+   695→  useEffect(() => {
+   696→    fetch('/api/users?role=transporter')
+   697→      .then((r) => r.json())
+   698→      .then((data) => {
+   699→        if (data.users) setTransporters(data.users)
+   700→      })
+   701→      .catch(() => toast.error('Failed to load transporters'))
+   702→  }, [])
+   703→
+   704→  const handleSubmit = async () => {
+   705→    if (transporterOption === 'platform' && !selectedTransporterId) {
+   706→      toast.error('Please select a transporter')
+   707→      return
+   708→    }
+   709→    if (transporterOption === 'external') {
+   710→      if (!externalForm.transporterName || !externalForm.driverName || !externalForm.vehicleNumber || !externalForm.mobileNumber) {
+   711→        toast.error('Please fill all required external transporter fields')
+   712→        return
+   713→      }
+   714→    }
+   715→
+   716→    const order = selectedOrder
+   717→    const pickupAddress =
+   718→      user.farmLocation || [user.city, user.state].filter(Boolean).join(', ') || order.product?.location || ''
+   719→    const deliveryAddress =
+   720→      order.deliveryFullAddress ||
+   721→      [order.deliveryAddress, order.deliveryCity, order.deliveryState].filter(Boolean).join(', ') ||
+   722→      [order.buyer?.city, order.buyer?.state].filter(Boolean).join(', ') ||
+   723→      ''
+   724→
+   725→    const shipmentData: Record<string, unknown> = {
+   726→      orderId: order.id,
+   727→      origin: pickupAddress,
+   728→      destination: deliveryAddress,
+   729→      exactPickupAddress: pickupAddress,
+   730→      exactDropAddress: deliveryAddress,
+   731→      expectedPickupDate:
+   732→        transporterOption === 'external' && externalForm.estimatedPickupDate
+   733→          ? new Date(externalForm.estimatedPickupDate).toISOString()
+   734→          : null,
+   735→      budgetMin: budgetRange.min ? parseFloat(budgetRange.min) : null,
+   736→      budgetMax: budgetRange.max ? parseFloat(budgetRange.max) : null,
+   737→    }
+   738→
+   739→    if (transporterOption === 'platform') {
+   740→      shipmentData.transporterId = selectedTransporterId
+   741→      shipmentData.status = 'assigned'
+   742→    } else {
+   743→      shipmentData.isExternal = true
+   744→      shipmentData.externalTransporterName = externalForm.transporterName
+   745→      shipmentData.externalCompanyName = externalForm.companyName || null
+   746→      shipmentData.driverName = externalForm.driverName
+   747→      shipmentData.vehicleNumber = externalForm.vehicleNumber
+   748→      shipmentData.driverPhone = externalForm.mobileNumber
+   749→      shipmentData.expectedDeliveryDate = externalForm.estimatedDeliveryDate
+   750→        ? new Date(externalForm.estimatedDeliveryDate).toISOString()
+   751→        : null
+   752→      shipmentData.status = 'assigned'
+   753→    }
+   754→
+   755→    await onSubmit(shipmentData)
+   756→    onClose()
+   757→  }
+   758→
+   759→  return (
+   760→    <>
+   761→      <DialogHeader>
+   762→        <DialogTitle className="text-foreground">Create Shipment</DialogTitle>
+   763→        <DialogDescription className="text-muted-foreground">
+   764→          {selectedOrder && (
+   765→            <>
+   766→              Order: {selectedOrder.product?.name || 'N/A'} &bull; {selectedOrder.quantity}{' '}
+   767→              {selectedOrder.product?.unit || ''}
+   768→            </>
+   769→          )}
+   770→        </DialogDescription>
+   771→      </DialogHeader>
+   772→
+   773→      <div className="grid gap-5 py-4">
+   774→        {/* Pickup & Delivery Info (auto-filled) */}
+   775→        <div className="space-y-3">
+   776→          <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   777→            <MapPin className="h-4 w-4" /> Addresses (Auto-filled)
+   778→          </h4>
+   779→          <div className="grid gap-2">
+   780→            <div className="glass-card p-3 border border-emerald-500/15">
+   781→              <p className="text-[10px] text-muted-foreground mb-0.5">Pickup Location (Your Address)</p>
+   782→              <p className="text-xs text-foreground font-medium">
+   783→                {user?.farmLocation ||
+   784→                  [user?.city, user?.state].filter(Boolean).join(', ') ||
+   785→                  selectedOrder?.product?.location ||
+   786→                  'Not set'}
+   787→              </p>
+   788→            </div>
+   789→            <div className="glass-card p-3 border border-teal-500/15">
+   790→              <p className="text-[10px] text-muted-foreground mb-0.5">Delivery Address (Buyer)</p>
+   791→              <p className="text-xs text-foreground font-medium">
+   792→                {selectedOrder?.deliveryFullAddress ||
+   793→                  [selectedOrder?.deliveryAddress, selectedOrder?.deliveryCity, selectedOrder?.deliveryState]
+   794→                    .filter(Boolean)
+   795→                    .join(', ') ||
+   796→                  [selectedOrder?.buyer?.city, selectedOrder?.buyer?.state].filter(Boolean).join(', ') ||
+   797→                  'Not set'}
+   798→              </p>
+   799→            </div>
+   800→          </div>
+   801→        </div>
+   802→
+   803→        <div className="border-t border-glass-border" />
+   804→
+   805→        {/* Budget Range */}
+   806→        <div className="space-y-3">
+   807→          <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   808→            <IndianRupee className="h-4 w-4" /> Budget Range (Transport Cost)
+   809→          </h4>
+   810→          <div className="grid grid-cols-2 gap-3">
+   811→            <div className="grid gap-2">
+   812→              <Label className="text-foreground text-xs">Min Budget (₹)</Label>
+   813→              <Input
+   814→                type="number"
+   815→                className="glass-input text-foreground"
+   816→                placeholder="1000"
+   817→                value={budgetRange.min}
+   818→                onChange={(e) => setBudgetRange((p) => ({ ...p, min: e.target.value }))}
+   819→              />
+   820→            </div>
+   821→            <div className="grid gap-2">
+   822→              <Label className="text-foreground text-xs">Max Budget (₹)</Label>
+   823→              <Input
+   824→                type="number"
+   825→                className="glass-input text-foreground"
+   826→                placeholder="5000"
+   827→                value={budgetRange.max}
+   828→                onChange={(e) => setBudgetRange((p) => ({ ...p, max: e.target.value }))}
+   829→              />
+   830→            </div>
+   831→          </div>
+   832→        </div>
+   833→
+   834→        <div className="border-t border-glass-border" />
+   835→
+   836→        {/* Transporter Option Toggle */}
+   837→        <div className="space-y-3">
+   838→          <h4 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+   839→            <Truck className="h-4 w-4" /> Transporter
+   840→          </h4>
+   841→          <div className="flex gap-2">
+   842→            <button
+   843→              type="button"
+   844→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   845→                transporterOption === 'platform'
+   846→                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+   847→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   848→              }`}
+   849→              onClick={() => setTransporterOption('platform')}
+   850→            >
+   851→              <Building2 className="h-4 w-4 mx-auto mb-1" />
+   852→              AgroBridge Transporters
+   853→            </button>
+   854→            <button
+   855→              type="button"
+   856→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+   857→                transporterOption === 'external'
+   858→                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+   859→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+   860→              }`}
+   861→              onClick={() => setTransporterOption('external')}
+   862→            >
+   863→              <User className="h-4 w-4 mx-auto mb-1" />
+   864→              Own Transporter
+   865→            </button>
+   866→          </div>
+   867→
+   868→          {/* Platform Transporters List */}
+   869→          {transporterOption === 'platform' && (
+   870→            <div className="space-y-3 max-h-60 overflow-y-auto">
+   871→              {transporters.length === 0 ? (
+   872→                <div className="glass-card p-4 text-center">
+   873→                  <p className="text-xs text-muted-foreground">Loading transporters...</p>
+   874→                </div>
+   875→              ) : (
+   876→                transporters.map((t: any) => (
+   877→                  <button
+   878→                    key={t.id}
+   879→                    type="button"
+   880→                    className={`w-full glass-card p-3 text-left transition-all ${
+   881→                      selectedTransporterId === t.id
+   882→                        ? 'border-emerald-500/40 bg-emerald-500/5'
+   883→                        : 'hover:border-white/20'
+   884→                    }`}
+   885→                    onClick={() => setSelectedTransporterId(t.id)}
+   886→                  >
+   887→                    <div className="flex items-center gap-3">
+   888→                      <Avatar className="h-8 w-8 border border-glass-border">
+   889→                        <AvatarFallback className="bg-teal-500/20 text-teal-400 text-[10px] font-semibold">
+   890→                          {(t.name || t.companyName || 'T').slice(0, 2).toUpperCase()}
+   891→                        </AvatarFallback>
+   892→                      </Avatar>
+   893→                      <div className="flex-1 min-w-0">
+   894→                        <p className="text-sm font-medium text-foreground truncate">
+   895→                          {t.companyName || t.name}
+   896→                        </p>
+   897→                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+   898→                          {t.city && <span>{t.city}</span>}
+   899→                          {t.avgRating && (
+   900→                            <span className="flex items-center gap-0.5">
+   901→                              <Star className="h-2.5 w-2.5 text-amber-400" /> {t.avgRating.toFixed(1)}
+   902→                            </span>
+   903→                          )}
+   904→                          <span>{t._count?.shipmentsAsTransporter || 0} shipments</span>
+   905→                        </div>
+   906→                      </div>
+   907→                      {selectedTransporterId === t.id && (
+   908→                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+   909→                      )}
+   910→                    </div>
+   911→                  </button>
+   912→                ))
+   913→              )}
+   914→            </div>
+   915→          )}
+   916→
+   917→          {/* External Transporter Form */}
+   918→          {transporterOption === 'external' && (
+   919→            <div className="space-y-3">
+   920→              <p className="text-xs text-muted-foreground bg-purple-500/10 p-2 rounded-lg border border-purple-500/20">
+   921→                No logistics commission is charged when using your own transporter. The shipment will
+   922→                still be tracked within AgroBridge.
+   923→              </p>
+   924→              <div className="grid grid-cols-2 gap-3">
+   925→                <div className="grid gap-2">
+   926→                  <Label className="text-foreground text-xs">Transporter Name *</Label>
+   927→                  <Input
+   928→                    className="glass-input text-foreground"
+   929→                    placeholder="e.g. Sharma Logistics"
+   930→                    value={externalForm.transporterName}
+   931→                    onChange={(e) =>
+   932→                      setExternalForm((p) => ({ ...p, transporterName: e.target.value }))
+   933→                    }
+   934→                  />
+   935→                </div>
+   936→                <div className="grid gap-2">
+   937→                  <Label className="text-foreground text-xs">Company Name</Label>
+   938→                  <Input
+   939→                    className="glass-input text-foreground"
+   940→                    placeholder="Optional"
+   941→                    value={externalForm.companyName}
+   942→                    onChange={(e) =>
+   943→                      setExternalForm((p) => ({ ...p, companyName: e.target.value }))
+   944→                    }
+   945→                  />
+   946→                </div>
+   947→              </div>
+   948→              <div className="grid grid-cols-2 gap-3">
+   949→                <div className="grid gap-2">
+   950→                  <Label className="text-foreground text-xs">Driver Name *</Label>
+   951→                  <Input
+   952→                    className="glass-input text-foreground"
+   953→                    placeholder="e.g. Raj Kumar"
+   954→                    value={externalForm.driverName}
+   955→                    onChange={(e) =>
+   956→                      setExternalForm((p) => ({ ...p, driverName: e.target.value }))
+   957→                    }
+   958→                  />
+   959→                </div>
+   960→                <div className="grid gap-2">
+   961→                  <Label className="text-foreground text-xs">Vehicle Number *</Label>
+   962→                  <Input
+   963→                    className="glass-input text-foreground"
+   964→                    placeholder="e.g. MH12AB1234"
+   965→                    value={externalForm.vehicleNumber}
+   966→                    onChange={(e) =>
+   967→                      setExternalForm((p) => ({ ...p, vehicleNumber: e.target.value }))
+   968→                    }
+   969→                  />
+   970→                </div>
+   971→              </div>
+   972→              <div className="grid grid-cols-2 gap-3">
+   973→                <div className="grid gap-2">
+   974→                  <Label className="text-foreground text-xs">Mobile Number *</Label>
+   975→                  <Input
+   976→                    className="glass-input text-foreground"
+   977→                    placeholder="e.g. 9876543210"
+   978→                    value={externalForm.mobileNumber}
+   979→                    onChange={(e) =>
+   980→                      setExternalForm((p) => ({ ...p, mobileNumber: e.target.value }))
+   981→                    }
+   982→                  />
+   983→                </div>
+   984→                <div className="grid gap-2">
+   985→                  <Label className="text-foreground text-xs">Estimated Pickup Date *</Label>
+   986→                  <Input
+   987→                    type="date"
+   988→                    className="glass-input text-foreground"
+   989→                    value={externalForm.estimatedPickupDate}
+   990→                    onChange={(e) =>
+   991→                      setExternalForm((p) => ({ ...p, estimatedPickupDate: e.target.value }))
+   992→                    }
+   993→                  />
+   994→                </div>
+   995→              </div>
+   996→              <div className="grid grid-cols-2 gap-3">
+   997→                <div className="grid gap-2">
+   998→                  <Label className="text-foreground text-xs">Estimated Delivery Date</Label>
+   999→                  <Input
+  1000→                    type="date"
+  1001→                    className="glass-input text-foreground"
+  1002→                    value={externalForm.estimatedDeliveryDate}
+  1003→                    onChange={(e) =>
+  1004→                      setExternalForm((p) => ({ ...p, estimatedDeliveryDate: e.target.value }))
+  1005→                    }
+  1006→                  />
+  1007→                </div>
+  1008→              </div>
+  1009→            </div>
+  1010→          )}
+  1011→        </div>
+  1012→      </div>
+  1013→
+  1014→      <DialogFooter>
+  1015→        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+  1016→          Cancel
+  1017→        </Button>
+  1018→        <Button className="bg-emerald-600 hover:bg-emerald-500" onClick={handleSubmit} disabled={submitting}>
+  1019→          {submitting ? (
+  1020→            <>
+  1021→              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+  1022→              Creating...
+  1023→            </>
+  1024→          ) : (
+  1025→            'Create Shipment'
+  1026→          )}
+  1027→        </Button>
+  1028→      </DialogFooter>
+  1029→    </>
+  1030→  )
+  1031→}
+  1032→
+  1033→// ─── Reassign Transporter Dialog Content ──────────────────────────────────────
+  1034→function ReassignTransporterDialogContent({
+  1035→  shipment,
+  1036→  onClose,
+  1037→  onSubmit,
+  1038→  submitting,
+  1039→}: {
+  1040→  shipment: any
+  1041→  onClose: () => void
+  1042→  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+  1043→  submitting: boolean
+  1044→}) {
+  1045→  const [transporterOption, setTransporterOption] = useState<'platform' | 'external'>('platform')
+  1046→  const [transporters, setTransporters] = useState<any[]>([])
+  1047→  const [selectedTransporterId, setSelectedTransporterId] = useState<string>('')
+  1048→  const [externalForm, setExternalForm] = useState({
+  1049→    transporterName: '',
+  1050→    companyName: '',
+  1051→    driverName: '',
+  1052→    vehicleNumber: '',
+  1053→    mobileNumber: '',
+  1054→  })
+  1055→
+  1056→  // Fetch transporters on mount
+  1057→  useEffect(() => {
+  1058→    fetch('/api/users?role=transporter')
+  1059→      .then((r) => r.json())
+  1060→      .then((data) => {
+  1061→        if (data.users) {
+  1062→          // Filter out the current transporter if it's a platform transporter
+  1063→          const currentTransporterId = shipment.transporterId
+  1064→          const filtered = currentTransporterId
+  1065→            ? data.users.filter((t: any) => t.id !== currentTransporterId)
+  1066→            : data.users
+  1067→          setTransporters(filtered)
+  1068→        }
+  1069→      })
+  1070→      .catch(() => toast.error('Failed to load transporters'))
+  1071→  }, [shipment.transporterId])
+  1072→
+  1073→  const handleSubmit = async () => {
+  1074→    if (transporterOption === 'platform' && !selectedTransporterId) {
+  1075→      toast.error('Please select a new transporter')
+  1076→      return
+  1077→    }
+  1078→    if (transporterOption === 'external') {
+  1079→      if (!externalForm.transporterName || !externalForm.driverName || !externalForm.vehicleNumber || !externalForm.mobileNumber) {
+  1080→        toast.error('Please fill all required external transporter fields')
+  1081→        return
+  1082→      }
+  1083→    }
+  1084→
+  1085→    const reassignData: Record<string, unknown> = {
+  1086→      shipmentId: shipment.id,
+  1087→    }
+  1088→
+  1089→    if (transporterOption === 'platform') {
+  1090→      reassignData.transporterId = selectedTransporterId
+  1091→    } else {
+  1092→      reassignData.isExternal = true
+  1093→      reassignData.externalTransporterName = externalForm.transporterName
+  1094→      reassignData.externalCompanyName = externalForm.companyName || null
+  1095→      reassignData.externalDriverName = externalForm.driverName
+  1096→      reassignData.externalVehicleNumber = externalForm.vehicleNumber
+  1097→      reassignData.externalMobileNumber = externalForm.mobileNumber
+  1098→      reassignData.driverName = externalForm.driverName
+  1099→      reassignData.vehicleNumber = externalForm.vehicleNumber
+  1100→      reassignData.driverPhone = externalForm.mobileNumber
+  1101→    }
+  1102→
+  1103→    await onSubmit(reassignData)
+  1104→    onClose()
+  1105→  }
+  1106→
+  1107→  return (
+  1108→    <>
+  1109→      <DialogHeader>
+  1110→        <DialogTitle className="text-foreground flex items-center gap-2">
+  1111→          <ArrowRightLeft className="h-5 w-5 text-amber-400" />
+  1112→          Reassign Transporter
+  1113→        </DialogTitle>
+  1114→        <DialogDescription className="text-muted-foreground">
+  1115→          {shipment && (
+  1116→            <>
+  1117→              Shipment for {shipment.order?.product?.name || 'N/A'} — Current status:{' '}
+  1118→              <span className="text-amber-400 font-medium">{(shipment.status || '').replace('_', ' ')}</span>
+  1119→              {shipment.transporter?.name && (
+  1120→                <span className="text-muted-foreground"> (was: {shipment.transporter.name})</span>
+  1121→              )}
+  1122→            </>
+  1123→          )}
+  1124→        </DialogDescription>
+  1125→      </DialogHeader>
+  1126→
+  1127→      <div className="grid gap-5 py-4">
+  1128→        {/* Current transporter info */}
+  1129→        {(shipment.transporterId || shipment.isExternal || shipment.isExternalTransporter) && (
+  1130→          <div className="glass-card p-3 border border-red-500/20 bg-red-500/5">
+  1131→            <p className="text-[10px] text-red-400 font-semibold mb-1">Current Transporter (to be replaced)</p>
+  1132→            <p className="text-xs text-foreground font-medium">
+  1133→              {shipment.isExternal || shipment.isExternalTransporter
+  1134→                ? shipment.externalCompanyName || shipment.externalTransporterName || 'External Transporter'
+  1135→                : shipment.transporter?.companyName || shipment.transporter?.name || 'Platform Transporter'}
+  1136→            </p>
+  1137→          </div>
+  1138→        )}
+  1139→
+  1140→        <div className="border-t border-glass-border" />
+  1141→
+  1142→        {/* Transporter Option Toggle */}
+  1143→        <div className="space-y-3">
+  1144→          <h4 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+  1145→            <Truck className="h-4 w-4" /> Select New Transporter
+  1146→          </h4>
+  1147→          <div className="flex gap-2">
+  1148→            <button
+  1149→              type="button"
+  1150→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+  1151→                transporterOption === 'platform'
+  1152→                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+  1153→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+  1154→              }`}
+  1155→              onClick={() => setTransporterOption('platform')}
+  1156→            >
+  1157→              <Building2 className="h-4 w-4 mx-auto mb-1" />
+  1158→              AgroBridge Transporters
+  1159→            </button>
+  1160→            <button
+  1161→              type="button"
+  1162→              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+  1163→                transporterOption === 'external'
+  1164→                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+  1165→                  : 'bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10'
+  1166→              }`}
+  1167→              onClick={() => setTransporterOption('external')}
+  1168→            >
+  1169→              <User className="h-4 w-4 mx-auto mb-1" />
+  1170→              External Transporter
+  1171→            </button>
+  1172→          </div>
+  1173→
+  1174→          {/* Platform Transporters List */}
+  1175→          {transporterOption === 'platform' && (
+  1176→            <div className="space-y-3 max-h-60 overflow-y-auto">
+  1177→              {transporters.length === 0 ? (
+  1178→                <div className="glass-card p-4 text-center">
+  1179→                  <p className="text-xs text-muted-foreground">No other transporters available</p>
+  1180→                </div>
+  1181→              ) : (
+  1182→                transporters.map((t: any) => (
+  1183→                  <button
+  1184→                    key={t.id}
+  1185→                    type="button"
+  1186→                    className={`w-full glass-card p-3 text-left transition-all ${
+  1187→                      selectedTransporterId === t.id
+  1188→                        ? 'border-emerald-500/40 bg-emerald-500/5'
+  1189→                        : 'hover:border-white/20'
+  1190→                    }`}
+  1191→                    onClick={() => setSelectedTransporterId(t.id)}
+  1192→                  >
+  1193→                    <div className="flex items-center gap-3">
+  1194→                      <Avatar className="h-8 w-8 border border-glass-border">
+  1195→                        <AvatarFallback className="bg-teal-500/20 text-teal-400 text-[10px] font-semibold">
+  1196→                          {(t.name || t.companyName || 'T').slice(0, 2).toUpperCase()}
+  1197→                        </AvatarFallback>
+  1198→                      </Avatar>
+  1199→                      <div className="flex-1 min-w-0">
+  1200→                        <p className="text-sm font-medium text-foreground truncate">
+  1201→                          {t.companyName || t.name}
+  1202→                        </p>
+  1203→                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+  1204→                          {t.city && <span>{t.city}</span>}
+  1205→                          {t.avgRating && (
+  1206→                            <span className="flex items-center gap-0.5">
+  1207→                              <Star className="h-2.5 w-2.5 text-amber-400" /> {t.avgRating.toFixed(1)}
+  1208→                            </span>
+  1209→                          )}
+  1210→                          <span>{t._count?.shipmentsAsTransporter || 0} shipments</span>
+  1211→                        </div>
+  1212→                      </div>
+  1213→                      {selectedTransporterId === t.id && (
+  1214→                        <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+  1215→                      )}
+  1216→                    </div>
+  1217→                  </button>
+  1218→                ))
+  1219→              )}
+  1220→            </div>
+  1221→          )}
+  1222→
+  1223→          {/* External Transporter Form */}
+  1224→          {transporterOption === 'external' && (
+  1225→            <div className="space-y-3">
+  1226→              <p className="text-xs text-muted-foreground bg-purple-500/10 p-2 rounded-lg border border-purple-500/20">
+  1227→                No logistics commission is charged for external transporters. The shipment will
+  1228→                still be tracked within AgroBridge.
+  1229→              </p>
+  1230→              <div className="grid grid-cols-2 gap-3">
+  1231→                <div className="grid gap-2">
+  1232→                  <Label className="text-foreground text-xs">Transporter Name *</Label>
+  1233→                  <Input
+  1234→                    className="glass-input text-foreground"
+  1235→                    placeholder="e.g. Sharma Logistics"
+  1236→                    value={externalForm.transporterName}
+  1237→                    onChange={(e) =>
+  1238→                      setExternalForm((p) => ({ ...p, transporterName: e.target.value }))
+  1239→                    }
+  1240→                  />
+  1241→                </div>
+  1242→                <div className="grid gap-2">
+  1243→                  <Label className="text-foreground text-xs">Company Name</Label>
+  1244→                  <Input
+  1245→                    className="glass-input text-foreground"
+  1246→                    placeholder="Optional"
+  1247→                    value={externalForm.companyName}
+  1248→                    onChange={(e) =>
+  1249→                      setExternalForm((p) => ({ ...p, companyName: e.target.value }))
+  1250→                    }
+  1251→                  />
+  1252→                </div>
+  1253→              </div>
+  1254→              <div className="grid grid-cols-2 gap-3">
+  1255→                <div className="grid gap-2">
+  1256→                  <Label className="text-foreground text-xs">Driver Name *</Label>
+  1257→                  <Input
+  1258→                    className="glass-input text-foreground"
+  1259→                    placeholder="e.g. Raj Kumar"
+  1260→                    value={externalForm.driverName}
+  1261→                    onChange={(e) =>
+  1262→                      setExternalForm((p) => ({ ...p, driverName: e.target.value }))
+  1263→                    }
+  1264→                  />
+  1265→                </div>
+  1266→                <div className="grid gap-2">
+  1267→                  <Label className="text-foreground text-xs">Vehicle Number *</Label>
+  1268→                  <Input
+  1269→                    className="glass-input text-foreground"
+  1270→                    placeholder="e.g. MH12AB1234"
+  1271→                    value={externalForm.vehicleNumber}
+  1272→                    onChange={(e) =>
+  1273→                      setExternalForm((p) => ({ ...p, vehicleNumber: e.target.value }))
+  1274→                    }
+  1275→                  />
+  1276→                </div>
+  1277→              </div>
+  1278→              <div className="grid gap-2">
+  1279→                <Label className="text-foreground text-xs">Mobile Number *</Label>
+  1280→                <Input
+  1281→                  className="glass-input text-foreground"
+  1282→                  placeholder="e.g. 9876543210"
+  1283→                  value={externalForm.mobileNumber}
+  1284→                  onChange={(e) =>
+  1285→                    setExternalForm((p) => ({ ...p, mobileNumber: e.target.value }))
+  1286→                  }
+  1287→                />
+  1288→              </div>
+  1289→            </div>
+  1290→          )}
+  1291→        </div>
+  1292→      </div>
+  1293→
+  1294→      <DialogFooter>
+  1295→        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+  1296→          Cancel
+  1297→        </Button>
+  1298→        <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleSubmit} disabled={submitting}>
+  1299→          {submitting ? (
+  1300→            <>
+  1301→              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+  1302→              Reassigning...
+  1303→            </>
+  1304→          ) : (
+  1305→            <>
+  1306→              <ArrowRightLeft className="h-4 w-4 mr-1" /> Reassign Transporter
+  1307→            </>
+  1308→          )}
+  1309→        </Button>
+  1310→      </DialogFooter>
+  1311→    </>
+  1312→  )
+  1313→}
+  1314→
+  1315→// ─── Assign Local Transporter Dialog Content ─────────────────────────────────
+  1316→function AssignLocalTransporterDialogContent({
+  1317→  order,
+  1318→  user,
+  1319→  onClose,
+  1320→  onSubmit,
+  1321→  submitting,
+  1322→}: {
+  1323→  order: any
+  1324→  user: any
+  1325→  onClose: () => void
+  1326→  onSubmit: (_data: Record<string, unknown>) => Promise<void>
+  1327→  submitting: boolean
+  1328→}) {
+  1329→  const [form, setForm] = useState({
+  1330→    transporterName: order?.localTransporterName || '',
+  1331→    phone: order?.localTransporterPhone || '',
+  1332→    vehicleNumber: order?.localTransporterVehicle || '',
+  1333→  })
+  1334→
+  1335→  const isReassign = !!(order?.localTransporterName)
+  1336→
+  1337→  const handleSubmit = async () => {
+  1338→    if (!form.transporterName || !form.phone || !form.vehicleNumber) {
+  1339→      toast.error('Please fill all required fields')
+  1340→      return
+  1341→    }
+  1342→    await onSubmit({
+  1343→      orderId: order.id,
+  1344→      deliveryType: 'local',
+  1345→      localTransporterName: form.transporterName,
+  1346→      localTransporterPhone: form.phone,
+  1347→      localTransporterVehicle: form.vehicleNumber,
+  1348→      statusUpdatedBy: user.id,
+  1349→    })
+  1350→    onClose()
+  1351→  }
+  1352→
+  1353→  return (
+  1354→    <>
+  1355→      <DialogHeader>
+  1356→        <DialogTitle className="text-foreground flex items-center gap-2">
+  1357→          <UserPlus className="h-5 w-5 text-emerald-400" />
+  1358→          {isReassign ? 'Reassign Local Transporter' : 'Assign Local Transporter'}
+  1359→        </DialogTitle>
+  1360→        <DialogDescription className="text-muted-foreground">
+  1361→          {order && (
+  1362→            <>
+  1363→              Order: {order.product?.name || 'N/A'} &bull; Qty: {order.quantity} {order.product?.unit || ''}
+  1364→            </>
+  1365→          )}
+  1366→        </DialogDescription>
+  1367→      </DialogHeader>
+  1368→
+  1369→      <div className="grid gap-5 py-4">
+  1370→        <div className="space-y-3">
+  1371→          <div className="grid gap-2">
+  1372→            <Label className="text-foreground text-xs">Transporter Name *</Label>
+  1373→            <Input
+  1374→              className="glass-input text-foreground"
+  1375→              placeholder="e.g. Sharma Transport"
+  1376→              value={form.transporterName}
+  1377→              onChange={(e) => setForm((p) => ({ ...p, transporterName: e.target.value }))}
+  1378→            />
+  1379→          </div>
+  1380→          <div className="grid gap-2">
+  1381→            <Label className="text-foreground text-xs">Phone Number *</Label>
+  1382→            <Input
+  1383→              className="glass-input text-foreground"
+  1384→              placeholder="e.g. 9876543210"
+  1385→              value={form.phone}
+  1386→              onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+  1387→            />
+  1388→          </div>
+  1389→          <div className="grid gap-2">
+  1390→            <Label className="text-foreground text-xs">Vehicle Number *</Label>
+  1391→            <Input
+  1392→              className="glass-input text-foreground"
+  1393→              placeholder="e.g. MH12AB1234"
+  1394→              value={form.vehicleNumber}
+  1395→              onChange={(e) => setForm((p) => ({ ...p, vehicleNumber: e.target.value }))}
+  1396→            />
+  1397→          </div>
+  1398→        </div>
+  1399→      </div>
+  1400→
+  1401→      <DialogFooter>
+  1402→        <Button variant="outline" className="border-glass-border" onClick={onClose}>
+  1403→          Cancel
+  1404→        </Button>
+  1405→        <Button
+  1406→          className="bg-emerald-600 hover:bg-emerald-500"
+  1407→          onClick={handleSubmit}
+  1408→          disabled={submitting}
+  1409→        >
+  1410→          {submitting ? (
+  1411→            <>
+  1412→              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />{' '}
+  1413→              {isReassign ? 'Reassigning...' : 'Assigning...'}
+  1414→            </>
+  1415→          ) : (
+  1416→            <>
+  1417→              <UserPlus className="h-4 w-4 mr-1" /> {isReassign ? 'Reassign' : 'Assign Transporter'}
+  1418→            </>
+  1419→          )}
+  1420→        </Button>
+  1421→      </DialogFooter>
+  1422→    </>
+  1423→  )
+  1424→}
+  1425→
+  1426→// ═══════════════════════════════════════════════════════════════════════════════
+  1427→// ─── Main Producer Dashboard Component ────────────────────────────────────────
+  1428→// ═══════════════════════════════════════════════════════════════════════════════
+  1429→export function ProducerDashboard({ tab }: ProducerDashboardProps) {
+  1430→  const { user, setChatOpen, setActiveChatUser, setDashboardTab } = useAppStore()
+  1431→
+  1432→  // Core data state
+  1433→  const [orders, setOrders] = useState<any[]>([])
+  1434→  const [products, setProducts] = useState<any[]>([])
+  1435→  const [loading, setLoading] = useState(true)
+  1436→  const [dealsCount, setDealsCount] = useState<number>(0)
+  1437→
+  1438→  // Add listing dialog state
+  1439→  const [addListingOpen, setAddListingOpen] = useState(false)
+  1440→  const [isSubmitting, setIsSubmitting] = useState(false)
+  1441→  const [formData, setFormData] = useState<Record<string, any>>({
+  1442→    name: '',
+  1443→    category: '',
+  1444→    description: '',
+  1445→    quantity: '',
+  1446→    unit: 'kg',
+  1447→    pricePerUnit: '',
+  1448→    minOrderQty: '',
+  1449→    location: '',
+  1450→    state: '',
+  1451→    qualityGrade: 'A',
+  1452→    imageUrl: '',
+  1453→    cropVariety: '',
+  1454→    harvestDate: '',
+  1455→    freshness: '',
+  1456→    isOrganic: false,
+  1457→    pesticidesUsed: '',
+  1458→    moistureContent: '',
+  1459→    shelfLife: '',
+  1460→    storageCondition: '',
+  1461→    certifications: '',
+  1462→    deliveryOption: 'platform',
+  1463→    deliveryFee: '',
+  1464→    freeDelivery: false,
+  1465→    localTransporterName: '',
+  1466→    localTransporterPhone: '',
+  1467→    localTransporterVehicle: '',
+  1468→  })
+  1469→
+  1470→  // Shipment tracking state
+  1471→  const [shipments, setShipments] = useState<any[]>([])
+  1472→  const [trackingShipment, setTrackingShipment] = useState<any>(null)
+  1473→  const [trackerOpen, setTrackerOpen] = useState(false)
+  1474→
+  1475→  // Inline quantity edit state
+  1476→  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
+  1477→  const [editQtyValue, setEditQtyValue] = useState<string>('')
+  1478→
+  1479→  // Create shipment dialog state
+  1480→  const [createShipmentOpen, setCreateShipmentOpen] = useState(false)
+  1481→  const [selectedOrderForShipment, setSelectedOrderForShipment] = useState<any>(null)
+  1482→  const [shipmentSubmitting, setShipmentSubmitting] = useState(false)
+  1483→
+  1484→  // Reassign transporter dialog state
+  1485→  const [reassignOpen, setReassignOpen] = useState(false)
+  1486→  const [reassignShipment, setReassignShipment] = useState<any>(null)
+  1487→  const [reassignSubmitting, setReassignSubmitting] = useState(false)
+  1488→
+  1489→  // ─── Data Fetching ──────────────────────────────────────────────────────────
+  1490→  const fetchData = useCallback(async () => {
+  1491→    if (!user) return
+  1492→    setLoading(true)
+  1493→    try {
+  1494→      const [ordersRes, productsRes, userRes] = await Promise.all([
+  1495→        fetch(`/api/orders?userId=${user.id}&role=producer`),
+  1496→        fetch(`/api/products?sellerId=${user.id}`),
+  1497→        fetch(`/api/users?id=${user.id}`),
+  1498→      ])
+  1499→      const ordersData = await ordersRes.json()
+  1500→      const productsData = await productsRes.json()
+  1501→      const userData = await userRes.json()
+  1502→      if (ordersData.orders) setOrders(ordersData.orders)
+  1503→      if (productsData.products) setProducts(productsData.products)
+  1504→
+  1505→      // Compute deals count: prefer totalDeals from User table, fallback to delivered orders count
+  1506→      const userTotalDeals = userData?.user?.totalDeals
+  1507→      if (typeof userTotalDeals === 'number' && userTotalDeals > 0) {
+  1508→        setDealsCount(userTotalDeals)
+  1509→      } else {
+  1510→        // Fallback: count delivered orders for this seller
+  1511→        const deliveredCount = (ordersData.orders || []).filter((o: any) => o.status === 'delivered').length
+  1512→        setDealsCount(deliveredCount)
+  1513→      }
+  1514→
+  1515→      // Fetch shipments for this producer's orders
+  1516→      const shipRes = await fetch('/api/shipments')
+  1517→      const shipData = await shipRes.json()
+  1518→      const allShipments = shipData.shipments || []
+  1519→      const myOrderIds = new Set((ordersData.orders || []).map((o: any) => o.id))
+  1520→      const myShips = allShipments.filter((s: any) => myOrderIds.has(s.orderId))
+  1521→      setShipments(myShips)
+  1522→    } catch {
+  1523→      toast.error('Failed to load data')
+  1524→    } finally {
+  1525→      setLoading(false)
+  1526→    }
+  1527→  }, [user])
+  1528→
+  1529→  useEffect(() => {
+  1530→    fetchData()
+  1531→  }, [fetchData])
+  1532→
+  1533→  // ─── Handlers ───────────────────────────────────────────────────────────────
+  1534→  const resetFormData = () => {
+  1535→    setFormData({
+  1536→      name: '',
+  1537→      category: '',
+  1538→      description: '',
+  1539→      quantity: '',
+  1540→      unit: 'kg',
+  1541→      pricePerUnit: '',
+  1542→      minOrderQty: '',
+  1543→      location: '',
+  1544→      state: '',
+  1545→      qualityGrade: 'A',
+  1546→      imageUrl: '',
+  1547→      cropVariety: '',
+  1548→      harvestDate: '',
+  1549→      freshness: '',
+  1550→      isOrganic: false,
+  1551→      pesticidesUsed: '',
+  1552→      moistureContent: '',
+  1553→      shelfLife: '',
+  1554→      storageCondition: '',
+  1555→      certifications: '',
+  1556→      deliveryOption: 'platform',
+  1557→      deliveryFee: '',
+  1558→      freeDelivery: false,
+  1559→      localTransporterName: '',
+  1560→      localTransporterPhone: '',
+  1561→      localTransporterVehicle: '',
+  1562→    })
+  1563→  }
+  1564→
+  1565→  const handleAddListing = async () => {
+  1566→    if (!user) return
+  1567→    setIsSubmitting(true)
+  1568→    try {
+  1569→      const deliveryHandledByProducer =
+  1570→        formData.deliveryOption === 'self' || formData.deliveryOption === 'local'
+  1571→      const freeDelivery = !!formData.freeDelivery
+  1572→      const deliveryFee = freeDelivery
+  1573→        ? 0
+  1574→        : formData.deliveryFee
+  1575→          ? parseFloat(formData.deliveryFee)
+  1576→          : 0
+  1577→      // Map form deliveryOption to API deliveryType
+  1578→      const deliveryType = formData.deliveryOption === 'self'
+  1579→        ? 'producer'
+  1580→        : formData.deliveryOption === 'local'
+  1581→          ? 'local'
+  1582→          : 'platform'
+  1583→      const res = await fetch('/api/products', {
+  1584→        method: 'POST',
+  1585→        headers: { 'Content-Type': 'application/json' },
+  1586→        body: JSON.stringify({
+  1587→          sellerId: user.id,
+  1588→          ...formData,
+  1589→          deliveryHandledByProducer,
+  1590→          freeDelivery,
+  1591→          deliveryFee,
+  1592→          deliveryType,
+  1593→          localTransporterName: formData.deliveryOption === 'local' ? formData.localTransporterName : undefined,
+  1594→          localTransporterPhone: formData.deliveryOption === 'local' ? formData.localTransporterPhone : undefined,
+  1595→          localTransporterVehicle: formData.deliveryOption === 'local' ? formData.localTransporterVehicle : undefined,
+  1596→        }),
+  1597→      })
+  1598→      if (res.ok) {
+  1599→        toast.success('Listing created successfully!')
+  1600→        setAddListingOpen(false)
+  1601→        resetFormData()
+  1602→        fetchData()
+  1603→      } else {
+  1604→        toast.error('Failed to create listing')
+  1605→      }
+  1606→    } catch {
+  1607→      toast.error('Failed to create listing')
+  1608→    } finally {
+  1609→      setIsSubmitting(false)
+  1610→    }
+  1611→  }
+  1612→
+  1613→  const handleOrderAction = async (orderId: string, status: string) => {
+  1614→    try {
+  1615→      const res = await fetch('/api/orders', {
+  1616→        method: 'PATCH',
+  1617→        headers: { 'Content-Type': 'application/json' },
+  1618→        body: JSON.stringify({ orderId, status }),
+  1619→      })
+  1620→      if (res.ok) {
+  1621→        toast.success(`Order ${status === 'confirmed' ? 'accepted' : 'rejected'}`)
+  1622→        fetchData()
+  1623→      } else {
+  1624→        toast.error('Failed to update order')
+  1625→      }
+  1626→    } catch {
+  1627→      toast.error('Failed to update order')
+  1628→    }
+  1629→  }
+  1630→
+  1631→  const handleTrackShipment = (shipment: any) => {
+  1632→    setTrackingShipment(shipment)
+  1633→    setTrackerOpen(true)
+  1634→  }
+  1635→
+  1636→  const getShipmentForOrder = (orderId: string) => {
+  1637→    return shipments.find((s: any) => s.orderId === orderId)
+  1638→  }
+  1639→
+  1640→  // Inline quantity edit
+  1641→  const handleStartEditQty = (productId: string, currentQty: number) => {
+  1642→    setEditingQtyId(productId)
+  1643→    setEditQtyValue(String(currentQty))
+  1644→  }
+  1645→
+  1646→  const handleSaveQty = async (productId: string) => {
+  1647→    try {
+  1648→      const res = await fetch('/api/products', {
+  1649→        method: 'PATCH',
+  1650→        headers: { 'Content-Type': 'application/json' },
+  1651→        body: JSON.stringify({ productId, quantity: parseFloat(editQtyValue) }),
+  1652→      })
+  1653→      if (res.ok) {
+  1654→        toast.success('Quantity updated')
+  1655→        setEditingQtyId(null)
+  1656→        fetchData()
+  1657→      } else {
+  1658→        toast.error('Failed to update quantity')
+  1659→      }
+  1660→    } catch {
+  1661→      toast.error('Failed to update quantity')
+  1662→    }
+  1663→  }
+  1664→
+  1665→  const handleCancelEditQty = () => {
+  1666→    setEditingQtyId(null)
+  1667→    setEditQtyValue('')
+  1668→  }
+  1669→
+  1670→  // Create shipment
+  1671→  const openCreateShipment = (order: any) => {
+  1672→    setSelectedOrderForShipment(order)
+  1673→    setCreateShipmentOpen(true)
+  1674→  }
+  1675→
+  1676→  const handleCreateShipment = async (shipmentData: Record<string, unknown>) => {
+  1677→    setShipmentSubmitting(true)
+  1678→    try {
+  1679→      const res = await fetch('/api/shipments', {
+  1680→        method: 'POST',
+  1681→        headers: { 'Content-Type': 'application/json' },
+  1682→        body: JSON.stringify(shipmentData),
+  1683→      })
+  1684→      if (res.ok) {
+  1685→        toast.success('Shipment created successfully!')
+  1686→        setCreateShipmentOpen(false)
+  1687→        setSelectedOrderForShipment(null)
+  1688→        fetchData()
+  1689→      } else {
+  1690→        toast.error('Failed to create shipment')
+  1691→      }
+  1692→    } catch {
+  1693→      toast.error('Failed to create shipment')
+  1694→    } finally {
+  1695→      setShipmentSubmitting(false)
+  1696→    }
+  1697→  }
+  1698→
+  1699→  // Reassign transporter
+  1700→  const openReassignTransporter = (shipment: any) => {
+  1701→    setReassignShipment(shipment)
+  1702→    setReassignOpen(true)
+  1703→  }
+  1704→
+  1705→  const handleReassignTransporter = async (reassignData: Record<string, unknown>) => {
+  1706→    setReassignSubmitting(true)
+  1707→    try {
+  1708→      const res = await fetch('/api/shipments', {
+  1709→        method: 'PATCH',
+  1710→        headers: { 'Content-Type': 'application/json' },
+  1711→        body: JSON.stringify(reassignData),
+  1712→      })
+  1713→      if (res.ok) {
+  1714→        toast.success('Transporter reassigned successfully!')
+  1715→        setReassignOpen(false)
+  1716→        setReassignShipment(null)
+  1717→        fetchData()
+  1718→      } else {
+  1719→        toast.error('Failed to reassign transporter')
+  1720→      }
+  1721→    } catch {
+  1722→      toast.error('Failed to reassign transporter')
+  1723→    } finally {
+  1724→      setReassignSubmitting(false)
+  1725→    }
+  1726→  }
+  1727→
+  1728→  // Delete listing (soft-delete via API)
+  1729→  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  1730→  const [isDeleting, setIsDeleting] = useState(false)
+  1731→  const handleDeleteListing = async () => {
+  1732→    if (!user || !deleteTarget) return
+  1733→    setIsDeleting(true)
+  1734→    try {
+  1735→      const res = await fetch(`/api/products?productId=${deleteTarget.id}&sellerId=${user.id}`, {
+  1736→        method: 'DELETE',
+  1737→      })
+  1738→      if (res.ok) {
+  1739→        toast.success('Listing deleted successfully')
+  1740→        setProducts((prev) => prev.filter((p) => p.id !== deleteTarget.id))
+  1741→        setDeleteTarget(null)
+  1742→      } else {
+  1743→        toast.error('Failed to delete listing')
+  1744→      }
+  1745→    } catch {
+  1746→      toast.error('Failed to delete listing')
+  1747→    } finally {
+  1748→      setIsDeleting(false)
+  1749→    }
+  1750→  }
+  1751→
+  1752→  // Producer-driven order status updates (Mark as Shipped / Delivered)
+  1753→  const handleMarkOrderStatus = async (orderId: string, status: string) => {
+  1754→    if (!user) return
+  1755→    try {
+  1756→      const res = await fetch('/api/orders', {
+  1757→        method: 'PATCH',
+  1758→        headers: { 'Content-Type': 'application/json' },
+  1759→        body: JSON.stringify({ orderId, status, statusUpdatedBy: user.id }),
+  1760→      })
+  1761→      if (res.ok) {
+  1762→        toast.success(`Order marked as ${status}`)
+  1763→        fetchData()
+  1764→      } else {
+  1765→        toast.error('Failed to update order status')
+  1766→      }
+  1767→    } catch {
+  1768→      toast.error('Failed to update order status')
+  1769→    }
+  1770→  }
+  1771→
+  1772→  // Assign / Reassign local transporter for producer-handled orders
+  1773→  const [assignLocalOpen, setAssignLocalOpen] = useState(false)
+  1774→  const [selectedOrderForLocal, setSelectedOrderForLocal] = useState<any>(null)
+  1775→  const [localSubmitting, setLocalSubmitting] = useState(false)
+  1776→
+  1777→  const openAssignLocalTransporter = (order: any) => {
+  1778→    setSelectedOrderForLocal(order)
+  1779→    setAssignLocalOpen(true)
+  1780→  }
+  1781→
+  1782→  const handleAssignLocalTransporter = async (data: Record<string, unknown>) => {
+  1783→    setLocalSubmitting(true)
+  1784→    try {
+  1785→      const res = await fetch('/api/orders', {
+  1786→        method: 'PATCH',
+  1787→        headers: { 'Content-Type': 'application/json' },
+  1788→        body: JSON.stringify(data),
+  1789→      })
+  1790→      if (res.ok) {
+  1791→        toast.success('Local transporter assigned')
+  1792→        setAssignLocalOpen(false)
+  1793→        setSelectedOrderForLocal(null)
+  1794→        fetchData()
+  1795→      } else {
+  1796→        toast.error('Failed to assign local transporter')
+  1797→      }
+  1798→    } catch {
+  1799→      toast.error('Failed to assign local transporter')
+  1800→    } finally {
+  1801→      setLocalSubmitting(false)
+  1802→    }
+  1803→  }
+  1804→
+  1805→  // Check if shipment deadline has passed
+  1806→  const isDeadlinePassed = (shipment: any) => {
+  1807→    if (!shipment.assignedAt && !shipment.pickupDeadline) return false
+  1808→    const deadline = shipment.pickupDeadline
+  1809→      ? new Date(shipment.pickupDeadline)
+  1810→      : new Date(new Date(shipment.assignedAt).getTime() + 24 * 60 * 60 * 1000)
+  1811→    return new Date() > deadline
+  1812→  }
+  1813→
+  1814→  // ─── Computed Values ────────────────────────────────────────────────────────
+  1815→  const activeListings = products.filter((p) => p.isActive).length
+  1816→  const revenue = orders
+  1817→    .filter((o) => o.status === 'delivered')
+  1818→    .reduce((s, o) => s + (o.totalPrice || 0), 0)
+  1819→  const avgRating = user?.avgRating || 4.7
+  1820→
+  1821→  // ─── Shared Create Shipment Dialog (used by orders & shipments tabs) ────────
+  1822→  const renderCreateShipmentDialog = () => (
+  1823→    <Dialog open={createShipmentOpen} onOpenChange={setCreateShipmentOpen}>
+  1824→      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1825→        {selectedOrderForShipment && (
+  1826→          <CreateShipmentDialogContent
+  1827→            selectedOrder={selectedOrderForShipment}
+  1828→            user={user}
+  1829→            onClose={() => {
+  1830→              setCreateShipmentOpen(false)
+  1831→              setSelectedOrderForShipment(null)
+  1832→            }}
+  1833→            onSubmit={handleCreateShipment}
+  1834→            submitting={shipmentSubmitting}
+  1835→          />
+  1836→        )}
+  1837→      </DialogContent>
+  1838→    </Dialog>
+  1839→  )
+  1840→
+  1841→  // ─── Shared Reassign Transporter Dialog ─────────────────────────────────────
+  1842→  const renderReassignDialog = () => (
+  1843→    <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+  1844→      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1845→        {reassignShipment && (
+  1846→          <ReassignTransporterDialogContent
+  1847→            shipment={reassignShipment}
+  1848→            onClose={() => {
+  1849→              setReassignOpen(false)
+  1850→              setReassignShipment(null)
+  1851→            }}
+  1852→            onSubmit={handleReassignTransporter}
+  1853→            submitting={reassignSubmitting}
+  1854→          />
+  1855→        )}
+  1856→      </DialogContent>
+  1857→    </Dialog>
+  1858→  )
+  1859→
+  1860→  // ─── Shared Assign Local Transporter Dialog ────────────────────────────────
+  1861→  const renderAssignLocalTransporterDialog = () => (
+  1862→    <Dialog open={assignLocalOpen} onOpenChange={setAssignLocalOpen}>
+  1863→      <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+  1864→        {selectedOrderForLocal && (
+  1865→          <AssignLocalTransporterDialogContent
+  1866→            order={selectedOrderForLocal}
+  1867→            user={user}
+  1868→            onClose={() => {
+  1869→              setAssignLocalOpen(false)
+  1870→              setSelectedOrderForLocal(null)
+  1871→            }}
+  1872→            onSubmit={handleAssignLocalTransporter}
+  1873→            submitting={localSubmitting}
+  1874→          />
+  1875→        )}
+  1876→      </DialogContent>
+  1877→    </Dialog>
+  1878→  )
+  1879→
+  1880→  // ─── Shared Shipment Tracker Dialog ─────────────────────────────────────────
+  1881→  const renderShipmentTracker = () => (
+  1882→    <ShipmentTracker
+  1883→      shipment={trackingShipment}
+  1884→      open={trackerOpen}
+  1885→      onClose={() => setTrackerOpen(false)}
+  1886→    />
+  1887→  )
+  1888→
+  1889→  // ═══════════════════════════════════════════════════════════════════════════
+  1890→  // ─── OVERVIEW TAB ──────────────────────────────────────────────────────────
+  1891→  // ═══════════════════════════════════════════════════════════════════════════
+  1892→  if (tab === 'overview') {
+  1893→    return (
+  1894→      <div className="space-y-6">
+  1895→        {/* Stat cards */}
+  1896→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  1897→          <StatCard
+  1898→            icon={<Package className="h-5 w-5" />}
+  1899→            value={String(activeListings)}
+  1900→            label="Active Listings"
+  1901→            trend="+12%"
+  1902→            trendUp
+  1903→          />
+  1904→          <StatCard
+  1905→            icon={<ShoppingCart className="h-5 w-5" />}
+  1906→            value={String(dealsCount)}
+  1907→            label="Total Deals"
+  1908→            trend="+8%"
+  1909→            trendUp
+  1910→          />
+  1911→          <StatCard
+  1912→            icon={<IndianRupee className="h-5 w-5" />}
+  1913→            value={`₹${(revenue / 1000).toFixed(0)}K`}
+  1914→            label="Revenue"
+  1915→            trend="+24%"
+  1916→            trendUp
+  1917→          />
+  1918→          <StatCard
+  1919→            icon={<Star className="h-5 w-5" />}
+  1920→            value={avgRating.toFixed(1)}
+  1921→            label="Avg Rating"
+  1922→            trend="+0.3"
+  1923→            trendUp
+  1924→          />
+  1925→        </div>
+  1926→
+  1927→        {/* Revenue chart */}
+  1928→        <div className="glass-card p-6">
+  1929→          <h3 className="text-lg font-semibold text-foreground mb-4">Revenue Trend</h3>
+  1930→          <div className="h-72">
+  1931→            <ResponsiveContainer width="100%" height="100%">
+  1932→              <AreaChart data={revenueData}>
+  1933→                <defs>
+  1934→                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+  1935→                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+  1936→                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+  1937→                  </linearGradient>
+  1938→                </defs>
+  1939→                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+  1940→                <XAxis dataKey="month" stroke="rgba(255,255,255,0.4)" fontSize={12} />
+  1941→                <YAxis
+  1942→                  stroke="rgba(255,255,255,0.4)"
+  1943→                  fontSize={12}
+  1944→                  tickFormatter={(v) => `₹${v / 1000}K`}
+  1945→                />
+  1946→                <Tooltip
+  1947→                  contentStyle={{
+  1948→                    backgroundColor: 'rgba(15,15,30,0.9)',
+  1949→                    border: '1px solid rgba(255,255,255,0.1)',
+  1950→                    borderRadius: '12px',
+  1951→                    color: '#fff',
+  1952→                  }}
+  1953→                  formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Revenue']}
+  1954→                />
+  1955→                <Area
+  1956→                  type="monotone"
+  1957→                  dataKey="revenue"
+  1958→                  stroke="#10b981"
+  1959→                  fill="url(#revenueGrad)"
+  1960→                  strokeWidth={2}
+  1961→                />
+  1962→              </AreaChart>
+  1963→            </ResponsiveContainer>
+  1964→          </div>
+  1965→        </div>
+  1966→
+  1967→        {/* Recent orders */}
+  1968→        <div className="glass-card p-6">
+  1969→          <div className="flex items-center justify-between mb-4">
+  1970→            <h3 className="text-lg font-semibold text-foreground">Recent Orders</h3>
+  1971→            <Button
+  1972→              variant="ghost"
+  1973→              size="sm"
+  1974→              className="text-emerald-400 hover:text-emerald-300"
+  1975→              onClick={() => setDashboardTab('orders')}
+  1976→            >
+  1977→              View All
+  1978→            </Button>
+  1979→          </div>
+  1980→          {loading ? (
+  1981→            <div className="space-y-3">
+  1982→              {[1, 2, 3].map((i) => (
+  1983→                <Skeleton key={i} className="h-12 w-full rounded-lg" />
+  1984→              ))}
+  1985→            </div>
+  1986→          ) : orders.length === 0 ? (
+  1987→            <p className="text-muted-foreground text-sm py-8 text-center">No orders yet</p>
+  1988→          ) : (
+  1989→            <Table>
+  1990→              <TableHeader>
+  1991→                <TableRow className="border-glass-border hover:bg-transparent">
+  1992→                  <TableHead className="text-muted-foreground">Product</TableHead>
+  1993→                  <TableHead className="text-muted-foreground">Buyer</TableHead>
+  1994→                  <TableHead className="text-muted-foreground">Qty</TableHead>
+  1995→                  <TableHead className="text-muted-foreground">Total</TableHead>
+  1996→                  <TableHead className="text-muted-foreground">Status</TableHead>
+  1997→                </TableRow>
+  1998→              </TableHeader>
+  1999→              <TableBody>
+  2000→                {orders.slice(0, 5).map((order) => (
+
+[showing lines 1-2000 of 3198; use offset=2001 with limit to continue reading]

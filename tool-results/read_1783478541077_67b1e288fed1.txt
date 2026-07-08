@@ -1,0 +1,1043 @@
+     1→     1→-- =============================================================
+     2→     2→-- AgroBridge - COMPLETE ALL-IN-ONE MIGRATION
+     3→     3→-- Creates ALL base tables + ALL V3 feature columns
+     4→     4→-- Run this in Supabase SQL Editor
+     5→     5→-- Safe to run on fresh DB or on top of existing tables
+     6→     6→-- =============================================================
+     7→     7→
+     8→     8→-- =============================================================
+     9→     9→-- PART 1: BASE TABLES (if they don't exist)
+    10→    10→-- =============================================================
+    11→    11→
+    12→    12→-- 1. USERS TABLE
+    13→    13→CREATE TABLE IF NOT EXISTS "User" (
+    14→    14→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    15→    15→  "role" TEXT DEFAULT 'buyer',
+    16→    16→  "companyName" TEXT,
+    17→    17→  "gstNumber" TEXT,
+    18→    18→  "phone" TEXT,
+    19→    19→  "email" TEXT UNIQUE NOT NULL,
+    20→    20→  "name" TEXT,
+    21→    21→  "password" TEXT,
+    22→    22→  "avatar" TEXT,
+    23→    23→  "state" TEXT,
+    24→    24→  "city" TEXT,
+    25→    25→  "address" TEXT,
+    26→    26→  "verificationStatus" TEXT DEFAULT 'pending',
+    27→    27→  "isOnline" BOOLEAN DEFAULT false,
+    28→    28→  "farmName" TEXT,
+    29→    29→  "farmSize" TEXT,
+    30→    30→  "farmLocation" TEXT,
+    31→    31→  "farmImages" TEXT,
+    32→    32→  "yearsExperience" INTEGER,
+    33→    33→  "certifications" TEXT,
+    34→    34→  "totalTransactions" INTEGER DEFAULT 0,
+    35→    35→  "latitude" TEXT,
+    36→    36→  "longitude" TEXT,
+    37→    37→  "avgRating" FLOAT DEFAULT 0,
+    38→    38→  "totalReviews" INTEGER DEFAULT 0,
+    39→    39→  "avatarUrl" TEXT,
+    40→    40→  "bannerUrl" TEXT,
+    41→    41→  "pickupSuccessRate" NUMERIC DEFAULT 100,
+    42→    42→  "deliverySuccessRate" NUMERIC DEFAULT 100,
+    43→    43→  "avgResponseTimeHours" NUMERIC DEFAULT 0,
+    44→    44→  "warningCount" INTEGER DEFAULT 0,
+    45→    45→  "lastWarningAt" TIMESTAMPTZ,
+    46→    46→  "totalCompletedShipments" INTEGER DEFAULT 0,
+    47→    47→  "totalFailedShipments" INTEGER DEFAULT 0,
+    48→    48→  "isSuspended" BOOLEAN DEFAULT FALSE,
+    49→    49→  "suspendedAt" TIMESTAMPTZ,
+    50→    50→  "suspensionReason" TEXT,
+    51→    51→  "lastShipmentAssignedAt" TIMESTAMPTZ,
+    52→    52→  "consecutiveFailures" INTEGER DEFAULT 0,
+    53→    53→  "subscriptionTier" TEXT DEFAULT 'free',
+    54→    54→  "subscriptionExpiry" TIMESTAMPTZ,
+    55→    55→  "subscriptionAmount" NUMERIC DEFAULT 0,
+    56→    56→  "subscriptionStartedAt" TIMESTAMPTZ,
+    57→    57→  "subscriptionAutoRenew" BOOLEAN DEFAULT FALSE,
+    58→    58→  "subscriptionPaymentRef" TEXT,
+    59→    59→  "isSponsored" BOOLEAN DEFAULT FALSE,
+    60→    60→  "sponsoredExpiry" TIMESTAMPTZ,
+    61→    61→  "sponsoredAmount" NUMERIC DEFAULT 0,
+    62→    62→  "sponsoredStartedAt" TIMESTAMPTZ,
+    63→    63→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+    64→    64→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+    65→    65→);
+    66→    66→
+    67→    67→-- 2. PRODUCT TABLE
+    68→    68→CREATE TABLE IF NOT EXISTS "Product" (
+    69→    69→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    70→    70→  "sellerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+    71→    71→  "category" TEXT NOT NULL,
+    72→    72→  "name" TEXT NOT NULL,
+    73→    73→  "description" TEXT,
+    74→    74→  "quantity" FLOAT NOT NULL,
+    75→    75→  "unit" TEXT NOT NULL,
+    76→    76→  "pricePerUnit" FLOAT NOT NULL,
+    77→    77→  "minOrderQty" FLOAT,
+    78→    78→  "location" TEXT NOT NULL,
+    79→    79→  "state" TEXT,
+    80→    80→  "qualityGrade" TEXT,
+    81→    81→  "images" TEXT,
+    82→    82→  "imageUrl" TEXT,
+    83→    83→  "harvestDate" TIMESTAMPTZ,
+    84→    84→  "freshness" TEXT,
+    85→    85→  "cropVariety" TEXT,
+    86→    86→  "isOrganic" BOOLEAN DEFAULT false,
+    87→    87→  "pesticidesUsed" TEXT,
+    88→    88→  "moistureContent" TEXT,
+    89→    89→  "shelfLife" TEXT,
+    90→    90→  "storageCondition" TEXT,
+    91→    91→  "certifications" TEXT,
+    92→    92→  "isActive" BOOLEAN DEFAULT true,
+    93→    93→  "stockReserved" NUMERIC DEFAULT 0,
+    94→    94→  "reservedUpdatedAt" TIMESTAMPTZ,
+    95→    95→  "isSponsored" BOOLEAN DEFAULT FALSE,
+    96→    96→  "sponsoredExpiry" TIMESTAMPTZ,
+    97→    97→  "sponsoredPosition" INTEGER DEFAULT 0,
+    98→    98→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+    99→    99→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   100→   100→);
+   101→   101→
+   102→   102→-- Add generated column (try, fallback to regular if fails)
+   103→   103→DO $$ BEGIN
+   104→   104→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockAvailable') THEN
+   105→   105→    ALTER TABLE "Product" ADD COLUMN "stockAvailable" NUMERIC GENERATED ALWAYS AS ("quantity" - "stockReserved") STORED;
+   106→   106→  END IF;
+   107→   107→EXCEPTION WHEN OTHERS THEN
+   108→   108→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockAvailable') THEN
+   109→   109→    ALTER TABLE "Product" ADD COLUMN "stockAvailable" NUMERIC DEFAULT 0;
+   110→   110→  END IF;
+   111→   111→END $$;
+   112→   112→
+   113→   113→-- 3. BUYER REQUIREMENT TABLE
+   114→   114→CREATE TABLE IF NOT EXISTS "BuyerRequirement" (
+   115→   115→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   116→   116→  "buyerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+   117→   117→  "productType" TEXT NOT NULL,
+   118→   118→  "category" TEXT NOT NULL,
+   119→   119→  "quantityNeeded" FLOAT NOT NULL,
+   120→   120→  "unit" TEXT NOT NULL,
+   121→   121→  "deliveryLocation" TEXT NOT NULL,
+   122→   122→  "deliveryState" TEXT,
+   123→   123→  "deadline" TIMESTAMPTZ,
+   124→   124→  "maxBudget" FLOAT,
+   125→   125→  "description" TEXT,
+   126→   126→  "status" TEXT DEFAULT 'open',
+   127→   127→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   128→   128→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   129→   129→);
+   130→   130→
+   131→   131→-- 4. ORDER TABLE (with ALL V3 columns included)
+   132→   132→CREATE TABLE IF NOT EXISTS "Order" (
+   133→   133→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   134→   134→  "buyerId" TEXT NOT NULL REFERENCES "User"("id"),
+   135→   135→  "sellerId" TEXT NOT NULL REFERENCES "User"("id"),
+   136→   136→  "productId" TEXT NOT NULL REFERENCES "Product"("id"),
+   137→   137→  "quantity" FLOAT NOT NULL,
+   138→   138→  "unitPrice" FLOAT NOT NULL,
+   139→   139→  "totalPrice" FLOAT NOT NULL,
+   140→   140→  "status" TEXT DEFAULT 'negotiating',
+   141→   141→  "productSubtotal" NUMERIC,
+   142→   142→  "transportEstimate" NUMERIC DEFAULT 0,
+   143→   143→  "transportBookingFee" NUMERIC DEFAULT 0,
+   144→   144→  "platformCommission" NUMERIC DEFAULT 0,
+   145→   145→  "escrowFee" NUMERIC DEFAULT 0,
+   146→   146→  "logisticsCommission" NUMERIC DEFAULT 0,
+   147→   147→  "totalWithCharges" NUMERIC,
+   148→   148→  "priceBreakdownJson" JSONB,
+   149→   149→  "paymentStatus" TEXT DEFAULT 'pending',
+   150→   150→  "advanceAmount" NUMERIC,
+   151→   151→  "remainingAmount" NUMERIC,
+   152→   152→  "advancePaidAt" TIMESTAMPTZ,
+   153→   153→  "remainingPaidAt" TIMESTAMPTZ,
+   154→   154→  "advancePaymentRef" TEXT,
+   155→   155→  "remainingPaymentRef" TEXT,
+   156→   156→  "advancePaymentMethod" TEXT,
+   157→   157→  "remainingPaymentMethod" TEXT,
+   158→   158→  "platformFee" NUMERIC DEFAULT 0,
+   159→   159→  "transportCost" NUMERIC DEFAULT 0,
+   160→   160→  "deliveryAddress" TEXT,
+   161→   161→  "deliveryCity" TEXT,
+   162→   162→  "deliveryState" TEXT,
+   163→   163→  "deliveryPincode" TEXT,
+   164→   164→  "deliveryLat" TEXT,
+   165→   165→  "deliveryLng" TEXT,
+   166→   166→  "deliveryFullAddress" TEXT,
+   167→   167→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   168→   168→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   169→   169→);
+   170→   170→
+   171→   171→-- 5. SHIPMENT TABLE (with ALL V3 columns included)
+   172→   172→CREATE TABLE IF NOT EXISTS "Shipment" (
+   173→   173→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   174→   174→  "orderId" TEXT UNIQUE NOT NULL REFERENCES "Order"("id"),
+   175→   175→  "transporterId" TEXT REFERENCES "User"("id"),
+   176→   176→  "origin" TEXT NOT NULL,
+   177→   177→  "destination" TEXT NOT NULL,
+   178→   178→  "distance" FLOAT,
+   179→   179→  "status" TEXT DEFAULT 'pending',
+   180→   180→  "pickupDate" TIMESTAMPTZ,
+   181→   181→  "deliveryDate" TIMESTAMPTZ,
+   182→   182→  "actualDelivery" TIMESTAMPTZ,
+   183→   183→  "vehicleType" TEXT,
+   184→   184→  "vehicleNumber" TEXT,
+   185→   185→  "driverName" TEXT,
+   186→   186→  "driverPhone" TEXT,
+   187→   187→  "deliveryProof" TEXT,
+   188→   188→  "exactPickupAddress" TEXT,
+   189→   189→  "exactDropAddress" TEXT,
+   190→   190→  "pickupLatitude" TEXT,
+   191→   191→  "pickupLongitude" TEXT,
+   192→   192→  "dropLatitude" TEXT,
+   193→   193→  "dropLongitude" TEXT,
+   194→   194→  "expectedPickupDate" TIMESTAMPTZ,
+   195→   195→  "currentLatitude" TEXT,
+   196→   196→  "currentLongitude" TEXT,
+   197→   197→  "lastTrackingUpdate" TIMESTAMPTZ,
+   198→   198→  "createdBy" TEXT,
+   199→   199→  "createdByRole" TEXT DEFAULT 'producer',
+   200→   200→  "assignedAt" TIMESTAMPTZ,
+   201→   201→  "pickupDeadline" TIMESTAMPTZ,
+   202→   202→  "autoCancelledAt" TIMESTAMPTZ,
+   203→   203→  "pickupConfirmedAt" TIMESTAMPTZ,
+   204→   204→  "reassignedFrom" TEXT,
+   205→   205→  "reassignmentCount" INTEGER DEFAULT 0,
+   206→   206→  "reassignmentReason" TEXT,
+   207→   207→  "producerNotes" TEXT,
+   208→   208→  "isExternal" BOOLEAN DEFAULT FALSE,
+   209→   209→  "externalTransporterName" TEXT,
+   210→   210→  "externalCompanyName" TEXT,
+   211→   211→  "externalDriverName" TEXT,
+   212→   212→  "externalVehicleNumber" TEXT,
+   213→   213→  "externalMobileNumber" TEXT,
+   214→   214→  "externalPickupDate" TIMESTAMPTZ,
+   215→   215→  "externalDeliveryDate" TIMESTAMPTZ,
+   216→   216→  "externalTransportCost" NUMERIC DEFAULT 0,
+   217→   217→  "logisticsCommissionWaived" BOOLEAN DEFAULT FALSE,
+   218→   218→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   219→   219→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   220→   220→);
+   221→   221→
+   222→   222→-- 6. TRANSPORT BID TABLE
+   223→   223→CREATE TABLE IF NOT EXISTS "TransportBid" (
+   224→   224→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   225→   225→  "shipmentId" TEXT NOT NULL REFERENCES "Shipment"("id") ON DELETE CASCADE,
+   226→   226→  "transporterId" TEXT NOT NULL REFERENCES "User"("id"),
+   227→   227→  "bidAmount" FLOAT NOT NULL,
+   228→   228→  "estimatedDays" INTEGER,
+   229→   229→  "vehicleType" TEXT,
+   230→   230→  "comments" TEXT,
+   231→   231→  "status" TEXT DEFAULT 'pending',
+   232→   232→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   233→   233→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   234→   234→);
+   235→   235→
+   236→   236→-- 7. MESSAGE TABLE (with ALL V3 columns included)
+   237→   237→CREATE TABLE IF NOT EXISTS "Message" (
+   238→   238→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   239→   239→  "senderId" TEXT NOT NULL REFERENCES "User"("id"),
+   240→   240→  "receiverId" TEXT NOT NULL REFERENCES "User"("id"),
+   241→   241→  "content" TEXT NOT NULL,
+   242→   242→  "isRead" BOOLEAN DEFAULT false,
+   243→   243→  "orderId" TEXT,
+   244→   244→  "shipmentId" TEXT,
+   245→   245→  "messageType" TEXT DEFAULT 'text',
+   246→   246→  "attachmentUrl" TEXT,
+   247→   247→  "chatType" TEXT DEFAULT 'order',
+   248→   248→  "isSystemMessage" BOOLEAN DEFAULT FALSE,
+   249→   249→  "metadata" JSONB,
+   250→   250→  "conversationId" TEXT,
+   251→   251→  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+   252→   252→);
+   253→   253→
+   254→   254→-- 8. REVIEW TABLE (with ALL V3 columns included)
+   255→   255→CREATE TABLE IF NOT EXISTS "Review" (
+   256→   256→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   257→   257→  "reviewerId" TEXT NOT NULL REFERENCES "User"("id"),
+   258→   258→  "targetId" TEXT NOT NULL REFERENCES "User"("id"),
+   259→   259→  "rating" INTEGER NOT NULL,
+   260→   260→  "comment" TEXT,
+   261→   261→  "productId" TEXT,
+   262→   262→  "reviewType" TEXT DEFAULT 'user',
+   263→   263→  "orderId" TEXT,
+   264→   264→  "shipmentId" TEXT,
+   265→   265→  "pickupRating" INTEGER,
+   266→   266→  "deliveryRating" INTEGER,
+   267→   267→  "responseTimeRating" INTEGER,
+   268→   268→  "overallRating" INTEGER,
+   269→   269→  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+   270→   270→);
+   271→   271→
+   272→   272→-- 9. PLATFORM STATS TABLE
+   273→   273→CREATE TABLE IF NOT EXISTS "PlatformStats" (
+   274→   274→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   275→   275→  "totalUsers" INTEGER DEFAULT 0,
+   276→   276→  "totalProducts" INTEGER DEFAULT 0,
+   277→   277→  "totalOrders" INTEGER DEFAULT 0,
+   278→   278→  "totalShipments" INTEGER DEFAULT 0,
+   279→   279→  "totalRevenue" FLOAT DEFAULT 0,
+   280→   280→  "activeListings" INTEGER DEFAULT 0,
+   281→   281→  "verifiedUsers" INTEGER DEFAULT 0,
+   282→   282→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   283→   283→);
+   284→   284→
+   285→   285→-- =============================================================
+   286→   286→-- PART 2: V3 NEW TABLES
+   287→   287→-- =============================================================
+   288→   288→
+   289→   289→-- 10. TRANSPORTER WARNING TABLE
+   290→   290→CREATE TABLE IF NOT EXISTS "TransporterWarning" (
+   291→   291→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   292→   292→  "transporterId" TEXT NOT NULL REFERENCES "User"("id"),
+   293→   293→  "shipmentId" TEXT REFERENCES "Shipment"("id"),
+   294→   294→  "orderId" TEXT REFERENCES "Order"("id"),
+   295→   295→  "warningType" TEXT NOT NULL,
+   296→   296→  "severity" TEXT DEFAULT 'warning',
+   297→   297→  "message" TEXT,
+   298→   298→  "issuedAt" TIMESTAMPTZ DEFAULT NOW(),
+   299→   299→  "resolvedAt" TIMESTAMPTZ,
+   300→   300→  "isResolved" BOOLEAN DEFAULT FALSE
+   301→   301→);
+   302→   302→
+   303→   303→-- 11. PAYMENT TABLE
+   304→   304→CREATE TABLE IF NOT EXISTS "Payment" (
+   305→   305→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   306→   306→  "orderId" TEXT NOT NULL REFERENCES "Order"("id"),
+   307→   307→  "paymentType" TEXT NOT NULL,
+   308→   308→  "amount" NUMERIC NOT NULL,
+   309→   309→  "currency" TEXT DEFAULT 'INR',
+   310→   310→  "status" TEXT DEFAULT 'pending',
+   311→   311→  "paymentMethod" TEXT,
+   312→   312→  "paymentRef" TEXT,
+   313→   313→  "gatewayResponse" JSONB,
+   314→   314→  "paidAt" TIMESTAMPTZ,
+   315→   315→  "failedAt" TIMESTAMPTZ,
+   316→   316→  "refundedAt" TIMESTAMPTZ,
+   317→   317→  "refundRef" TEXT,
+   318→   318→  "description" TEXT,
+   319→   319→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   320→   320→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   321→   321→);
+   322→   322→
+   323→   323→-- 12. SUBSCRIPTION TABLE
+   324→   324→CREATE TABLE IF NOT EXISTS "Subscription" (
+   325→   325→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   326→   326→  "userId" TEXT NOT NULL REFERENCES "User"("id"),
+   327→   327→  "tier" TEXT NOT NULL,
+   328→   328→  "roleType" TEXT NOT NULL,
+   329→   329→  "amount" NUMERIC NOT NULL,
+   330→   330→  "durationDays" INTEGER NOT NULL,
+   331→   331→  "startedAt" TIMESTAMPTZ DEFAULT NOW(),
+   332→   332→  "expiresAt" TIMESTAMPTZ NOT NULL,
+   333→   333→  "status" TEXT DEFAULT 'active',
+   334→   334→  "autoRenew" BOOLEAN DEFAULT FALSE,
+   335→   335→  "paymentRef" TEXT,
+   336→   336→  "paymentId" TEXT REFERENCES "Payment"("id"),
+   337→   337→  "cancelledAt" TIMESTAMPTZ,
+   338→   338→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   339→   339→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   340→   340→);
+   341→   341→
+   342→   342→-- 13. SPONSORED LISTING TABLE
+   343→   343→CREATE TABLE IF NOT EXISTS "SponsoredListing" (
+   344→   344→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   345→   345→  "userId" TEXT NOT NULL REFERENCES "User"("id"),
+   346→   346→  "productId" TEXT REFERENCES "Product"("id"),
+   347→   347→  "amount" NUMERIC NOT NULL,
+   348→   348→  "durationDays" INTEGER DEFAULT 7,
+   349→   349→  "startedAt" TIMESTAMPTZ DEFAULT NOW(),
+   350→   350→  "expiresAt" TIMESTAMPTZ NOT NULL,
+   351→   351→  "status" TEXT DEFAULT 'active',
+   352→   352→  "position" INTEGER DEFAULT 0,
+   353→   353→  "impressions" INTEGER DEFAULT 0,
+   354→   354→  "clicks" INTEGER DEFAULT 0,
+   355→   355→  "paymentRef" TEXT,
+   356→   356→  "paymentId" TEXT REFERENCES "Payment"("id"),
+   357→   357→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   358→   358→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   359→   359→);
+   360→   360→
+   361→   361→-- 14. CONVERSATION TABLE
+   362→   362→CREATE TABLE IF NOT EXISTS "Conversation" (
+   363→   363→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   364→   364→  "type" TEXT NOT NULL,
+   365→   365→  "orderId" TEXT REFERENCES "Order"("id"),
+   366→   366→  "shipmentId" TEXT REFERENCES "Shipment"("id"),
+   367→   367→  "participant1Id" TEXT NOT NULL REFERENCES "User"("id"),
+   368→   368→  "participant2Id" TEXT NOT NULL REFERENCES "User"("id"),
+   369→   369→  "lastMessageAt" TIMESTAMPTZ DEFAULT NOW(),
+   370→   370→  "lastMessageContent" TEXT,
+   371→   371→  "lastMessageSenderId" TEXT,
+   372→   372→  "unreadCount1" INTEGER DEFAULT 0,
+   373→   373→  "unreadCount2" INTEGER DEFAULT 0,
+   374→   374→  "isActive" BOOLEAN DEFAULT TRUE,
+   375→   375→  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+   376→   376→  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+   377→   377→);
+   378→   378→
+   379→   379→-- 15. PLATFORM REVENUE TABLE
+   380→   380→CREATE TABLE IF NOT EXISTS "PlatformRevenue" (
+   381→   381→  "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+   382→   382→  "type" TEXT NOT NULL,
+   383→   383→  "amount" NUMERIC NOT NULL,
+   384→   384→  "currency" TEXT DEFAULT 'INR',
+   385→   385→  "orderId" TEXT REFERENCES "Order"("id"),
+   386→   386→  "shipmentId" TEXT REFERENCES "Shipment"("id"),
+   387→   387→  "userId" TEXT REFERENCES "User"("id"),
+   388→   388→  "subscriptionId" TEXT REFERENCES "Subscription"("id"),
+   389→   389→  "sponsoredListingId" TEXT REFERENCES "SponsoredListing"("id"),
+   390→   390→  "paymentId" TEXT REFERENCES "Payment"("id"),
+   391→   391→  "percentage" NUMERIC,
+   392→   392→  "baseAmount" NUMERIC,
+   393→   393→  "description" TEXT,
+   394→   394→  "metadata" JSONB,
+   395→   395→  "recordedAt" TIMESTAMPTZ DEFAULT NOW(),
+   396→   396→  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+   397→   397→);
+   398→   398→
+   399→   399→-- =============================================================
+   400→   400→-- PART 3: ADD MISSING COLUMNS TO EXISTING TABLES
+   401→   401→-- (Safe - only adds if column doesn't exist)
+   402→   402→-- =============================================================
+   403→   403→
+   404→   404→-- Product: missing V3 columns
+   405→   405→DO $$ BEGIN
+   406→   406→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'stockReserved') THEN
+   407→   407→    ALTER TABLE "Product" ADD COLUMN "stockReserved" NUMERIC DEFAULT 0;
+   408→   408→  END IF;
+   409→   409→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'reservedUpdatedAt') THEN
+   410→   410→    ALTER TABLE "Product" ADD COLUMN "reservedUpdatedAt" TIMESTAMPTZ;
+   411→   411→  END IF;
+   412→   412→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'isSponsored') THEN
+   413→   413→    ALTER TABLE "Product" ADD COLUMN "isSponsored" BOOLEAN DEFAULT FALSE;
+   414→   414→  END IF;
+   415→   415→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'sponsoredExpiry') THEN
+   416→   416→    ALTER TABLE "Product" ADD COLUMN "sponsoredExpiry" TIMESTAMPTZ;
+   417→   417→  END IF;
+   418→   418→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Product' AND column_name = 'sponsoredPosition') THEN
+   419→   419→    ALTER TABLE "Product" ADD COLUMN "sponsoredPosition" INTEGER DEFAULT 0;
+   420→   420→  END IF;
+   421→   421→END $$;
+   422→   422→
+   423→   423→-- Order: missing V3 columns
+   424→   424→DO $$ BEGIN
+   425→   425→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'productSubtotal') THEN
+   426→   426→    ALTER TABLE "Order" ADD COLUMN "productSubtotal" NUMERIC;
+   427→   427→  END IF;
+   428→   428→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'transportEstimate') THEN
+   429→   429→    ALTER TABLE "Order" ADD COLUMN "transportEstimate" NUMERIC DEFAULT 0;
+   430→   430→  END IF;
+   431→   431→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'transportBookingFee') THEN
+   432→   432→    ALTER TABLE "Order" ADD COLUMN "transportBookingFee" NUMERIC DEFAULT 0;
+   433→   433→  END IF;
+   434→   434→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'platformCommission') THEN
+   435→   435→    ALTER TABLE "Order" ADD COLUMN "platformCommission" NUMERIC DEFAULT 0;
+   436→   436→  END IF;
+   437→   437→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'escrowFee') THEN
+   438→   438→    ALTER TABLE "Order" ADD COLUMN "escrowFee" NUMERIC DEFAULT 0;
+   439→   439→  END IF;
+   440→   440→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'logisticsCommission') THEN
+   441→   441→    ALTER TABLE "Order" ADD COLUMN "logisticsCommission" NUMERIC DEFAULT 0;
+   442→   442→  END IF;
+   443→   443→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'totalWithCharges') THEN
+   444→   444→    ALTER TABLE "Order" ADD COLUMN "totalWithCharges" NUMERIC;
+   445→   445→  END IF;
+   446→   446→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'priceBreakdownJson') THEN
+   447→   447→    ALTER TABLE "Order" ADD COLUMN "priceBreakdownJson" JSONB;
+   448→   448→  END IF;
+   449→   449→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'paymentStatus') THEN
+   450→   450→    ALTER TABLE "Order" ADD COLUMN "paymentStatus" TEXT DEFAULT 'pending';
+   451→   451→  END IF;
+   452→   452→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'advanceAmount') THEN
+   453→   453→    ALTER TABLE "Order" ADD COLUMN "advanceAmount" NUMERIC;
+   454→   454→  END IF;
+   455→   455→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'remainingAmount') THEN
+   456→   456→    ALTER TABLE "Order" ADD COLUMN "remainingAmount" NUMERIC;
+   457→   457→  END IF;
+   458→   458→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'advancePaidAt') THEN
+   459→   459→    ALTER TABLE "Order" ADD COLUMN "advancePaidAt" TIMESTAMPTZ;
+   460→   460→  END IF;
+   461→   461→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'remainingPaidAt') THEN
+   462→   462→    ALTER TABLE "Order" ADD COLUMN "remainingPaidAt" TIMESTAMPTZ;
+   463→   463→  END IF;
+   464→   464→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'advancePaymentRef') THEN
+   465→   465→    ALTER TABLE "Order" ADD COLUMN "advancePaymentRef" TEXT;
+   466→   466→  END IF;
+   467→   467→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'remainingPaymentRef') THEN
+   468→   468→    ALTER TABLE "Order" ADD COLUMN "remainingPaymentRef" TEXT;
+   469→   469→  END IF;
+   470→   470→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'advancePaymentMethod') THEN
+   471→   471→    ALTER TABLE "Order" ADD COLUMN "advancePaymentMethod" TEXT;
+   472→   472→  END IF;
+   473→   473→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'remainingPaymentMethod') THEN
+   474→   474→    ALTER TABLE "Order" ADD COLUMN "remainingPaymentMethod" TEXT;
+   475→   475→  END IF;
+   476→   476→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'platformFee') THEN
+   477→   477→    ALTER TABLE "Order" ADD COLUMN "platformFee" NUMERIC DEFAULT 0;
+   478→   478→  END IF;
+   479→   479→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'transportCost') THEN
+   480→   480→    ALTER TABLE "Order" ADD COLUMN "transportCost" NUMERIC DEFAULT 0;
+   481→   481→  END IF;
+   482→   482→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryAddress') THEN
+   483→   483→    ALTER TABLE "Order" ADD COLUMN "deliveryAddress" TEXT;
+   484→   484→  END IF;
+   485→   485→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryCity') THEN
+   486→   486→    ALTER TABLE "Order" ADD COLUMN "deliveryCity" TEXT;
+   487→   487→  END IF;
+   488→   488→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryState') THEN
+   489→   489→    ALTER TABLE "Order" ADD COLUMN "deliveryState" TEXT;
+   490→   490→  END IF;
+   491→   491→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryPincode') THEN
+   492→   492→    ALTER TABLE "Order" ADD COLUMN "deliveryPincode" TEXT;
+   493→   493→  END IF;
+   494→   494→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryLat') THEN
+   495→   495→    ALTER TABLE "Order" ADD COLUMN "deliveryLat" TEXT;
+   496→   496→  END IF;
+   497→   497→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryLng') THEN
+   498→   498→    ALTER TABLE "Order" ADD COLUMN "deliveryLng" TEXT;
+   499→   499→  END IF;
+   500→   500→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Order' AND column_name = 'deliveryFullAddress') THEN
+   501→   501→    ALTER TABLE "Order" ADD COLUMN "deliveryFullAddress" TEXT;
+   502→   502→  END IF;
+   503→   503→END $$;
+   504→   504→
+   505→   505→-- Shipment: missing V3 columns
+   506→   506→DO $$ BEGIN
+   507→   507→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'createdBy') THEN
+   508→   508→    ALTER TABLE "Shipment" ADD COLUMN "createdBy" TEXT;
+   509→   509→  END IF;
+   510→   510→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'createdByRole') THEN
+   511→   511→    ALTER TABLE "Shipment" ADD COLUMN "createdByRole" TEXT DEFAULT 'producer';
+   512→   512→  END IF;
+   513→   513→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'assignedAt') THEN
+   514→   514→    ALTER TABLE "Shipment" ADD COLUMN "assignedAt" TIMESTAMPTZ;
+   515→   515→  END IF;
+   516→   516→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'pickupDeadline') THEN
+   517→   517→    ALTER TABLE "Shipment" ADD COLUMN "pickupDeadline" TIMESTAMPTZ;
+   518→   518→  END IF;
+   519→   519→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'autoCancelledAt') THEN
+   520→   520→    ALTER TABLE "Shipment" ADD COLUMN "autoCancelledAt" TIMESTAMPTZ;
+   521→   521→  END IF;
+   522→   522→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'pickupConfirmedAt') THEN
+   523→   523→    ALTER TABLE "Shipment" ADD COLUMN "pickupConfirmedAt" TIMESTAMPTZ;
+   524→   524→  END IF;
+   525→   525→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'reassignedFrom') THEN
+   526→   526→    ALTER TABLE "Shipment" ADD COLUMN "reassignedFrom" TEXT;
+   527→   527→  END IF;
+   528→   528→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'reassignmentCount') THEN
+   529→   529→    ALTER TABLE "Shipment" ADD COLUMN "reassignmentCount" INTEGER DEFAULT 0;
+   530→   530→  END IF;
+   531→   531→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'reassignmentReason') THEN
+   532→   532→    ALTER TABLE "Shipment" ADD COLUMN "reassignmentReason" TEXT;
+   533→   533→  END IF;
+   534→   534→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'producerNotes') THEN
+   535→   535→    ALTER TABLE "Shipment" ADD COLUMN "producerNotes" TEXT;
+   536→   536→  END IF;
+   537→   537→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'isExternal') THEN
+   538→   538→    ALTER TABLE "Shipment" ADD COLUMN "isExternal" BOOLEAN DEFAULT FALSE;
+   539→   539→  END IF;
+   540→   540→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalTransporterName') THEN
+   541→   541→    ALTER TABLE "Shipment" ADD COLUMN "externalTransporterName" TEXT;
+   542→   542→  END IF;
+   543→   543→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalCompanyName') THEN
+   544→   544→    ALTER TABLE "Shipment" ADD COLUMN "externalCompanyName" TEXT;
+   545→   545→  END IF;
+   546→   546→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalDriverName') THEN
+   547→   547→    ALTER TABLE "Shipment" ADD COLUMN "externalDriverName" TEXT;
+   548→   548→  END IF;
+   549→   549→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalVehicleNumber') THEN
+   550→   550→    ALTER TABLE "Shipment" ADD COLUMN "externalVehicleNumber" TEXT;
+   551→   551→  END IF;
+   552→   552→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalMobileNumber') THEN
+   553→   553→    ALTER TABLE "Shipment" ADD COLUMN "externalMobileNumber" TEXT;
+   554→   554→  END IF;
+   555→   555→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalPickupDate') THEN
+   556→   556→    ALTER TABLE "Shipment" ADD COLUMN "externalPickupDate" TIMESTAMPTZ;
+   557→   557→  END IF;
+   558→   558→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalDeliveryDate') THEN
+   559→   559→    ALTER TABLE "Shipment" ADD COLUMN "externalDeliveryDate" TIMESTAMPTZ;
+   560→   560→  END IF;
+   561→   561→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'externalTransportCost') THEN
+   562→   562→    ALTER TABLE "Shipment" ADD COLUMN "externalTransportCost" NUMERIC DEFAULT 0;
+   563→   563→  END IF;
+   564→   564→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Shipment' AND column_name = 'logisticsCommissionWaived') THEN
+   565→   565→    ALTER TABLE "Shipment" ADD COLUMN "logisticsCommissionWaived" BOOLEAN DEFAULT FALSE;
+   566→   566→  END IF;
+   567→   567→END $$;
+   568→   568→
+   569→   569→-- Message: missing V3 columns
+   570→   570→DO $$ BEGIN
+   571→   571→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'orderId') THEN
+   572→   572→    ALTER TABLE "Message" ADD COLUMN "orderId" TEXT;
+   573→   573→  END IF;
+   574→   574→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'shipmentId') THEN
+   575→   575→    ALTER TABLE "Message" ADD COLUMN "shipmentId" TEXT;
+   576→   576→  END IF;
+   577→   577→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'messageType') THEN
+   578→   578→    ALTER TABLE "Message" ADD COLUMN "messageType" TEXT DEFAULT 'text';
+   579→   579→  END IF;
+   580→   580→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'attachmentUrl') THEN
+   581→   581→    ALTER TABLE "Message" ADD COLUMN "attachmentUrl" TEXT;
+   582→   582→  END IF;
+   583→   583→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'chatType') THEN
+   584→   584→    ALTER TABLE "Message" ADD COLUMN "chatType" TEXT DEFAULT 'order';
+   585→   585→  END IF;
+   586→   586→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'isSystemMessage') THEN
+   587→   587→    ALTER TABLE "Message" ADD COLUMN "isSystemMessage" BOOLEAN DEFAULT FALSE;
+   588→   588→  END IF;
+   589→   589→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'metadata') THEN
+   590→   590→    ALTER TABLE "Message" ADD COLUMN "metadata" JSONB;
+   591→   591→  END IF;
+   592→   592→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Message' AND column_name = 'conversationId') THEN
+   593→   593→    ALTER TABLE "Message" ADD COLUMN "conversationId" TEXT;
+   594→   594→  END IF;
+   595→   595→END $$;
+   596→   596→
+   597→   597→-- Review: missing V3 columns
+   598→   598→DO $$ BEGIN
+   599→   599→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'productId') THEN
+   600→   600→    ALTER TABLE "Review" ADD COLUMN "productId" TEXT;
+   601→   601→  END IF;
+   602→   602→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'reviewType') THEN
+   603→   603→    ALTER TABLE "Review" ADD COLUMN "reviewType" TEXT DEFAULT 'user';
+   604→   604→  END IF;
+   605→   605→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'orderId') THEN
+   606→   606→    ALTER TABLE "Review" ADD COLUMN "orderId" TEXT;
+   607→   607→  END IF;
+   608→   608→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'shipmentId') THEN
+   609→   609→    ALTER TABLE "Review" ADD COLUMN "shipmentId" TEXT;
+   610→   610→  END IF;
+   611→   611→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'pickupRating') THEN
+   612→   612→    ALTER TABLE "Review" ADD COLUMN "pickupRating" INTEGER;
+   613→   613→  END IF;
+   614→   614→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'deliveryRating') THEN
+   615→   615→    ALTER TABLE "Review" ADD COLUMN "deliveryRating" INTEGER;
+   616→   616→  END IF;
+   617→   617→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'responseTimeRating') THEN
+   618→   618→    ALTER TABLE "Review" ADD COLUMN "responseTimeRating" INTEGER;
+   619→   619→  END IF;
+   620→   620→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Review' AND column_name = 'overallRating') THEN
+   621→   621→    ALTER TABLE "Review" ADD COLUMN "overallRating" INTEGER;
+   622→   622→  END IF;
+   623→   623→END $$;
+   624→   624→
+   625→   625→-- User: missing V3 columns
+   626→   626→DO $$ BEGIN
+   627→   627→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'avatarUrl') THEN
+   628→   628→    ALTER TABLE "User" ADD COLUMN "avatarUrl" TEXT;
+   629→   629→  END IF;
+   630→   630→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'bannerUrl') THEN
+   631→   631→    ALTER TABLE "User" ADD COLUMN "bannerUrl" TEXT;
+   632→   632→  END IF;
+   633→   633→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'pickupSuccessRate') THEN
+   634→   634→    ALTER TABLE "User" ADD COLUMN "pickupSuccessRate" NUMERIC DEFAULT 100;
+   635→   635→  END IF;
+   636→   636→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'deliverySuccessRate') THEN
+   637→   637→    ALTER TABLE "User" ADD COLUMN "deliverySuccessRate" NUMERIC DEFAULT 100;
+   638→   638→  END IF;
+   639→   639→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'avgResponseTimeHours') THEN
+   640→   640→    ALTER TABLE "User" ADD COLUMN "avgResponseTimeHours" NUMERIC DEFAULT 0;
+   641→   641→  END IF;
+   642→   642→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'warningCount') THEN
+   643→   643→    ALTER TABLE "User" ADD COLUMN "warningCount" INTEGER DEFAULT 0;
+   644→   644→  END IF;
+   645→   645→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'lastWarningAt') THEN
+   646→   646→    ALTER TABLE "User" ADD COLUMN "lastWarningAt" TIMESTAMPTZ;
+   647→   647→  END IF;
+   648→   648→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'totalCompletedShipments') THEN
+   649→   649→    ALTER TABLE "User" ADD COLUMN "totalCompletedShipments" INTEGER DEFAULT 0;
+   650→   650→  END IF;
+   651→   651→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'totalFailedShipments') THEN
+   652→   652→    ALTER TABLE "User" ADD COLUMN "totalFailedShipments" INTEGER DEFAULT 0;
+   653→   653→  END IF;
+   654→   654→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'isSuspended') THEN
+   655→   655→    ALTER TABLE "User" ADD COLUMN "isSuspended" BOOLEAN DEFAULT FALSE;
+   656→   656→  END IF;
+   657→   657→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'suspendedAt') THEN
+   658→   658→    ALTER TABLE "User" ADD COLUMN "suspendedAt" TIMESTAMPTZ;
+   659→   659→  END IF;
+   660→   660→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'suspensionReason') THEN
+   661→   661→    ALTER TABLE "User" ADD COLUMN "suspensionReason" TEXT;
+   662→   662→  END IF;
+   663→   663→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'lastShipmentAssignedAt') THEN
+   664→   664→    ALTER TABLE "User" ADD COLUMN "lastShipmentAssignedAt" TIMESTAMPTZ;
+   665→   665→  END IF;
+   666→   666→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'consecutiveFailures') THEN
+   667→   667→    ALTER TABLE "User" ADD COLUMN "consecutiveFailures" INTEGER DEFAULT 0;
+   668→   668→  END IF;
+   669→   669→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionTier') THEN
+   670→   670→    ALTER TABLE "User" ADD COLUMN "subscriptionTier" TEXT DEFAULT 'free';
+   671→   671→  END IF;
+   672→   672→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionExpiry') THEN
+   673→   673→    ALTER TABLE "User" ADD COLUMN "subscriptionExpiry" TIMESTAMPTZ;
+   674→   674→  END IF;
+   675→   675→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionAmount') THEN
+   676→   676→    ALTER TABLE "User" ADD COLUMN "subscriptionAmount" NUMERIC DEFAULT 0;
+   677→   677→  END IF;
+   678→   678→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionStartedAt') THEN
+   679→   679→    ALTER TABLE "User" ADD COLUMN "subscriptionStartedAt" TIMESTAMPTZ;
+   680→   680→  END IF;
+   681→   681→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionAutoRenew') THEN
+   682→   682→    ALTER TABLE "User" ADD COLUMN "subscriptionAutoRenew" BOOLEAN DEFAULT FALSE;
+   683→   683→  END IF;
+   684→   684→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'subscriptionPaymentRef') THEN
+   685→   685→    ALTER TABLE "User" ADD COLUMN "subscriptionPaymentRef" TEXT;
+   686→   686→  END IF;
+   687→   687→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'isSponsored') THEN
+   688→   688→    ALTER TABLE "User" ADD COLUMN "isSponsored" BOOLEAN DEFAULT FALSE;
+   689→   689→  END IF;
+   690→   690→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'sponsoredExpiry') THEN
+   691→   691→    ALTER TABLE "User" ADD COLUMN "sponsoredExpiry" TIMESTAMPTZ;
+   692→   692→  END IF;
+   693→   693→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'sponsoredAmount') THEN
+   694→   694→    ALTER TABLE "User" ADD COLUMN "sponsoredAmount" NUMERIC DEFAULT 0;
+   695→   695→  END IF;
+   696→   696→  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'sponsoredStartedAt') THEN
+   697→   697→    ALTER TABLE "User" ADD COLUMN "sponsoredStartedAt" TIMESTAMPTZ;
+   698→   698→  END IF;
+   699→   699→END $$;
+   700→   700→
+   701→   701→-- =============================================================
+   702→   702→-- PART 4: UPDATE EXISTING DATA
+   703→   703→-- =============================================================
+   704→   704→
+   705→   705→UPDATE "Order" SET "productSubtotal" = "unitPrice" * "quantity" WHERE "productSubtotal" IS NULL;
+   706→   706→UPDATE "Order" SET "totalWithCharges" = "totalPrice" WHERE "totalWithCharges" IS NULL;
+   707→   707→UPDATE "Order" SET "paymentStatus" = CASE
+   708→   708→    WHEN status = 'delivered' THEN 'full_paid'
+   709→   709→    WHEN status IN ('confirmed', 'shipped') THEN 'advance_paid'
+   710→   710→    ELSE 'pending'
+   711→   711→  END
+   712→   712→WHERE "paymentStatus" IS NULL OR "paymentStatus" = 'pending';
+   713→   713→UPDATE "Order" SET
+   714→   714→  "advanceAmount" = FLOOR("totalPrice" * 0.5 * 100) / 100,
+   715→   715→  "remainingAmount" = CEIL("totalPrice" * 0.5 * 100) / 100
+   716→   716→WHERE "advanceAmount" IS NULL AND "totalPrice" > 0;
+   717→   717→
+   718→   718→UPDATE "Product" p SET "stockReserved" = COALESCE((
+   719→   719→    SELECT SUM(o."quantity") FROM "Order" o
+   720→   720→    WHERE o."productId" = p."id" AND o.status NOT IN ('cancelled', 'delivered', 'disputed')
+   721→   721→  ), 0), "reservedUpdatedAt" = NOW();
+   722→   722→
+   723→   723→-- =============================================================
+   724→   724→-- PART 5: ENABLE ROW LEVEL SECURITY ON ALL TABLES
+   725→   725→-- =============================================================
+   726→   726→
+   727→   727→ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+   728→   728→ALTER TABLE "Product" ENABLE ROW LEVEL SECURITY;
+   729→   729→ALTER TABLE "BuyerRequirement" ENABLE ROW LEVEL SECURITY;
+   730→   730→ALTER TABLE "Order" ENABLE ROW LEVEL SECURITY;
+   731→   731→ALTER TABLE "Shipment" ENABLE ROW LEVEL SECURITY;
+   732→   732→ALTER TABLE "TransportBid" ENABLE ROW LEVEL SECURITY;
+   733→   733→ALTER TABLE "Message" ENABLE ROW LEVEL SECURITY;
+   734→   734→ALTER TABLE "Review" ENABLE ROW LEVEL SECURITY;
+   735→   735→ALTER TABLE "PlatformStats" ENABLE ROW LEVEL SECURITY;
+   736→   736→ALTER TABLE "TransporterWarning" ENABLE ROW LEVEL SECURITY;
+   737→   737→ALTER TABLE "Payment" ENABLE ROW LEVEL SECURITY;
+   738→   738→ALTER TABLE "Subscription" ENABLE ROW LEVEL SECURITY;
+   739→   739→ALTER TABLE "SponsoredListing" ENABLE ROW LEVEL SECURITY;
+   740→   740→ALTER TABLE "Conversation" ENABLE ROW LEVEL SECURITY;
+   741→   741→ALTER TABLE "PlatformRevenue" ENABLE ROW LEVEL SECURITY;
+   742→   742→
+   743→   743→-- Create RLS policies (idempotent)
+   744→   744→DO $$ BEGIN
+   745→   745→  -- User
+   746→   746→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'User' AND policyname = 'Allow all on User') THEN
+   747→   747→    CREATE POLICY "Allow all on User" ON "User" FOR ALL USING (true) WITH CHECK (true);
+   748→   748→  END IF;
+   749→   749→  -- Product
+   750→   750→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Product' AND policyname = 'Allow all on Product') THEN
+   751→   751→    CREATE POLICY "Allow all on Product" ON "Product" FOR ALL USING (true) WITH CHECK (true);
+   752→   752→  END IF;
+   753→   753→  -- BuyerRequirement
+   754→   754→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'BuyerRequirement' AND policyname = 'Allow all on BuyerRequirement') THEN
+   755→   755→    CREATE POLICY "Allow all on BuyerRequirement" ON "BuyerRequirement" FOR ALL USING (true) WITH CHECK (true);
+   756→   756→  END IF;
+   757→   757→  -- Order
+   758→   758→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Order' AND policyname = 'Allow all on Order') THEN
+   759→   759→    CREATE POLICY "Allow all on Order" ON "Order" FOR ALL USING (true) WITH CHECK (true);
+   760→   760→  END IF;
+   761→   761→  -- Shipment
+   762→   762→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Shipment' AND policyname = 'Allow all on Shipment') THEN
+   763→   763→    CREATE POLICY "Allow all on Shipment" ON "Shipment" FOR ALL USING (true) WITH CHECK (true);
+   764→   764→  END IF;
+   765→   765→  -- TransportBid
+   766→   766→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'TransportBid' AND policyname = 'Allow all on TransportBid') THEN
+   767→   767→    CREATE POLICY "Allow all on TransportBid" ON "TransportBid" FOR ALL USING (true) WITH CHECK (true);
+   768→   768→  END IF;
+   769→   769→  -- Message
+   770→   770→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Message' AND policyname = 'Allow all on Message') THEN
+   771→   771→    CREATE POLICY "Allow all on Message" ON "Message" FOR ALL USING (true) WITH CHECK (true);
+   772→   772→  END IF;
+   773→   773→  -- Review
+   774→   774→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Review' AND policyname = 'Allow all on Review') THEN
+   775→   775→    CREATE POLICY "Allow all on Review" ON "Review" FOR ALL USING (true) WITH CHECK (true);
+   776→   776→  END IF;
+   777→   777→  -- PlatformStats
+   778→   778→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'PlatformStats' AND policyname = 'Allow all on PlatformStats') THEN
+   779→   779→    CREATE POLICY "Allow all on PlatformStats" ON "PlatformStats" FOR ALL USING (true) WITH CHECK (true);
+   780→   780→  END IF;
+   781→   781→  -- TransporterWarning
+   782→   782→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'TransporterWarning' AND policyname = 'Allow all on TransporterWarning') THEN
+   783→   783→    CREATE POLICY "Allow all on TransporterWarning" ON "TransporterWarning" FOR ALL USING (true) WITH CHECK (true);
+   784→   784→  END IF;
+   785→   785→  -- Payment
+   786→   786→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Payment' AND policyname = 'Allow all on Payment') THEN
+   787→   787→    CREATE POLICY "Allow all on Payment" ON "Payment" FOR ALL USING (true) WITH CHECK (true);
+   788→   788→  END IF;
+   789→   789→  -- Subscription
+   790→   790→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Subscription' AND policyname = 'Allow all on Subscription') THEN
+   791→   791→    CREATE POLICY "Allow all on Subscription" ON "Subscription" FOR ALL USING (true) WITH CHECK (true);
+   792→   792→  END IF;
+   793→   793→  -- SponsoredListing
+   794→   794→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'SponsoredListing' AND policyname = 'Allow all on SponsoredListing') THEN
+   795→   795→    CREATE POLICY "Allow all on SponsoredListing" ON "SponsoredListing" FOR ALL USING (true) WITH CHECK (true);
+   796→   796→  END IF;
+   797→   797→  -- Conversation
+   798→   798→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'Conversation' AND policyname = 'Allow all on Conversation') THEN
+   799→   799→    CREATE POLICY "Allow all on Conversation" ON "Conversation" FOR ALL USING (true) WITH CHECK (true);
+   800→   800→  END IF;
+   801→   801→  -- PlatformRevenue
+   802→   802→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'PlatformRevenue' AND policyname = 'Allow all on PlatformRevenue') THEN
+   803→   803→    CREATE POLICY "Allow all on PlatformRevenue" ON "PlatformRevenue" FOR ALL USING (true) WITH CHECK (true);
+   804→   804→  END IF;
+   805→   805→END $$;
+   806→   806→
+   807→   807→-- =============================================================
+   808→   808→-- PART 6: INDEXES
+   809→   809→-- =============================================================
+   810→   810→
+   811→   811→CREATE INDEX IF NOT EXISTS "idx_product_seller" ON "Product"("sellerId");
+   812→   812→CREATE INDEX IF NOT EXISTS "idx_product_category" ON "Product"("category");
+   813→   813→CREATE INDEX IF NOT EXISTS "idx_product_state" ON "Product"("state");
+   814→   814→CREATE INDEX IF NOT EXISTS "idx_product_stockAvailable" ON "Product"("stockAvailable") WHERE "stockAvailable" > 0;
+   815→   815→CREATE INDEX IF NOT EXISTS "idx_product_sponsored" ON "Product"("isSponsored") WHERE "isSponsored" = TRUE;
+   816→   816→CREATE INDEX IF NOT EXISTS "idx_order_buyer" ON "Order"("buyerId");
+   817→   817→CREATE INDEX IF NOT EXISTS "idx_order_seller" ON "Order"("sellerId");
+   818→   818→CREATE INDEX IF NOT EXISTS "idx_shipment_transporter" ON "Shipment"("transporterId");
+   819→   819→CREATE INDEX IF NOT EXISTS "idx_shipment_status" ON "Shipment"("status");
+   820→   820→CREATE INDEX IF NOT EXISTS "idx_shipment_createdBy" ON "Shipment"("createdBy");
+   821→   821→CREATE INDEX IF NOT EXISTS "idx_shipment_pickupDeadline" ON "Shipment"("pickupDeadline") WHERE "pickupDeadline" IS NOT NULL;
+   822→   822→CREATE INDEX IF NOT EXISTS "idx_shipment_isExternal" ON "Shipment"("isExternal") WHERE "isExternal" = TRUE;
+   823→   823→CREATE INDEX IF NOT EXISTS "idx_message_sender" ON "Message"("senderId");
+   824→   824→CREATE INDEX IF NOT EXISTS "idx_message_receiver" ON "Message"("receiverId");
+   825→   825→CREATE INDEX IF NOT EXISTS "idx_message_orderId" ON "Message"("orderId") WHERE "orderId" IS NOT NULL;
+   826→   826→CREATE INDEX IF NOT EXISTS "idx_message_shipmentId" ON "Message"("shipmentId") WHERE "shipmentId" IS NOT NULL;
+   827→   827→CREATE INDEX IF NOT EXISTS "idx_message_chatType" ON "Message"("chatType");
+   828→   828→CREATE INDEX IF NOT EXISTS "idx_message_conversationId" ON "Message"("conversationId") WHERE "conversationId" IS NOT NULL;
+   829→   829→CREATE INDEX IF NOT EXISTS "idx_review_target" ON "Review"("targetId");
+   830→   830→CREATE INDEX IF NOT EXISTS "idx_review_productId" ON "Review"("productId") WHERE "productId" IS NOT NULL;
+   831→   831→CREATE INDEX IF NOT EXISTS "idx_review_orderId" ON "Review"("orderId") WHERE "orderId" IS NOT NULL;
+   832→   832→CREATE INDEX IF NOT EXISTS "idx_review_type" ON "Review"("reviewType");
+   833→   833→CREATE INDEX IF NOT EXISTS "idx_user_role" ON "User"("role");
+   834→   834→CREATE INDEX IF NOT EXISTS "idx_user_email" ON "User"("email");
+   835→   835→CREATE INDEX IF NOT EXISTS "idx_user_sponsored" ON "User"("isSponsored") WHERE "isSponsored" = TRUE;
+   836→   836→CREATE INDEX IF NOT EXISTS "idx_user_subscription" ON "User"("subscriptionTier") WHERE "subscriptionTier" != 'free';
+   837→   837→CREATE INDEX IF NOT EXISTS "idx_user_suspended" ON "User"("isSuspended") WHERE "isSuspended" = TRUE;
+   838→   838→CREATE INDEX IF NOT EXISTS "idx_warning_transporter" ON "TransporterWarning"("transporterId");
+   839→   839→CREATE INDEX IF NOT EXISTS "idx_warning_type" ON "TransporterWarning"("warningType");
+   840→   840→CREATE INDEX IF NOT EXISTS "idx_warning_severity" ON "TransporterWarning"("severity");
+   841→   841→CREATE INDEX IF NOT EXISTS "idx_warning_resolved" ON "TransporterWarning"("isResolved") WHERE "isResolved" = FALSE;
+   842→   842→CREATE INDEX IF NOT EXISTS "idx_payment_orderId" ON "Payment"("orderId");
+   843→   843→CREATE INDEX IF NOT EXISTS "idx_payment_status" ON "Payment"("status");
+   844→   844→CREATE INDEX IF NOT EXISTS "idx_payment_type" ON "Payment"("paymentType");
+   845→   845→CREATE INDEX IF NOT EXISTS "idx_subscription_userId" ON "Subscription"("userId");
+   846→   846→CREATE INDEX IF NOT EXISTS "idx_subscription_status" ON "Subscription"("status");
+   847→   847→CREATE INDEX IF NOT EXISTS "idx_subscription_expiresAt" ON "Subscription"("expiresAt");
+   848→   848→CREATE INDEX IF NOT EXISTS "idx_sponsored_userId" ON "SponsoredListing"("userId");
+   849→   849→CREATE INDEX IF NOT EXISTS "idx_sponsored_productId" ON "SponsoredListing"("productId") WHERE "productId" IS NOT NULL;
+   850→   850→CREATE INDEX IF NOT EXISTS "idx_sponsored_status" ON "SponsoredListing"("status");
+   851→   851→CREATE INDEX IF NOT EXISTS "idx_conversation_participants" ON "Conversation"("participant1Id", "participant2Id");
+   852→   852→CREATE INDEX IF NOT EXISTS "idx_conversation_orderId" ON "Conversation"("orderId") WHERE "orderId" IS NOT NULL;
+   853→   853→CREATE INDEX IF NOT EXISTS "idx_conversation_shipmentId" ON "Conversation"("shipmentId") WHERE "shipmentId" IS NOT NULL;
+   854→   854→CREATE INDEX IF NOT EXISTS "idx_conversation_lastMessage" ON "Conversation"("lastMessageAt");
+   855→   855→CREATE INDEX IF NOT EXISTS "idx_revenue_type" ON "PlatformRevenue"("type");
+   856→   856→CREATE INDEX IF NOT EXISTS "idx_revenue_userId" ON "PlatformRevenue"("userId");
+   857→   857→CREATE INDEX IF NOT EXISTS "idx_revenue_recordedAt" ON "PlatformRevenue"("recordedAt");
+   858→   858→
+   859→   859→-- =============================================================
+   860→   860→-- PART 7: TRIGGERS & FUNCTIONS
+   861→   861→-- Note: Using unique dollar-quote tags ($fn1$, $fn2$, etc.)
+   862→   862→-- instead of $$ to avoid delimiter confusion in Supabase SQL Editor
+   863→   863→-- =============================================================
+   864→   864→
+   865→   865→-- Inventory trigger
+   866→   866→CREATE OR REPLACE FUNCTION update_product_stock_reserved()
+   867→   867→RETURNS TRIGGER AS $fn1$
+   868→   868→DECLARE v_product_id TEXT;
+   869→   869→BEGIN
+   870→   870→  IF TG_OP = 'INSERT' THEN v_product_id := NEW."productId";
+   871→   871→  ELSIF TG_OP = 'UPDATE' THEN
+   872→   872→    v_product_id := NEW."productId";
+   873→   873→    IF OLD."productId" IS DISTINCT FROM NEW."productId" THEN
+   874→   874→      UPDATE "Product" SET "stockReserved" = COALESCE((SELECT SUM("quantity") FROM "Order" WHERE "productId" = OLD."productId" AND status NOT IN ('cancelled','delivered','disputed')),0), "reservedUpdatedAt" = NOW() WHERE "id" = OLD."productId";
+   875→   875→    END IF;
+   876→   876→  ELSIF TG_OP = 'DELETE' THEN v_product_id := OLD."productId";
+   877→   877→  END IF;
+   878→   878→  UPDATE "Product" SET "stockReserved" = COALESCE((SELECT SUM("quantity") FROM "Order" WHERE "productId" = v_product_id AND status NOT IN ('cancelled','delivered','disputed')),0), "reservedUpdatedAt" = NOW() WHERE "id" = v_product_id;
+   879→   879→  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+   880→   880→  RETURN NEW;
+   881→   881→END;
+   882→   882→$fn1$ LANGUAGE plpgsql;
+   883→   883→
+   884→   884→DROP TRIGGER IF EXISTS trigger_order_stock_update ON "Order";
+   885→   885→CREATE TRIGGER trigger_order_stock_update AFTER INSERT OR UPDATE OF "productId","quantity","status" OR DELETE ON "Order" FOR EACH ROW EXECUTE FUNCTION update_product_stock_reserved();
+   886→   886→
+   887→   887→-- Pickup deadline trigger
+   888→   888→CREATE OR REPLACE FUNCTION set_pickup_deadline()
+   889→   889→RETURNS TRIGGER AS $fn2$
+   890→   890→BEGIN
+   891→   891→  IF NEW."transporterId" IS NOT NULL AND (OLD."transporterId" IS NULL OR TG_OP = 'INSERT') THEN
+   892→   892→    NEW."assignedAt" := NOW();
+   893→   893→    NEW."pickupDeadline" := NOW() + INTERVAL '24 hours';
+   894→   894→    UPDATE "User" SET "lastShipmentAssignedAt" = NOW() WHERE "id" = NEW."transporterId";
+   895→   895→  END IF;
+   896→   896→  IF NEW."status" = 'picked_up' AND (OLD."status" IS NULL OR OLD."status" != 'picked_up') THEN
+   897→   897→    NEW."pickupConfirmedAt" := NOW();
+   898→   898→  END IF;
+   899→   899→  RETURN NEW;
+   900→   900→END;
+   901→   901→$fn2$ LANGUAGE plpgsql;
+   902→   902→
+   903→   903→DROP TRIGGER IF EXISTS trigger_set_pickup_deadline ON "Shipment";
+   904→   904→CREATE TRIGGER trigger_set_pickup_deadline BEFORE INSERT OR UPDATE OF "transporterId","status" ON "Shipment" FOR EACH ROW EXECUTE FUNCTION set_pickup_deadline();
+   905→   905→
+   906→   906→-- Auto-cancel expired shipments
+   907→   907→CREATE OR REPLACE FUNCTION auto_cancel_expired_shipments()
+   908→   908→RETURNS INTEGER AS $fn3$
+   909→   909→DECLARE cancelled_count INTEGER := 0; rec RECORD;
+   910→   910→BEGIN
+   911→   911→  FOR rec IN SELECT s."id", s."transporterId", s."orderId" FROM "Shipment" s WHERE s."pickupDeadline" IS NOT NULL AND s."pickupDeadline" < NOW() AND s."status" IN ('assigned','pending') AND s."autoCancelledAt" IS NULL LOOP
+   912→   912→    UPDATE "Shipment" SET "status"='cancelled',"autoCancelledAt"=NOW() WHERE "id"=rec."id";
+   913→   913→    INSERT INTO "TransporterWarning" ("transporterId","shipmentId","orderId","warningType","severity","message") VALUES (rec."transporterId",rec."id",rec."orderId",'pickup_missed','critical','24-hour pickup deadline exceeded');
+   914→   914→    UPDATE "User" SET "warningCount"="warningCount"+1,"lastWarningAt"=NOW(),"totalFailedShipments"="totalFailedShipments"+1,"consecutiveFailures"="consecutiveFailures"+1 WHERE "id"=rec."transporterId";
+   915→   915→    UPDATE "User" SET "isSuspended"=TRUE,"suspendedAt"=NOW(),"suspensionReason"='3+ consecutive failures' WHERE "id"=rec."transporterId" AND "consecutiveFailures">=3;
+   916→   916→    cancelled_count := cancelled_count + 1;
+   917→   917→  END LOOP;
+   918→   918→  RETURN cancelled_count;
+   919→   919→END;
+   920→   920→$fn3$ LANGUAGE plpgsql;
+   921→   921→
+   922→   922→-- Transporter stats on delivery
+   923→   923→CREATE OR REPLACE FUNCTION update_transporter_stats_on_delivery()
+   924→   924→RETURNS TRIGGER AS $fn4$
+   925→   925→BEGIN
+   926→   926→  IF NEW."status"='delivered' AND (OLD."status" IS NULL OR OLD."status"!='delivered') THEN
+   927→   927→    UPDATE "User" SET "totalCompletedShipments"="totalCompletedShipments"+1,"consecutiveFailures"=0,"pickupSuccessRate"=CASE WHEN ("totalCompletedShipments"+"totalFailedShipments"+1)=0 THEN 100 ELSE ROUND(("totalCompletedShipments"+1)::NUMERIC/("totalCompletedShipments"+"totalFailedShipments"+1)*100,2) END,"deliverySuccessRate"=CASE WHEN ("totalCompletedShipments"+"totalFailedShipments"+1)=0 THEN 100 ELSE ROUND(("totalCompletedShipments"+1)::NUMERIC/("totalCompletedShipments"+"totalFailedShipments"+1)*100,2) END WHERE "id"=NEW."transporterId";
+   928→   928→  END IF;
+   929→   929→  RETURN NEW;
+   930→   930→END;
+   931→   931→$fn4$ LANGUAGE plpgsql;
+   932→   932→
+   933→   933→DROP TRIGGER IF EXISTS trigger_update_transporter_stats ON "Shipment";
+   934→   934→CREATE TRIGGER trigger_update_transporter_stats AFTER UPDATE OF "status" ON "Shipment" FOR EACH ROW EXECUTE FUNCTION update_transporter_stats_on_delivery();
+   935→   935→
+   936→   936→-- Conversation upsert
+   937→   937→CREATE OR REPLACE FUNCTION get_or_create_conversation(p1 TEXT, p2 TEXT, p_type TEXT, p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL)
+   938→   938→RETURNS TEXT AS $fn5$
+   939→   939→DECLARE v_conversation_id TEXT;
+   940→   940→BEGIN
+   941→   941→  SELECT "id" INTO v_conversation_id FROM "Conversation" WHERE ("participant1Id"=p1 AND "participant2Id"=p2 OR "participant1Id"=p2 AND "participant2Id"=p1) AND ("orderId"=p_order_id OR (p_order_id IS NULL AND "orderId" IS NULL)) AND ("shipmentId"=p_shipment_id OR (p_shipment_id IS NULL AND "shipmentId" IS NULL)) AND "isActive"=TRUE LIMIT 1;
+   942→   942→  IF v_conversation_id IS NULL THEN INSERT INTO "Conversation" ("participant1Id","participant2Id","type","orderId","shipmentId") VALUES (p1,p2,p_type,p_order_id,p_shipment_id) RETURNING "id" INTO v_conversation_id; END IF;
+   943→   943→  RETURN v_conversation_id;
+   944→   944→END;
+   945→   945→$fn5$ LANGUAGE plpgsql;
+   946→   946→
+   947→   947→-- Update conversation on message
+   948→   948→CREATE OR REPLACE FUNCTION update_conversation_on_message()
+   949→   949→RETURNS TRIGGER AS $fn6$
+   950→   950→BEGIN
+   951→   951→  IF NEW."conversationId" IS NOT NULL THEN
+   952→   952→    UPDATE "Conversation" SET "lastMessageAt"=NEW."createdAt","lastMessageContent"=NEW."content","lastMessageSenderId"=NEW."senderId","unreadCount1"=CASE WHEN "participant1Id"=NEW."receiverId" THEN "unreadCount1"+1 ELSE "unreadCount1" END,"unreadCount2"=CASE WHEN "participant2Id"=NEW."receiverId" THEN "unreadCount2"+1 ELSE "unreadCount2" END,"updatedAt"=NOW() WHERE "id"=NEW."conversationId";
+   953→   953→  END IF;
+   954→   954→  RETURN NEW;
+   955→   955→END;
+   956→   956→$fn6$ LANGUAGE plpgsql;
+   957→   957→
+   958→   958→DROP TRIGGER IF EXISTS trigger_update_conversation_on_message ON "Message";
+   959→   959→CREATE TRIGGER trigger_update_conversation_on_message AFTER INSERT ON "Message" FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
+   960→   960→
+   961→   961→-- Record platform revenue helper
+   962→   962→CREATE OR REPLACE FUNCTION record_platform_revenue(p_type TEXT, p_amount NUMERIC, p_order_id TEXT DEFAULT NULL, p_shipment_id TEXT DEFAULT NULL, p_user_id TEXT DEFAULT NULL, p_description TEXT DEFAULT NULL, p_percentage NUMERIC DEFAULT NULL, p_base_amount NUMERIC DEFAULT NULL)
+   963→   963→RETURNS TEXT AS $fn7$
+   964→   964→DECLARE v_revenue_id TEXT;
+   965→   965→BEGIN
+   966→   966→  INSERT INTO "PlatformRevenue" ("type","amount","orderId","shipmentId","userId","description","percentage","baseAmount") VALUES (p_type,p_amount,p_order_id,p_shipment_id,p_user_id,p_description,p_percentage,p_base_amount) RETURNING "id" INTO v_revenue_id;
+   967→   967→  RETURN v_revenue_id;
+   968→   968→END;
+   969→   969→$fn7$ LANGUAGE plpgsql;
+   970→   970→
+   971→   971→-- Expire subscriptions/listings
+   972→   972→CREATE OR REPLACE FUNCTION expire_subscriptions_and_listings()
+   973→   973→RETURNS INTEGER AS $fn8$
+   974→   974→DECLARE v_count INTEGER := 0;
+   975→   975→BEGIN
+   976→   976→  UPDATE "Subscription" SET "status"='expired',"updatedAt"=NOW() WHERE "status"='active' AND "expiresAt"<NOW();
+   977→   977→  GET DIAGNOSTICS v_count = ROW_COUNT;
+   978→   978→  UPDATE "User" u SET "subscriptionTier"='free',"subscriptionExpiry"=NULL,"subscriptionAmount"=0 WHERE u."subscriptionTier"!='free' AND NOT EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId"=u."id" AND s."status"='active' AND s."expiresAt">=NOW());
+   979→   979→  UPDATE "SponsoredListing" SET "status"='expired',"updatedAt"=NOW() WHERE "status"='active' AND "expiresAt"<NOW();
+   980→   980→  UPDATE "Product" SET "isSponsored"=FALSE,"sponsoredExpiry"=NULL WHERE "isSponsored"=TRUE AND "sponsoredExpiry"<NOW();
+   981→   981→  UPDATE "User" SET "isSponsored"=FALSE,"sponsoredExpiry"=NULL WHERE "isSponsored"=TRUE AND "sponsoredExpiry"<NOW();
+   982→   982→  RETURN v_count;
+   983→   983→END;
+   984→   984→$fn8$ LANGUAGE plpgsql;
+   985→   985→
+   986→   986→-- =============================================================
+   987→   987→-- PART 8: VIEWS
+   988→   988→-- =============================================================
+   989→   989→
+   990→   990→CREATE OR REPLACE VIEW "OrderBreakdown" AS
+   991→   991→SELECT o."id" AS order_id, o."buyerId", o."sellerId", o."productId", o."quantity", o."unitPrice", o."productSubtotal", o."transportEstimate", o."transportBookingFee", o."platformCommission", o."escrowFee", o."totalWithCharges", o."advanceAmount", o."remainingAmount", o."paymentStatus", o."status" AS order_status, p."name" AS product_name, p."unit" AS product_unit, ub."name" AS buyer_name, us."name" AS seller_name
+   992→   992→FROM "Order" o LEFT JOIN "Product" p ON p."id"=o."productId" LEFT JOIN "User" ub ON ub."id"=o."buyerId" LEFT JOIN "User" us ON us."id"=o."sellerId";
+   993→   993→
+   994→   994→CREATE OR REPLACE VIEW "TransporterPerformance" AS
+   995→   995→SELECT u."id" AS transporter_id, u."name", u."companyName", u."phone", u."pickupSuccessRate", u."deliverySuccessRate", u."avgResponseTimeHours", u."warningCount", u."totalCompletedShipments", u."totalFailedShipments", u."consecutiveFailures", u."isSuspended", u."avgRating", u."totalReviews", u."subscriptionTier"
+   996→   996→FROM "User" u WHERE u."role"='transporter';
+   997→   997→
+   998→   998→CREATE OR REPLACE VIEW "RevenueSummary" AS
+   999→   999→SELECT "type" AS revenue_type, COUNT(*) AS transaction_count, SUM("amount") AS total_amount, AVG("amount") AS avg_amount, MIN("amount") AS min_amount, MAX("amount") AS max_amount, DATE_TRUNC('day',"recordedAt") AS revenue_date FROM "PlatformRevenue" GROUP BY "type", DATE_TRUNC('day',"recordedAt");
+  1000→  1000→
+  1001→  1001→CREATE OR REPLACE VIEW "ProductWithStock" AS
+  1002→  1002→SELECT p.*, (p."quantity"-p."stockReserved") AS "calculatedAvailable", u."name" AS seller_name, u."companyName" AS seller_company, u."farmName" AS seller_farm, u."avgRating" AS seller_rating, u."subscriptionTier" AS seller_tier, u."isSponsored" AS seller_sponsored
+  1003→  1003→FROM "Product" p LEFT JOIN "User" u ON u."id"=p."sellerId" WHERE p."isActive"=TRUE;
+  1004→  1004→
+  1005→  1005→-- =============================================================
+  1006→  1006→-- PART 9: GRANT PERMISSIONS
+  1007→  1007→-- =============================================================
+  1008→  1008→
+  1009→  1009→GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
+  1010→  1010→GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+  1011→  1011→GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;
+  1012→  1012→GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+  1013→  1013→GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon;
+  1014→  1014→GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+  1015→  1015→
+  1016→  1016→-- =============================================================
+  1017→  1017→-- PART 10: STORAGE BUCKET
+  1018→  1018→-- =============================================================
+  1019→  1019→
+  1020→  1020→INSERT INTO storage.buckets (id, name, public, file_size_limit)
+  1021→  1021→VALUES ('agrilink-images', 'agrilink-images', true, 5242880)
+  1022→  1022→ON CONFLICT (id) DO NOTHING;
+  1023→  1023→
+  1024→  1024→DO $$ BEGIN
+  1025→  1025→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Public read agrilink-images') THEN
+  1026→  1026→    CREATE POLICY "Public read agrilink-images" ON storage.objects FOR SELECT USING (bucket_id = 'agrilink-images');
+  1027→  1027→  END IF;
+  1028→  1028→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Anon upload agrilink-images') THEN
+  1029→  1029→    CREATE POLICY "Anon upload agrilink-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'agrilink-images');
+  1030→  1030→  END IF;
+  1031→  1031→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Allow updates agrilink-images') THEN
+  1032→  1032→    CREATE POLICY "Allow updates agrilink-images" ON storage.objects FOR UPDATE USING (bucket_id = 'agrilink-images');
+  1033→  1033→  END IF;
+  1034→  1034→  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND policyname = 'Allow deletes agrilink-images') THEN
+  1035→  1035→    CREATE POLICY "Allow deletes agrilink-images" ON storage.objects FOR DELETE USING (bucket_id = 'agrilink-images');
+  1036→  1036→  END IF;
+  1037→  1037→END $$;
+  1038→  1038→
+  1039→  1039→-- =============================================================
+  1040→  1040→-- DONE! AgroBridge complete database is ready.
+  1041→  1041→-- 15 tables, 6 triggers, 7 functions, 4 views, storage bucket.
+  1042→  1042→-- =============================================================
+  1043→  1043→

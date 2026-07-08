@@ -12,47 +12,64 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 })
     }
 
-    // Product fields to include in order queries
-    const productSelect = 'id, name, category, unit, pricePerUnit, imageUrl, images, qualityGrade, location, state, isOrganic, cropVariety, deliveryHandledByProducer, deliveryFee, freeDelivery'
+    // Product fields - base (always exist) and extended (V4 migration, may not exist yet)
+    const productSelectBase = 'id, name, category, unit, pricePerUnit, imageUrl, images, qualityGrade, location, state, isOrganic, cropVariety'
+    const productSelectV4 = 'deliveryHandledByProducer, deliveryFee, freeDelivery'
+    const productSelectFull = `${productSelectBase}, ${productSelectV4}`
+
+    // Helper: fetch orders with fallback for missing V4 columns
+    async function fetchOrders(selectStr: string, filterFn: (q: any) => any) {
+      // Try with full product select (includes V4 columns)
+      const fullQuery = supabase
+        .from('Order')
+        .select(selectStr.replace('${productSelect}', productSelectFull))
+
+      const { data, error } = await filterFn(fullQuery)
+
+      if (error) {
+        // Check if it's a missing column error — retry without V4 columns
+        if (error.code === '42703' || (error.message && error.message.includes('does not exist'))) {
+          console.warn('Orders: V4 columns not found, retrying with base product select:', error.message)
+          const baseQuery = supabase
+            .from('Order')
+            .select(selectStr.replace('${productSelect}', productSelectBase))
+
+          const fallbackResult = await filterFn(baseQuery)
+          if (fallbackResult.error) {
+            console.error('Orders fetch error (fallback):', fallbackResult.error)
+            return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
+          }
+          return { data: fallbackResult.data ?? [], usedV4: false }
+        }
+        console.error('Orders fetch error:', error)
+        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
+      }
+      return { data: data ?? [], usedV4: true }
+    }
 
     let orders: unknown[] = []
 
     if (role === 'buyer') {
-      const { data, error } = await supabase
-        .from('Order')
-        .select(`*, seller:User!sellerId(id, name, companyName, phone, city, state, avatar), product:Product!productId(${productSelect})`)
-        .eq('buyerId', userId)
-        .order('createdAt', { ascending: false })
-
-      if (error) {
-        console.error('Orders fetch error:', error)
-        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
-      }
-      orders = data ?? []
+      const result = await fetchOrders(
+        `*, seller:User!sellerId(id, name, companyName, phone, city, state, avatar), product:Product!productId(\${productSelect})`,
+        (q: any) => q.eq('buyerId', userId).order('createdAt', { ascending: false })
+      )
+      if (result instanceof NextResponse) return result
+      orders = result.data
     } else if (role === 'producer' || role === 'seller') {
-      const { data, error } = await supabase
-        .from('Order')
-        .select(`*, buyer:User!buyerId(id, name, companyName, phone, email, city, state, avatar, avatarUrl, address), product:Product!productId(${productSelect})`)
-        .eq('sellerId', userId)
-        .order('createdAt', { ascending: false })
-
-      if (error) {
-        console.error('Orders fetch error:', error)
-        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
-      }
-      orders = data ?? []
+      const result = await fetchOrders(
+        `*, buyer:User!buyerId(id, name, companyName, phone, email, city, state, avatar, avatarUrl, address), product:Product!productId(\${productSelect})`,
+        (q: any) => q.eq('sellerId', userId).order('createdAt', { ascending: false })
+      )
+      if (result instanceof NextResponse) return result
+      orders = result.data
     } else if (role === 'admin') {
-      const { data, error } = await supabase
-        .from('Order')
-        .select(`*, buyer:User!buyerId(id, name, companyName), seller:User!sellerId(id, name, companyName), product:Product!productId(${productSelect})`)
-        .order('createdAt', { ascending: false })
-        .limit(50)
-
-      if (error) {
-        console.error('Orders fetch error:', error)
-        return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 })
-      }
-      orders = data ?? []
+      const result = await fetchOrders(
+        `*, buyer:User!buyerId(id, name, companyName), seller:User!sellerId(id, name, companyName), product:Product!productId(\${productSelect})`,
+        (q: any) => q.order('createdAt', { ascending: false }).limit(50)
+      )
+      if (result instanceof NextResponse) return result
+      orders = result.data
     }
 
     return NextResponse.json({ orders: (orders as any[]).map(mapOrderAvatar) })
@@ -63,6 +80,7 @@ export async function GET(request: Request) {
 }
 
 // Helper to map avatar -> avatarUrl for frontend compatibility
+// Also provides safe defaults for V4 columns that may not exist yet
 function mapOrderAvatar(order: any) {
   if (order.seller?.avatar) {
     order.seller.avatarUrl = order.seller.avatar
@@ -70,6 +88,14 @@ function mapOrderAvatar(order: any) {
   if (order.buyer?.avatar) {
     order.buyer.avatarUrl = order.buyer.avatar
   }
+  // Provide defaults for V4 columns so frontend optional-chaining always works
+  if (order.product) {
+    order.product.deliveryHandledByProducer = order.product.deliveryHandledByProducer ?? false
+    order.product.deliveryFee = order.product.deliveryFee ?? 0
+    order.product.freeDelivery = order.product.freeDelivery ?? false
+  }
+  order.deliveryType = order.deliveryType ?? 'platform'
+  order.deliveryFee = order.deliveryFee ?? 0
   return order
 }
 
@@ -416,22 +442,43 @@ export async function PATCH(request: Request) {
       }
 
       // Increment seller's totalTransactions & totalDeals (deals count fix)
-      const { data: seller } = await supabase
+      // Try with totalDeals (V4) first, fallback without it
+      let sellerSelectResult = await supabase
         .from('User')
         .select('totalTransactions, totalDeals')
         .eq('id', currentOrder.sellerId)
         .single()
 
+      if (sellerSelectResult.error && (sellerSelectResult.error.code === '42703' || sellerSelectResult.error.message?.includes('does not exist'))) {
+        sellerSelectResult = await supabase
+          .from('User')
+          .select('totalTransactions')
+          .eq('id', currentOrder.sellerId)
+          .single()
+      }
+
+      const seller = sellerSelectResult.data
       if (seller) {
         const updates: Record<string, unknown> = {
           totalTransactions: (seller.totalTransactions || 0) + 1,
-          totalDeals: (seller.totalDeals || 0) + 1,
           updatedAt: new Date().toISOString(),
         }
-        await supabase
+        // Only include totalDeals if the column exists (i.e., it was in the select result)
+        if ('totalDeals' in seller) {
+          updates.totalDeals = (seller.totalDeals || 0) + 1
+        }
+        let updateResult = await supabase
           .from('User')
           .update(updates)
           .eq('id', currentOrder.sellerId)
+        // If update fails due to totalDeals column, retry without it
+        if (updateResult.error && updateResult.error.code === '42703') {
+          delete updates.totalDeals
+          updateResult = await supabase
+            .from('User')
+            .update(updates)
+            .eq('id', currentOrder.sellerId)
+        }
       }
 
       // Also increment transporter's stats if there's a platform shipment
@@ -442,23 +489,43 @@ export async function PATCH(request: Request) {
         .single()
 
       if (shipment?.transporterId && !shipment.isExternal && !shipment.isExternalTransporter) {
-        const { data: transporter } = await supabase
+        // Try with V4 columns first, fallback without
+        let transporterSelectResult = await supabase
           .from('User')
           .select('totalTransactions, totalCompletedShipments, deliverySuccessRate, totalDeals')
           .eq('id', shipment.transporterId)
           .single()
 
-        if (transporter) {
-          await supabase
+        if (transporterSelectResult.error && (transporterSelectResult.error.code === '42703' || transporterSelectResult.error.message?.includes('does not exist'))) {
+          transporterSelectResult = await supabase
             .from('User')
-            .update({
-              totalTransactions: (transporter.totalTransactions || 0) + 1,
-              totalCompletedShipments: (transporter.totalCompletedShipments || 0) + 1,
-              totalDeals: (transporter.totalDeals || 0) + 1,
-              deliverySuccessRate: Math.min(100, (transporter.deliverySuccessRate || 100) + 1),
-              updatedAt: new Date().toISOString(),
-            })
+            .select('totalTransactions, totalCompletedShipments, deliverySuccessRate')
             .eq('id', shipment.transporterId)
+            .single()
+        }
+
+        const transporter = transporterSelectResult.data
+        if (transporter) {
+          const transporterUpdates: Record<string, unknown> = {
+            totalTransactions: (transporter.totalTransactions || 0) + 1,
+            totalCompletedShipments: (transporter.totalCompletedShipments || 0) + 1,
+            deliverySuccessRate: Math.min(100, (transporter.deliverySuccessRate || 100) + 1),
+            updatedAt: new Date().toISOString(),
+          }
+          if ('totalDeals' in transporter) {
+            transporterUpdates.totalDeals = (transporter.totalDeals || 0) + 1
+          }
+          let transporterUpdateResult = await supabase
+            .from('User')
+            .update(transporterUpdates)
+            .eq('id', shipment.transporterId)
+          if (transporterUpdateResult.error && transporterUpdateResult.error.code === '42703') {
+            delete transporterUpdates.totalDeals
+            transporterUpdateResult = await supabase
+              .from('User')
+              .update(transporterUpdates)
+              .eq('id', shipment.transporterId)
+          }
         }
       }
     }

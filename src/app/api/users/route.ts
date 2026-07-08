@@ -7,7 +7,10 @@ const userSelectBase = 'id, name, email, role, companyName, phone, state, city, 
 // Extended columns from migration V3 (may not exist yet)
 const userSelectExtended = 'pickupSuccessRate, deliverySuccessRate, avgResponseTimeHours, warningCount, totalCompletedShipments, totalFailedShipments, lastWarningAt, subscriptionTier, subscriptionExpiry, subscriptionAmount, isSponsored, sponsoredExpiry, sponsoredAmount'
 
-const userSelectFull = `${userSelectBase}, ${userSelectExtended}`
+// V4 columns (may not exist yet)
+const userSelectV4 = 'subscriptionPaymentId, subscriptionStatus, subscriptionStartedAt, totalDeals'
+
+const userSelectFull = `${userSelectBase}, ${userSelectExtended}, ${userSelectV4}`
 
 export async function GET(request: Request) {
   try {
@@ -18,7 +21,7 @@ export async function GET(request: Request) {
 
     // Single user lookup by ID
     if (id) {
-      // Try with extended columns first, fallback to base columns
+      // Try with full columns (base + extended + V4) first
       let { data: user, error: userError } = await supabase
         .from('User')
         .select(userSelectFull)
@@ -26,14 +29,26 @@ export async function GET(request: Request) {
         .maybeSingle()
 
       if (userError) {
-        // Fallback: try without extended columns
-        const fallback = await supabase
+        // Fallback: try without V4 columns (base + extended)
+        const fallback1 = await supabase
           .from('User')
-          .select(userSelectBase)
+          .select(`${userSelectBase}, ${userSelectExtended}`)
           .eq('id', id)
           .maybeSingle()
-        user = fallback.data
-        userError = fallback.error
+        
+        if (fallback1.error) {
+          // Final fallback: try with just base columns
+          const fallback2 = await supabase
+            .from('User')
+            .select(userSelectBase)
+            .eq('id', id)
+            .maybeSingle()
+          user = fallback2.data
+          userError = fallback2.error
+        } else {
+          user = fallback1.data
+          userError = null
+        }
       }
 
       if (userError) {
@@ -45,7 +60,7 @@ export async function GET(request: Request) {
       }
 
       // Use avatarUrl/bannerUrl columns directly, fallback to avatar for legacy data
-      // Provide defaults for extended columns in case they don't exist
+      // Provide defaults for extended + V4 columns in case they don't exist
       const mappedUser = {
         ...user,
         avatarUrl: user.avatarUrl || user.avatar || null,
@@ -56,6 +71,9 @@ export async function GET(request: Request) {
         warningCount: user.warningCount ?? 0,
         totalCompletedShipments: user.totalCompletedShipments ?? 0,
         totalFailedShipments: user.totalFailedShipments ?? 0,
+        // V4 defaults
+        subscriptionStatus: (user as any).subscriptionStatus ?? 'inactive',
+        totalDeals: (user as any).totalDeals ?? 0,
       }
 
       // Fetch counts separately
@@ -80,7 +98,7 @@ export async function GET(request: Request) {
     }
 
     // List users with filters
-    // Try with extended columns first, fallback to base columns
+    // Try with full columns (base + extended + V4) first, cascade down
     let query = supabase
       .from('User')
       .select(userSelectFull)
@@ -96,18 +114,33 @@ export async function GET(request: Request) {
     let { data: users, error: usersError } = await query
 
     if (usersError) {
-      // Fallback: try without extended columns
-      let fallbackQuery = supabase
+      // Fallback 1: try without V4 columns (base + extended)
+      let fallbackQuery1 = supabase
         .from('User')
-        .select(userSelectBase)
+        .select(`${userSelectBase}, ${userSelectExtended}`)
         .order('createdAt', { ascending: false })
 
-      if (role) fallbackQuery = fallbackQuery.eq('role', role)
-      if (verificationStatus) fallbackQuery = fallbackQuery.eq('verificationStatus', verificationStatus)
+      if (role) fallbackQuery1 = fallbackQuery1.eq('role', role)
+      if (verificationStatus) fallbackQuery1 = fallbackQuery1.eq('verificationStatus', verificationStatus)
 
-      const fallback = await fallbackQuery
-      users = fallback.data
-      usersError = fallback.error
+      const fallback1 = await fallbackQuery1
+      if (fallback1.error) {
+        // Fallback 2: try with just base columns
+        let fallbackQuery2 = supabase
+          .from('User')
+          .select(userSelectBase)
+          .order('createdAt', { ascending: false })
+
+        if (role) fallbackQuery2 = fallbackQuery2.eq('role', role)
+        if (verificationStatus) fallbackQuery2 = fallbackQuery2.eq('verificationStatus', verificationStatus)
+
+        const fallback2 = await fallbackQuery2
+        users = fallback2.data
+        usersError = fallback2.error
+      } else {
+        users = fallback1.data
+        usersError = null
+      }
     }
 
     if (usersError) {
@@ -119,7 +152,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ users: [] })
     }
 
-    // Map avatar -> avatarUrl for each user + add defaults for extended columns
+    // Map avatar -> avatarUrl for each user + add defaults for extended + V4 columns
     const mappedUsers = users.map(u => ({
       ...u,
       avatarUrl: u.avatarUrl || u.avatar || null,
@@ -130,6 +163,9 @@ export async function GET(request: Request) {
       warningCount: (u as any).warningCount ?? 0,
       totalCompletedShipments: (u as any).totalCompletedShipments ?? 0,
       totalFailedShipments: (u as any).totalFailedShipments ?? 0,
+      // V4 defaults
+      subscriptionStatus: (u as any).subscriptionStatus ?? 'inactive',
+      totalDeals: (u as any).totalDeals ?? 0,
     }))
 
     // Fetch all related FK values and compute counts in JS

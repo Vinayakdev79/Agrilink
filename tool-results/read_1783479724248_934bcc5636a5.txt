@@ -1,0 +1,979 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useEffect, useRef, useState } from 'react'
+     4→     4→import { motion, useInView } from 'framer-motion'
+     5→     5→import { useAppStore } from '@/lib/store'
+     6→     6→import {
+     7→     7→  Leaf,
+     8→     8→  TrendingUp,
+     9→     9→  Shield,
+    10→    10→  Truck,
+    11→    11→  MapPin,
+    12→    12→  CheckCircle2,
+    13→    13→  ArrowRight,
+    14→    14→  Menu,
+    15→    15→  X,
+    16→    16→  ChevronRight,
+    17→    17→  Package,
+    18→    18→  Clock,
+    19→    19→  Route,
+    20→    20→  Globe,
+    21→    21→  Twitter,
+    22→    22→  Github,
+    23→    23→  Linkedin,
+    24→    24→  Mail,
+    25→    25→  BadgeCheck,
+    26→    26→  Star,
+    27→    27→  Zap,
+    28→    28→  BarChart3,
+    29→    29→} from 'lucide-react'
+    30→    30→
+    31→    31→// ─── Animated Counter Hook ───────────────────────────────────────────────────
+    32→    32→function useCountUp(end: number, duration = 2000, startOnView = true) {
+    33→    33→  const [count, setCount] = useState(0)
+    34→    34→  const ref = useRef<HTMLSpanElement>(null)
+    35→    35→  const isInView = useInView(ref, { once: true })
+    36→    36→  const hasStarted = useRef(false)
+    37→    37→
+    38→    38→  useEffect(() => {
+    39→    39→    if (!startOnView || !isInView) return
+    40→    40→    if (hasStarted.current) return
+    41→    41→    hasStarted.current = true
+    42→    42→
+    43→    43→    let startTime: number
+    44→    44→    const step = (timestamp: number) => {
+    45→    45→      if (!startTime) startTime = timestamp
+    46→    46→      const progress = Math.min((timestamp - startTime) / duration, 1)
+    47→    47→      const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+    48→    48→      setCount(Math.floor(eased * end))
+    49→    49→      if (progress < 1) requestAnimationFrame(step)
+    50→    50→    }
+    51→    51→    requestAnimationFrame(step)
+    52→    52→  }, [isInView, end, duration, startOnView])
+    53→    53→
+    54→    54→  return { count, ref }
+    55→    55→}
+    56→    56→
+    57→    57→// ─── Data ────────────────────────────────────────────────────────────────────
+    58→    58→const marketplaceProducts = [
+    59→    59→  {
+    60→    60→    id: 1,
+    61→    61→    name: 'Basmati Rice (1121)',
+    62→    62→    price: '₹4,200',
+    63→    63→    unit: '/quintal',
+    64→    64→    location: 'Patiala, Punjab',
+    65→    65→    quality: 'A+',
+    66→    66→    seller: 'Guru Granth Foods',
+    67→    67→    verified: true,
+    68→    68→    trend: '+3.2%',
+    69→    69→    category: 'Grains',
+    70→    70→  },
+    71→    71→  {
+    72→    72→    id: 2,
+    73→    73→    name: 'Alphonso Mango',
+    74→    74→    price: '₹8,500',
+    75→    75→    unit: '/quintal',
+    76→    76→    location: 'Ratnagiri, Maharashtra',
+    77→    77→    quality: 'Premium',
+    78→    78→    seller: 'Konkan Harvests',
+    79→    79→    verified: true,
+    80→    80→    trend: '+5.1%',
+    81→    81→    category: 'Fruits',
+    82→    82→  },
+    83→    83→  {
+    84→    84→    id: 3,
+    85→    85→    name: 'Turmeric (Sangli)',
+    86→    86→    price: '₹6,800',
+    87→    87→    unit: '/quintal',
+    88→    88→    location: 'Sangli, Maharashtra',
+    89→    89→    quality: 'A',
+    90→    90→    seller: 'Sahyadri Spices',
+    91→    91→    verified: true,
+    92→    92→    trend: '-1.4%',
+    93→    93→    category: 'Spices',
+    94→    94→  },
+    95→    95→  {
+    96→    96→    id: 4,
+    97→    97→    name: 'Cotton (Shankar-6)',
+    98→    98→    price: '₹7,100',
+    99→    99→    unit: '/quintal',
+   100→   100→    location: 'Rajkot, Gujarat',
+   101→   101→    quality: 'A+',
+   102→   102→    seller: 'Saurashtra Cotton Co.',
+   103→   103→    verified: true,
+   104→   104→    trend: '+2.8%',
+   105→   105→    category: 'Fiber',
+   106→   106→  },
+   107→   107→  {
+   108→   108→    id: 5,
+   109→   109→    name: 'Assam Tea (CTC)',
+   110→   110→    price: '₹2,900',
+   111→   111→    unit: '/quintal',
+   112→   112→    location: 'Jorhat, Assam',
+   113→   113→    quality: 'BOPSM',
+   114→   114→    seller: 'Brahmaputra Estates',
+   115→   115→    verified: false,
+   116→   116→    trend: '+0.9%',
+   117→   117→    category: 'Beverages',
+   118→   118→  },
+   119→   119→  {
+   120→   120→    id: 6,
+   121→   121→    name: 'Onion (Nashik Red)',
+   122→   122→    price: '₹1,400',
+   123→   123→    unit: '/quintal',
+   124→   124→    location: 'Nashik, Maharashtra',
+   125→   125→    quality: 'A',
+   126→   126→    seller: 'Khandesh Produce',
+   127→   127→    verified: true,
+   128→   128→    trend: '-3.7%',
+   129→   129→    category: 'Vegetables',
+   130→   130→  },
+   131→   131→]
+   132→   132→
+   133→   133→const logisticsCities = [
+   134→   134→  { name: 'Delhi', x: 48, y: 20 },
+   135→   135→  { name: 'Jaipur', x: 40, y: 30 },
+   136→   136→  { name: 'Lucknow', x: 55, y: 24 },
+   137→   137→  { name: 'Mumbai', x: 25, y: 52 },
+   138→   138→  { name: 'Hyderabad', x: 45, y: 55 },
+   139→   139→  { name: 'Bengaluru', x: 40, y: 70 },
+   140→   140→  { name: 'Chennai', x: 55, y: 68 },
+   141→   141→  { name: 'Kolkata', x: 72, y: 30 },
+   142→   142→  { name: 'Chandigarh', x: 48, y: 17 },
+   143→   143→  { name: 'Ahmedabad', x: 30, y: 38 },
+   144→   144→  { name: 'Indore', x: 35, y: 42 },
+   145→   145→  { name: 'Nagpur', x: 45, y: 45 },
+   146→   146→  { name: 'Pune', x: 32, y: 56 },
+   147→   147→  { name: 'Coimbatore', x: 42, y: 72 },
+   148→   148→  { name: 'Visakhapatnam', x: 60, y: 52 },
+   149→   149→  { name: 'Guwahati', x: 78, y: 20 },
+   150→   150→]
+   151→   151→
+   152→   152→const logisticsRoutes = [
+   153→   153→  [0, 1], [0, 2], [1, 3], [3, 4], [4, 5], [5, 6], [2, 7], [4, 6],
+   154→   154→  [0, 3], [2, 4], [0, 8], [9, 3], [10, 11], [11, 4], [12, 5], [13, 6], [14, 7], [15, 7],
+   155→   155→]
+   156→   156→
+   157→   157→// ─── Animation Variants (visible-by-default) ─────────────────────────────────
+   158→   158→// All "hidden" states are the same as "visible" to ensure content is always visible.
+   159→   159→// The stagger effect still works for a nice cascading entrance.
+   160→   160→const staggerContainer = {
+   161→   161→  hidden: {},
+   162→   162→  visible: {
+   163→   163→    transition: {
+   164→   164→      staggerChildren: 0.08,
+   165→   165→      delayChildren: 0.1,
+   166→   166→    },
+   167→   167→  },
+   168→   168→}
+   169→   169→
+   170→   170→const fadeUp = {
+   171→   171→  hidden: {},
+   172→   172→  visible: {
+   173→   173→    y: 0,
+   174→   174→    opacity: 1,
+   175→   175→    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+   176→   176→  },
+   177→   177→}
+   178→   178→
+   179→   179→const scaleIn = {
+   180→   180→  hidden: {},
+   181→   181→  visible: {
+   182→   182→    scale: 1,
+   183→   183→    opacity: 1,
+   184→   184→    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+   185→   185→  },
+   186→   186→}
+   187→   187→
+   188→   188→// ─── Glowing Orbs Background ────────────────────────────────────────────────
+   189→   189→function GlowingOrbs() {
+   190→   190→  return (
+   191→   191→    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+   192→   192→      <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] animate-float" />
+   193→   193→      <div
+   194→   194→        className="absolute top-1/3 -left-20 w-72 h-72 bg-emerald-600/8 rounded-full blur-[100px]"
+   195→   195→        style={{ animationDelay: '1s', animation: 'float 4s ease-in-out infinite' }}
+   196→   196→      />
+   197→   197→      <div
+   198→   198→        className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-amber-500/6 rounded-full blur-[100px]"
+   199→   199→        style={{ animationDelay: '2s', animation: 'float 5s ease-in-out infinite' }}
+   200→   200→      />
+   201→   201→      <div
+   202→   202→        className="absolute bottom-0 left-1/3 w-64 h-64 bg-emerald-400/5 rounded-full blur-[80px]"
+   203→   203→        style={{ animationDelay: '0.5s', animation: 'float 3.5s ease-in-out infinite' }}
+   204→   204→      />
+   205→   205→    </div>
+   206→   206→  )
+   207→   207→}
+   208→   208→
+   209→   209→// ─── Navbar ──────────────────────────────────────────────────────────────────
+   210→   210→function Navbar() {
+   211→   211→  const setView = useAppStore((s) => s.setView)
+   212→   212→  const [mobileOpen, setMobileOpen] = useState(false)
+   213→   213→
+   214→   214→  return (
+   215→   215→    <nav className="sticky top-0 z-50 w-full animate-slide-down">
+   216→   216→      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+   217→   217→        <div className="glass-nav mt-3 px-4 sm:px-6 py-3 flex items-center justify-between">
+   218→   218→          {/* Logo */}
+   219→   219→          <div className="flex items-center gap-2.5">
+   220→   220→            <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+   221→   221→              <Leaf className="w-5 h-5 text-emerald-400" />
+   222→   222→            </div>
+   223→   223→            <span className="text-xl font-bold tracking-tight">
+   224→   224→              <span className="text-emerald-400">Agri</span>
+   225→   225→              <span className="text-foreground">Link</span>
+   226→   226→            </span>
+   227→   227→          </div>
+   228→   228→
+   229→   229→          {/* Desktop Nav Links */}
+   230→   230→          <div className="hidden md:flex items-center gap-1">
+   231→   231→            {['Marketplace', 'Logistics', 'About'].map((item) => (
+   232→   232→              <button
+   233→   233→                key={item}
+   234→   234→                onClick={() => {
+   235→   235→                  if (item === 'Marketplace') setView('marketplace')
+   236→   236→                  else if (item === 'Logistics') setView('logistics')
+   237→   237→                }}
+   238→   238→                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5"
+   239→   239→              >
+   240→   240→                {item}
+   241→   241→              </button>
+   242→   242→            ))}
+   243→   243→          </div>
+   244→   244→
+   245→   245→          {/* Desktop CTA */}
+   246→   246→          <div className="hidden md:flex items-center gap-3">
+   247→   247→            <button
+   248→   248→              onClick={() => setView('auth')}
+   249→   249→              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5"
+   250→   250→            >
+   251→   251→              Sign In
+   252→   252→            </button>
+   253→   253→            <button
+   254→   254→              onClick={() => setView('role-select')}
+   255→   255→              className="px-5 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30"
+   256→   256→            >
+   257→   257→              Get Started
+   258→   258→            </button>
+   259→   259→          </div>
+   260→   260→
+   261→   261→          {/* Mobile Menu Toggle */}
+   262→   262→          <button
+   263→   263→            onClick={() => setMobileOpen(!mobileOpen)}
+   264→   264→            className="md:hidden p-2 rounded-lg hover:bg-white/5 text-muted-foreground"
+   265→   265→          >
+   266→   266→            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+   267→   267→          </button>
+   268→   268→        </div>
+   269→   269→
+   270→   270→        {/* Mobile Menu */}
+   271→   271→        {mobileOpen && (
+   272→   272→          <motion.div
+   273→   273→            initial={{ opacity: 0, y: -10 }}
+   274→   274→            animate={{ opacity: 1, y: 0 }}
+   275→   275→            exit={{ opacity: 0, y: -10 }}
+   276→   276→            className="glass-card-strong mt-2 p-4 md:hidden"
+   277→   277→          >
+   278→   278→            <div className="flex flex-col gap-2">
+   279→   279→              {['Marketplace', 'Logistics', 'About'].map((item) => (
+   280→   280→                <button
+   281→   281→                  key={item}
+   282→   282→                  onClick={() => {
+   283→   283→                    if (item === 'Marketplace') setView('marketplace')
+   284→   284→                    else if (item === 'Logistics') setView('logistics')
+   285→   285→                    setMobileOpen(false)
+   286→   286→                  }}
+   287→   287→                  className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5 text-left"
+   288→   288→                >
+   289→   289→                  {item}
+   290→   290→                </button>
+   291→   291→              ))}
+   292→   292→              <div className="border-t border-white/10 my-2" />
+   293→   293→              <button
+   294→   294→                onClick={() => {
+   295→   295→                  setView('auth')
+   296→   296→                  setMobileOpen(false)
+   297→   297→                }}
+   298→   298→                className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-white/5 text-left"
+   299→   299→              >
+   300→   300→                Sign In
+   301→   301→              </button>
+   302→   302→              <button
+   303→   303→                onClick={() => {
+   304→   304→                  setView('role-select')
+   305→   305→                  setMobileOpen(false)
+   306→   306→                }}
+   307→   307→                className="px-5 py-3 text-sm font-semibold rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all text-center"
+   308→   308→              >
+   309→   309→                Get Started
+   310→   310→              </button>
+   311→   311→            </div>
+   312→   312→          </motion.div>
+   313→   313→        )}
+   314→   314→      </div>
+   315→   315→    </nav>
+   316→   316→  )
+   317→   317→}
+   318→   318→
+   319→   319→// ─── Hero Section ────────────────────────────────────────────────────────────
+   320→   320→function HeroSection() {
+   321→   321→  const setView = useAppStore((s) => s.setView)
+   322→   322→
+   323→   323→  return (
+   324→   324→    <section id="hero" className="relative min-h-[90vh] flex items-center overflow-hidden scroll-mt-20">
+   325→   325→      <GlowingOrbs />
+   326→   326→      <div className="absolute inset-0 bg-grid-pattern opacity-40" />
+   327→   327→
+   328→   328→      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28 w-full">
+   329→   329→        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+   330→   330→          {/* Left: Copy */}
+   331→   331→          <motion.div
+   332→   332→            variants={staggerContainer}
+   333→   333→            initial="hidden"
+   334→   334→            animate="visible"
+   335→   335→            className="space-y-8"
+   336→   336→          >
+   337→   337→            <motion.div variants={fadeUp}>
+   338→   338→              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-6">
+   339→   339→                <Zap className="w-3.5 h-3.5" />
+   340→   340→                <span>India&apos;s #1 Agricultural Trade Platform</span>
+   341→   341→              </div>
+   342→   342→            </motion.div>
+   343→   343→
+   344→   344→            <motion.h1
+   345→   345→              variants={fadeUp}
+   346→   346→              className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.08] tracking-tight"
+   347→   347→            >
+   348→   348→              <span className="text-foreground">India&apos;s</span>
+   349→   349→              <br />
+   350→   350→              <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-amber-400 bg-clip-text text-transparent">
+   351→   351→                Agricultural Trade
+   352→   352→              </span>
+   353→   353→              <br />
+   354→   354→              <span className="text-foreground">Infrastructure</span>
+   355→   355→            </motion.h1>
+   356→   356→
+   357→   357→            <motion.p
+   358→   358→              variants={fadeUp}
+   359→   359→              className="text-lg sm:text-xl text-muted-foreground max-w-xl leading-relaxed"
+   360→   360→            >
+   361→   361→              Connecting producers, buyers, and logistics across 28 states. Transparent pricing,
+   362→   362→              verified suppliers, seamless trade.
+   363→   363→            </motion.p>
+   364→   364→
+   365→   365→            <motion.div variants={fadeUp} className="flex flex-wrap gap-4 pt-2">
+   366→   366→              <button
+   367→   367→                onClick={() => setView('role-select')}
+   368→   368→                className="group px-7 py-3.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 flex items-center gap-2"
+   369→   369→              >
+   370→   370→                Start Trading
+   371→   371→                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+   372→   372→              </button>
+   373→   373→              <button
+   374→   374→                onClick={() => setView('marketplace')}
+   375→   375→                className="group px-7 py-3.5 text-sm font-semibold rounded-xl bg-white/5 border border-white/10 text-foreground hover:bg-white/10 hover:border-white/20 transition-all flex items-center gap-2"
+   376→   376→              >
+   377→   377→                View Marketplace
+   378→   378→                <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+   379→   379→              </button>
+   380→   380→            </motion.div>
+   381→   381→
+   382→   382→            <motion.div
+   383→   383→              variants={fadeUp}
+   384→   384→              className="flex items-center gap-6 pt-4 text-sm text-muted-foreground"
+   385→   385→            >
+   386→   386→              <div className="flex items-center gap-2">
+   387→   387→                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+   388→   388→                <span>No hidden fees</span>
+   389→   389→              </div>
+   390→   390→              <div className="flex items-center gap-2">
+   391→   391→                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+   392→   392→                <span>GST verified</span>
+   393→   393→              </div>
+   394→   394→              <div className="flex items-center gap-2">
+   395→   395→                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+   396→   396→                <span>Escrow protected</span>
+   397→   397→              </div>
+   398→   398→            </motion.div>
+   399→   399→          </motion.div>
+   400→   400→
+   401→   401→          {/* Right: Floating Stats */}
+   402→   402→          <motion.div
+   403→   403→            variants={staggerContainer}
+   404→   404→            initial="hidden"
+   405→   405→            animate="visible"
+   406→   406→            className="relative hidden lg:block"
+   407→   407→          >
+   408→   408→            <div className="relative h-[500px]">
+   409→   409→              {/* Decorative ring */}
+   410→   410→              <div className="absolute inset-0 flex items-center justify-center">
+   411→   411→                <div className="w-80 h-80 rounded-full border border-emerald-500/10" />
+   412→   412→                <div className="absolute w-96 h-96 rounded-full border border-emerald-500/5" />
+   413→   413→              </div>
+   414→   414→
+   415→   415→              {/* Stat Card 1 */}
+   416→   416→              <motion.div
+   417→   417→                variants={scaleIn}
+   418→   418→                className="absolute top-4 right-8 glass-card p-5 min-w-[200px] animate-float"
+   419→   419→              >
+   420→   420→                <div className="flex items-center gap-3 mb-2">
+   421→   421→                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+   422→   422→                    <TrendingUp className="w-5 h-5 text-emerald-400" />
+   423→   423→                  </div>
+   424→   424→                  <div>
+   425→   425→                    <p className="text-2xl font-bold text-foreground">
+   426→   426→                      <CountUpNumber end={2.4} prefix="₹" suffix="Cr+" decimals={1} />
+   427→   427→                    </p>
+   428→   428→                    <p className="text-xs text-muted-foreground">Trade Volume</p>
+   429→   429→                  </div>
+   430→   430→                </div>
+   431→   431→              </motion.div>
+   432→   432→
+   433→   433→              {/* Stat Card 2 */}
+   434→   434→              <motion.div
+   435→   435→                variants={scaleIn}
+   436→   436→                className="absolute top-36 left-4 glass-card p-5 min-w-[180px]"
+   437→   437→                style={{ animation: 'float 3.5s ease-in-out infinite', animationDelay: '0.5s' }}
+   438→   438→              >
+   439→   439→                <div className="flex items-center gap-3 mb-2">
+   440→   440→                  <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
+   441→   441→                    <Globe className="w-5 h-5 text-amber-400" />
+   442→   442→                  </div>
+   443→   443→                  <div>
+   444→   444→                    <p className="text-2xl font-bold text-foreground">
+   445→   445→                      <CountUpNumber end={28} suffix=" States" />
+   446→   446→                    </p>
+   447→   447→                    <p className="text-xs text-muted-foreground">Covered</p>
+   448→   448→                  </div>
+   449→   449→                </div>
+   450→   450→              </motion.div>
+   451→   451→
+   452→   452→              {/* Stat Card 3 */}
+   453→   453→              <motion.div
+   454→   454→                variants={scaleIn}
+   455→   455→                className="absolute bottom-28 right-4 glass-card p-5 min-w-[200px]"
+   456→   456→                style={{ animation: 'float 4s ease-in-out infinite', animationDelay: '1s' }}
+   457→   457→              >
+   458→   458→                <div className="flex items-center gap-3 mb-2">
+   459→   459→                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+   460→   460→                    <BadgeCheck className="w-5 h-5 text-emerald-400" />
+   461→   461→                  </div>
+   462→   462→                  <div>
+   463→   463→                    <p className="text-2xl font-bold text-foreground">
+   464→   464→                      <CountUpNumber end={15000} suffix="+" formatNumber />
+   465→   465→                    </p>
+   466→   466→                    <p className="text-xs text-muted-foreground">Verified Suppliers</p>
+   467→   467→                  </div>
+   468→   468→                </div>
+   469→   469→              </motion.div>
+   470→   470→
+   471→   471→              {/* Stat Card 4 */}
+   472→   472→              <motion.div
+   473→   473→                variants={scaleIn}
+   474→   474→                className="absolute bottom-4 left-16 glass-card p-5 min-w-[180px]"
+   475→   475→                style={{ animation: 'float 3s ease-in-out infinite', animationDelay: '1.5s' }}
+   476→   476→              >
+   477→   477→                <div className="flex items-center gap-3 mb-2">
+   478→   478→                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+   479→   479→                    <BarChart3 className="w-5 h-5 text-emerald-400" />
+   480→   480→                  </div>
+   481→   481→                  <div>
+   482→   482→                    <p className="text-2xl font-bold text-foreground">
+   483→   483→                      <CountUpNumber end={99.9} suffix="%" decimals={1} />
+   484→   484→                    </p>
+   485→   485→                    <p className="text-xs text-muted-foreground">Uptime</p>
+   486→   486→                  </div>
+   487→   487→                </div>
+   488→   488→              </motion.div>
+   489→   489→            </div>
+   490→   490→          </motion.div>
+   491→   491→        </div>
+   492→   492→      </div>
+   493→   493→    </section>
+   494→   494→  )
+   495→   495→}
+   496→   496→
+   497→   497→// ─── Count Up Number ─────────────────────────────────────────────────────────
+   498→   498→function CountUpNumber({
+   499→   499→  end,
+   500→   500→  prefix = '',
+   501→   501→  suffix = '',
+   502→   502→  decimals = 0,
+   503→   503→  formatNumber = false,
+   504→   504→}: {
+   505→   505→  end: number
+   506→   506→  prefix?: string
+   507→   507→  suffix?: string
+   508→   508→  decimals?: number
+   509→   509→  formatNumber?: boolean
+   510→   510→}) {
+   511→   511→  const { count, ref } = useCountUp(end * Math.pow(10, decimals), 2000)
+   512→   512→  const displayValue = count / Math.pow(10, decimals)
+   513→   513→  const formatted = formatNumber
+   514→   514→    ? displayValue.toLocaleString('en-IN')
+   515→   515→    : displayValue.toFixed(decimals)
+   516→   516→
+   517→   517→  return (
+   518→   518→    <span ref={ref}>
+   519→   519→      {prefix}
+   520→   520→      {formatted}
+   521→   521→      {suffix}
+   522→   522→    </span>
+   523→   523→  )
+   524→   524→}
+   525→   525→
+   526→   526→// ─── Live Marketplace Preview ────────────────────────────────────────────────
+   527→   527→function MarketplacePreview() {
+   528→   528→  const setView = useAppStore((s) => s.setView)
+   529→   529→
+   530→   530→  return (
+   531→   531→    <section id="marketplace" className="relative min-h-screen py-16 lg:py-20 scroll-mt-20">
+   532→   532→      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+   533→   533→        <SectionHeader
+   534→   534→          badge="Live Marketplace"
+   535→   535→          title="Real-Time Commodity Prices"
+   536→   536→          subtitle="Verified listings from across India. Updated every minute with mandi prices and quality grades."
+   537→   537→        />
+   538→   538→
+   539→   539→        <motion.div
+   540→   540→          variants={staggerContainer}
+   541→   541→          initial="hidden"
+   542→   542→          whileInView="visible"
+   543→   543→          viewport={{ once: true, margin: '-100px' }}
+   544→   544→          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-12"
+   545→   545→        >
+   546→   546→          {marketplaceProducts.map((product) => (
+   547→   547→            <motion.div key={product.id} variants={fadeUp}>
+   548→   548→              <ProductCard product={product} />
+   549→   549→            </motion.div>
+   550→   550→          ))}
+   551→   551→        </motion.div>
+   552→   552→
+   553→   553→        <div className="flex justify-center mt-10">
+   554→   554→          <button
+   555→   555→            onClick={() => setView('marketplace')}
+   556→   556→            className="group px-7 py-3.5 text-sm font-semibold rounded-xl bg-white/5 border border-white/10 text-foreground hover:bg-white/10 hover:border-white/20 transition-all flex items-center gap-2"
+   557→   557→          >
+   558→   558→            View All Listings
+   559→   559→            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+   560→   560→          </button>
+   561→   561→        </div>
+   562→   562→      </div>
+   563→   563→    </section>
+   564→   564→  )
+   565→   565→}
+   566→   566→
+   567→   567→function ProductCard({
+   568→   568→  product,
+   569→   569→}: {
+   570→   570→  product: (typeof marketplaceProducts)[number]
+   571→   571→}) {
+   572→   572→  const isPositive = product.trend.startsWith('+')
+   573→   573→  const setView = useAppStore((s) => s.setView)
+   574→   574→
+   575→   575→  return (
+   576→   576→    <div
+   577→   577→      className="glass-card p-5 hover:bg-white/[0.07] transition-all duration-300 group cursor-pointer"
+   578→   578→      onClick={() => setView('marketplace')}
+   579→   579→    >
+   580→   580→      <div className="flex items-start justify-between mb-3">
+   581→   581→        <div>
+   582→   582→          <h3 className="font-semibold text-foreground text-sm leading-tight group-hover:text-emerald-400 transition-colors">
+   583→   583→            {product.name}
+   584→   584→          </h3>
+   585→   585→          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+   586→   586→            <MapPin className="w-3 h-3" />
+   587→   587→            {product.location}
+   588→   588→          </p>
+   589→   589→        </div>
+   590→   590→        <span
+   591→   591→          className={`text-xs font-semibold px-2 py-1 rounded-lg ${
+   592→   592→            isPositive
+   593→   593→              ? 'bg-emerald-500/10 text-emerald-400'
+   594→   594→              : 'bg-red-500/10 text-red-400'
+   595→   595→          }`}
+   596→   596→        >
+   597→   597→          {product.trend}
+   598→   598→        </span>
+   599→   599→      </div>
+   600→   600→
+   601→   601→      <div className="flex items-end justify-between mt-4">
+   602→   602→        <div>
+   603→   603→          <span className="text-xl font-bold text-foreground">{product.price}</span>
+   604→   604→          <span className="text-xs text-muted-foreground">{product.unit}</span>
+   605→   605→        </div>
+   606→   606→        <div className="flex items-center gap-2">
+   607→   607→          <span className="text-xs font-medium px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+   608→   608→            {product.quality}
+   609→   609→          </span>
+   610→   610→          {product.verified && (
+   611→   611→            <span className="text-xs font-medium px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+   612→   612→              <Shield className="w-3 h-3" />
+   613→   613→              Verified
+   614→   614→            </span>
+   615→   615→          )}
+   616→   616→        </div>
+   617→   617→      </div>
+   618→   618→
+   619→   619→      <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+   620→   620→        <span className="text-xs text-muted-foreground">{product.seller}</span>
+   621→   621→        <span className="text-xs text-muted-foreground">{product.category}</span>
+   622→   622→      </div>
+   623→   623→    </div>
+   624→   624→  )
+   625→   625→}
+   626→   626→
+   627→   627→// ─── Logistics Visualization ─────────────────────────────────────────────────
+   628→   628→function LogisticsSection() {
+   629→   629→  const setView = useAppStore((s) => s.setView)
+   630→   630→
+   631→   631→  return (
+   632→   632→    <section id="logistics" className="relative min-h-screen py-16 lg:py-20 scroll-mt-20">
+   633→   633→      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+   634→   634→        <SectionHeader
+   635→   635→          badge="Logistics Network"
+   636→   636→          title="Pan-India Supply Chain"
+   637→   637→          subtitle="Real-time tracking across major trade routes. From farm gate to warehouse, every shipment accounted for."
+   638→   638→        />
+   639→   639→
+   640→   640→        <motion.div
+   641→   641→          initial={{ opacity: 1, y: 0 }}
+   642→   642→          whileInView={{ opacity: 1, y: 0 }}
+   643→   643→          viewport={{ once: true, margin: '-100px' }}
+   644→   644→          className="mt-12"
+   645→   645→        >
+   646→   646→          <div className="glass-card p-6 lg:p-8">
+   647→   647→            <div className="grid lg:grid-cols-5 gap-8 items-center">
+   648→   648→              {/* Map Visualization */}
+   649→   649→              <div className="lg:col-span-3 relative">
+   650→   650→                <svg viewBox="0 0 100 100" className="w-full h-auto max-h-[400px]" xmlns="http://www.w3.org/2000/svg">
+   651→   651→                  <defs>
+   652→   652→                    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+   653→   653→                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
+   654→   654→                      <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.4" />
+   655→   655→                    </linearGradient>
+   656→   656→                    <radialGradient id="cityGlow">
+   657→   657→                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.8" />
+   658→   658→                      <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+   659→   659→                    </radialGradient>
+   660→   660→                    <filter id="indiaGlow" x="-20%" y="-20%" width="140%" height="140%">
+   661→   661→                      <feGaussianBlur stdDeviation="1.2" result="blur" />
+   662→   662→                      <feFlood floodColor="#10b981" floodOpacity="0.35" result="color" />
+   663→   663→                      <feComposite in="color" in2="blur" operator="in" result="glow" />
+   664→   664→                      <feMerge>
+   665→   665→                        <feMergeNode in="glow" />
+   666→   666→                        <feMergeNode in="glow" />
+   667→   667→                        <feMergeNode in="SourceGraphic" />
+   668→   668→                      </feMerge>
+   669→   669→                    </filter>
+   670→   670→                  </defs>
+   671→   671→
+   672→   672→                  <path
+   673→   673→                    d="M 32 10 L 35 8 L 40 7 L 45 6 L 50 5 L 52 4 L 54 3 L 55 5 L 54 7 L 56 8 L 58 6 L 60 8 L 62 10 L 64 12 L 66 14 L 68 15 L 70 17 L 72 20 L 73 22 L 75 24 L 76 27 L 77 30 L 78 33 L 78 36 L 77 38 L 76 40 L 75 43 L 74 45 L 72 48 L 70 50 L 68 52 L 66 54 L 64 56 L 62 58 L 60 60 L 58 62 L 56 64 L 54 66 L 52 68 L 50 70 L 48 72 L 47 74 L 46 76 L 44 78 L 42 80 L 40 82 L 39 84 L 38 86 L 37 84 L 36 82 L 35 80 L 33 76 L 31 72 L 29 68 L 27 64 L 25 60 L 23 56 L 21 52 L 19 48 L 18 44 L 16 40 L 15 36 L 16 32 L 17 28 L 19 24 L 22 20 L 25 16 L 28 13 L 30 11 Z"
+   674→   674→                    fill="rgba(16,185,129,0.05)"
+   675→   675→                    stroke="rgba(16,185,129,0.3)"
+   676→   676→                    strokeWidth="0.4"
+   677→   677→                    filter="url(#indiaGlow)"
+   678→   678→                  />
+   679→   679→
+   680→   680→                  <path
+   681→   681→                    d="M 50 82 L 52 80 L 53 82 L 53 85 L 52 87 L 50 88 L 49 86 L 49 84 Z"
+   682→   682→                    fill="rgba(16,185,129,0.03)"
+   683→   683→                    stroke="rgba(16,185,129,0.2)"
+   684→   684→                    strokeWidth="0.3"
+   685→   685→                  />
+   686→   686→
+   687→   687→                  {logisticsRoutes.map(([from, to], i) => {
+   688→   688→                    const cityFrom = logisticsCities[from]
+   689→   689→                    const cityTo = logisticsCities[to]
+   690→   690→                    return (
+   691→   691→                      <line
+   692→   692→                        key={`route-${i}`}
+   693→   693→                        x1={cityFrom.x}
+   694→   694→                        y1={cityFrom.y}
+   695→   695→                        x2={cityTo.x}
+   696→   696→                        y2={cityTo.y}
+   697→   697→                        stroke="url(#routeGradient)"
+   698→   698→                        strokeWidth="0.3"
+   699→   699→                        strokeDasharray="2 2"
+   700→   700→                        className="animate-route"
+   701→   701→                        style={{ animationDelay: `${i * 0.15}s` }}
+   702→   702→                      />
+   703→   703→                    )
+   704→   704→                  })}
+   705→   705→
+   706→   706→                  {logisticsCities.map((city, i) => (
+   707→   707→                    <g key={`city-${i}`}>
+   708→   708→                      <circle
+   709→   709→                        cx={city.x}
+   710→   710→                        cy={city.y}
+   711→   711→                        r={i < 8 ? '3' : '2.5'}
+   712→   712→                        fill="url(#cityGlow)"
+   713→   713→                        className="animate-pulse-green"
+   714→   714→                        style={{ animationDelay: `${i * 0.25}s` }}
+   715→   715→                      />
+   716→   716→                      <circle
+   717→   717→                        cx={city.x}
+   718→   718→                        cy={city.y}
+   719→   719→                        r={i < 8 ? '1' : '0.8'}
+   720→   720→                        fill="#10b981"
+   721→   721→                      />
+   722→   722→                      <text
+   723→   723→                        x={city.x}
+   724→   724→                        y={city.y - (i < 8 ? 3.5 : 3)}
+   725→   725→                        textAnchor="middle"
+   726→   726→                        fill={i < 8 ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.5)'}
+   727→   727→                        fontSize={i < 8 ? '2.5' : '2.2'}
+   728→   728→                        fontWeight={i < 8 ? '500' : '400'}
+   729→   729→                      >
+   730→   730→                        {city.name}
+   731→   731→                      </text>
+   732→   732→                    </g>
+   733→   733→                  ))}
+   734→   734→                </svg>
+   735→   735→              </div>
+   736→   736→
+   737→   737→              {/* Stats */}
+   738→   738→              <div className="lg:col-span-2 space-y-4">
+   739→   739→                <div className="glass-card p-5">
+   740→   740→                  <div className="flex items-center gap-4">
+   741→   741→                    <div className="w-12 h-12 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+   742→   742→                      <Clock className="w-6 h-6 text-emerald-400" />
+   743→   743→                    </div>
+   744→   744→                    <div>
+   745→   745→                      <p className="text-2xl font-bold text-foreground">2.4 Days</p>
+   746→   746→                      <p className="text-sm text-muted-foreground">Avg. Delivery Time</p>
+   747→   747→                    </div>
+   748→   748→                  </div>
+   749→   749→                </div>
+   750→   750→
+   751→   751→                <div className="glass-card p-5">
+   752→   752→                  <div className="flex items-center gap-4">
+   753→   753→                    <div className="w-12 h-12 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+   754→   754→                      <Truck className="w-6 h-6 text-amber-400" />
+   755→   755→                    </div>
+   756→   756→                    <div>
+   757→   757→                      <p className="text-2xl font-bold text-foreground">3,200+</p>
+   758→   758→                      <p className="text-sm text-muted-foreground">Active Transporters</p>
+   759→   759→                    </div>
+   760→   760→                  </div>
+   761→   761→                </div>
+   762→   762→
+   763→   763→                <div className="glass-card p-5">
+   764→   764→                  <div className="flex items-center gap-4">
+   765→   765→                    <div className="w-12 h-12 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+   766→   766→                      <Route className="w-6 h-6 text-emerald-400" />
+   767→   767→                    </div>
+   768→   768→                    <div>
+   769→   769→                      <p className="text-2xl font-bold text-foreground">840+</p>
+   770→   770→                      <p className="text-sm text-muted-foreground">Routes Covered</p>
+   771→   771→                    </div>
+   772→   772→                  </div>
+   773→   773→                </div>
+   774→   774→
+   775→   775→                <button
+   776→   776→                  onClick={() => setView('logistics')}
+   777→   777→                  className="w-full group px-5 py-3.5 text-sm font-semibold rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-2"
+   778→   778→                >
+   779→   779→                  Explore Logistics
+   780→   780→                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+   781→   781→                </button>
+   782→   782→              </div>
+   783→   783→            </div>
+   784→   784→          </div>
+   785→   785→        </motion.div>
+   786→   786→      </div>
+   787→   787→    </section>
+   788→   788→  )
+   789→   789→}
+   790→   790→
+   791→   791→// ─── Trust Section ───────────────────────────────────────────────────────────
+   792→   792→function TrustSection() {
+   793→   793→  const features = [
+   794→   794→    {
+   795→   795→      icon: Shield,
+   796→   796→      title: 'GST Verified Suppliers',
+   797→   797→      description: 'Every supplier is GST verified for transparent transactions. No unregistered traders.',
+   798→   798→      color: 'emerald',
+   799→   799→    },
+   800→   800→    {
+   801→   801→      icon: Package,
+   802→   802→      title: 'Escrow Payments',
+   803→   803→      description: 'Secure payments held in escrow until delivery confirmation. Your money, protected.',
+   804→   804→      color: 'amber',
+   805→   805→    },
+   806→   806→    {
+   807→   807→      icon: Star,
+   808→   808→      title: 'Quality Grading',
+   809→   809→      description: 'Standardized quality assessment for every listing. Know exactly what you are getting.',
+   810→   810→      color: 'emerald',
+   811→   811→    },
+   812→   812→  ]
+   813→   813→
+   814→   814→  return (
+   815→   815→    <section id="trust" className="relative min-h-screen py-16 lg:py-20 scroll-mt-20">
+   816→   816→      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+   817→   817→        <SectionHeader
+   818→   818→          badge="Built on Trust"
+   819→   819→          title="Enterprise-Grade Security"
+   820→   820→          subtitle="Every transaction is protected, every supplier is verified, every product is graded."
+   821→   821→        />
+   822→   822→
+   823→   823→        <motion.div
+   824→   824→          variants={staggerContainer}
+   825→   825→          initial="hidden"
+   826→   826→          whileInView="visible"
+   827→   827→          viewport={{ once: true, margin: '-100px' }}
+   828→   828→          className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12"
+   829→   829→        >
+   830→   830→          {features.map((feature, i) => {
+   831→   831→            const Icon = feature.icon
+   832→   832→            const isEmerald = feature.color === 'emerald'
+   833→   833→            return (
+   834→   834→              <motion.div
+   835→   835→                key={i}
+   836→   836→                variants={fadeUp}
+   837→   837→                className="glass-card p-8 hover:bg-white/[0.07] transition-all duration-300 group"
+   838→   838→              >
+   839→   839→                <div
+   840→   840→                  className={`w-14 h-14 rounded-2xl ${
+   841→   841→                    isEmerald ? 'bg-emerald-500/15' : 'bg-amber-500/15'
+   842→   842→                  } flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}
+   843→   843→                >
+   844→   844→                  <Icon
+   845→   845→                    className={`w-7 h-7 ${isEmerald ? 'text-emerald-400' : 'text-amber-400'}`}
+   846→   846→                  />
+   847→   847→                </div>
+   848→   848→                <h3 className="text-lg font-semibold text-foreground mb-3">{feature.title}</h3>
+   849→   849→                <p className="text-sm text-muted-foreground leading-relaxed">
+   850→   850→                  {feature.description}
+   851→   851→                </p>
+   852→   852→              </motion.div>
+   853→   853→            )
+   854→   854→          })}
+   855→   855→        </motion.div>
+   856→   856→      </div>
+   857→   857→    </section>
+   858→   858→  )
+   859→   859→}
+   860→   860→
+   861→   861→// ─── Footer ──────────────────────────────────────────────────────────────────
+   862→   862→function Footer() {
+   863→   863→  const setView = useAppStore((s) => s.setView)
+   864→   864→
+   865→   865→  return (
+   866→   866→    <footer className="relative border-t border-white/5 mt-auto">
+   867→   867→      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+   868→   868→        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
+   869→   869→          <div className="md:col-span-2">
+   870→   870→            <div className="flex items-center gap-2.5 mb-4">
+   871→   871→              <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+   872→   872→                <Leaf className="w-5 h-5 text-emerald-400" />
+   873→   873→              </div>
+   874→   874→              <span className="text-xl font-bold tracking-tight">
+   875→   875→                <span className="text-emerald-400">Agri</span>
+   876→   876→                <span className="text-foreground">Link</span>
+   877→   877→              </span>
+   878→   878→            </div>
+   879→   879→            <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
+   880→   880→              India&apos;s Agricultural Trade Infrastructure. Connecting producers, buyers, and
+   881→   881→              logistics across 28 states with transparent, verified, and secure trading.
+   882→   882→            </p>
+   883→   883→            <div className="flex items-center gap-3 mt-6">
+   884→   884→              {[Twitter, Linkedin, Github, Mail].map((Icon, i) => (
+   885→   885→                <button
+   886→   886→                  key={i}
+   887→   887→                  className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all"
+   888→   888→                >
+   889→   889→                  <Icon className="w-4 h-4" />
+   890→   890→                </button>
+   891→   891→              ))}
+   892→   892→            </div>
+   893→   893→          </div>
+   894→   894→
+   895→   895→          <div>
+   896→   896→            <h4 className="text-sm font-semibold text-foreground mb-4">Platform</h4>
+   897→   897→            <ul className="space-y-3">
+   898→   898→              {[
+   899→   899→                { label: 'Marketplace', view: 'marketplace' as const },
+   900→   900→                { label: 'Logistics', view: 'logistics' as const },
+   901→   901→                { label: 'About', view: 'landing' as const },
+   902→   902→              ].map((item) => (
+   903→   903→                <li key={item.label}>
+   904→   904→                  <button
+   905→   905→                    onClick={() => setView(item.view)}
+   906→   906→                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+   907→   907→                  >
+   908→   908→                    {item.label}
+   909→   909→                  </button>
+   910→   910→                </li>
+   911→   911→              ))}
+   912→   912→            </ul>
+   913→   913→          </div>
+   914→   914→
+   915→   915→          <div>
+   916→   916→            <h4 className="text-sm font-semibold text-foreground mb-4">Legal</h4>
+   917→   917→            <ul className="space-y-3">
+   918→   918→              {['Terms of Service', 'Privacy Policy', 'Contact Us'].map((item) => (
+   919→   919→                <li key={item}>
+   920→   920→                  <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+   921→   921→                    {item}
+   922→   922→                  </button>
+   923→   923→                </li>
+   924→   924→              ))}
+   925→   925→            </ul>
+   926→   926→          </div>
+   927→   927→        </div>
+   928→   928→
+   929→   929→        <div className="border-t border-white/5 mt-10 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+   930→   930→          <p className="text-xs text-muted-foreground">
+   931→   931→            &copy; {new Date().getFullYear()} AgriLink Technologies Pvt. Ltd. All rights reserved.
+   932→   932→          </p>
+   933→   933→          <p className="text-xs text-muted-foreground flex items-center gap-1">
+   934→   934→            Made with <Leaf className="w-3 h-3 text-emerald-400" /> in India
+   935→   935→          </p>
+   936→   936→        </div>
+   937→   937→      </div>
+   938→   938→    </footer>
+   939→   939→  )
+   940→   940→}
+   941→   941→
+   942→   942→// ─── Section Header ──────────────────────────────────────────────────────────
+   943→   943→function SectionHeader({
+   944→   944→  badge,
+   945→   945→  title,
+   946→   946→  subtitle,
+   947→   947→}: {
+   948→   948→  badge: string
+   949→   949→  title: string
+   950→   950→  subtitle: string
+   951→   951→}) {
+   952→   952→  return (
+   953→   953→    <div className="text-center max-w-2xl mx-auto">
+   954→   954→      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-6">
+   955→   955→        <Leaf className="w-3.5 h-3.5" />
+   956→   956→        <span>{badge}</span>
+   957→   957→      </div>
+   958→   958→      <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">{title}</h2>
+   959→   959→      <p className="text-muted-foreground mt-4 text-lg leading-relaxed">{subtitle}</p>
+   960→   960→    </div>
+   961→   961→  )
+   962→   962→}
+   963→   963→
+   964→   964→// ─── Main Landing Page ──────────────────────────────────────────────────────
+   965→   965→export function LandingPage() {
+   966→   966→  return (
+   967→   967→    <div className="min-h-screen flex flex-col bg-background">
+   968→   968→      <Navbar />
+   969→   969→      <main className="flex-1">
+   970→   970→        <HeroSection />
+   971→   971→        <MarketplacePreview />
+   972→   972→        <LogisticsSection />
+   973→   973→        <TrustSection />
+   974→   974→      </main>
+   975→   975→      <Footer />
+   976→   976→    </div>
+   977→   977→  )
+   978→   978→}
+   979→   979→

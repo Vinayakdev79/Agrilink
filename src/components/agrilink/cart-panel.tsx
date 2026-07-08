@@ -164,8 +164,11 @@ function CheckoutDialog({
               paymentStatus: 'advance_paid',
               status: 'confirmed',
               // V4 delivery handling
-              deliveryType: item.deliveryHandledByProducer ? 'producer' : 'platform',
+              deliveryType: item.deliveryType || (item.deliveryHandledByProducer ? 'producer' : 'platform'),
               deliveryFee: itemDeliveryFee,
+              localTransporterName: item.deliveryType === 'local' ? item.localTransporterName : undefined,
+              localTransporterPhone: item.deliveryType === 'local' ? item.localTransporterPhone : undefined,
+              localTransporterVehicle: item.deliveryType === 'local' ? item.localTransporterVehicle : undefined,
             }),
           })
         })
@@ -633,7 +636,12 @@ export function CartPanel() {
                             )}
                           </div>
                           {/* Delivery badge */}
-                          {item.deliveryHandledByProducer ? (
+                          {item.deliveryType === 'local' ? (
+                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-500/15 text-amber-400 border-amber-500/25">
+                              <Truck className="w-2.5 h-2.5" />
+                              Producer's Transporter
+                            </span>
+                          ) : item.deliveryHandledByProducer ? (
                             item.freeDelivery ? (
                               <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-500/15 text-amber-400 border-amber-500/25">
                                 <Truck className="w-2.5 h-2.5" />

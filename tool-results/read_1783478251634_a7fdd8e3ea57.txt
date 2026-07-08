@@ -1,0 +1,1500 @@
+     1→'use client'
+     2→
+     3→import { useAppStore } from '@/lib/store'
+     4→import { useEffect, useState, useCallback } from 'react'
+     5→import { motion, AnimatePresence } from 'framer-motion'
+     6→import {
+     7→  Users, Package, ShoppingCart, IndianRupee, ShieldCheck, Truck,
+     8→  TrendingUp, TrendingDown, Check, X, Eye, MessageSquare, Filter, Shield,
+     9→  BarChart3, CreditCard, Star, Clock, Wallet, ArrowUpRight, ArrowDownRight,
+    10→  Crown, Gem, Sparkles, CalendarDays, Tag, Receipt
+    11→} from 'lucide-react'
+    12→import { Button } from '@/components/ui/button'
+    13→import { Badge } from '@/components/ui/badge'
+    14→import { Skeleton } from '@/components/ui/skeleton'
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    16→import {
+    17→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    18→} from '@/components/ui/table'
+    19→import {
+    20→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+    21→} from '@/components/ui/dialog'
+    22→import {
+    23→  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid
+    24→} from 'recharts'
+    25→import { toast } from 'sonner'
+    26→
+    27→interface AdminDashboardProps {
+    28→  tab: string
+    29→}
+    30→
+    31→const orderStatusColors: Record<string, string> = {
+    32→  negotiating: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    33→  confirmed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    34→  shipped: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    35→  delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
+    36→  cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+    37→  disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    38→}
+    39→
+    40→const shipmentStatusColors: Record<string, string> = {
+    41→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    42→  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    43→  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    44→  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    45→  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    46→  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    47→}
+    48→
+    49→const verificationColors: Record<string, string> = {
+    50→  verified: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    51→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    52→  rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
+    53→}
+    54→
+    55→const roleColors: Record<string, string> = {
+    56→  producer: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    57→  buyer: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    58→  transporter: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    59→  admin: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    60→}
+    61→
+    62→const DONUT_COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4']
+    63→const BAR_COLORS = ['#10b981', '#f59e0b', '#14b8a6', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#a855f7']
+    64→
+    65→const REVENUE_TYPE_LABELS: Record<string, string> = {
+    66→  transaction_commission: 'Transaction Commission',
+    67→  transport_booking_fee: 'Transport Booking Fee',
+    68→  subscription: 'Subscription',
+    69→  logistics_commission: 'Logistics Commission',
+    70→  escrow_fee: 'Escrow Fee',
+    71→  sponsored_listing: 'Sponsored Listing',
+    72→}
+    73→
+    74→const REVENUE_TYPE_COLORS: Record<string, string> = {
+    75→  transaction_commission: '#10b981',
+    76→  transport_booking_fee: '#f59e0b',
+    77→  subscription: '#8b5cf6',
+    78→  logistics_commission: '#14b8a6',
+    79→  escrow_fee: '#3b82f6',
+    80→  sponsored_listing: '#f97316',
+    81→}
+    82→
+    83→const SUBSCRIPTION_TIERS = [
+    84→  { id: 'free', label: 'Free', price: '₹0', description: 'Default tier', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+    85→  { id: 'producer_premium_monthly', label: 'Producer Premium (Monthly)', price: '₹299/mo', description: 'Enhanced listing & analytics', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+    86→  { id: 'producer_premium_plus', label: 'Producer Premium+', price: '₹999/mo', description: 'Priority visibility & bulk tools', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+    87→  { id: 'producer_premium_annual', label: 'Producer Premium (Annual)', price: '₹4,999/yr', description: 'Best value for producers', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+    88→  { id: 'transporter_premium_monthly', label: 'Transporter Premium (Monthly)', price: '₹199/mo', description: 'Priority load matching', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
+    89→  { id: 'transporter_premium_plus', label: 'Transporter Premium+', price: '₹499/mo', description: 'Advanced logistics tools', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
+    90→]
+    91→
+    92→function StatCard({ icon, value, label, trend, trendUp, accentColor }: {
+    93→  icon: React.ReactNode; value: string; label: string; trend?: string; trendUp?: boolean; accentColor?: string
+    94→}) {
+    95→  return (
+    96→    <motion.div
+    97→      initial={{ opacity: 0, y: 20 }}
+    98→      animate={{ opacity: 1, y: 0 }}
+    99→      className="glass-card p-5 flex flex-col gap-3"
+   100→    >
+   101→      <div className="flex items-center justify-between">
+   102→        <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${accentColor || 'bg-purple-500/15 text-purple-400'}`}>
+   103→          {icon}
+   104→        </div>
+   105→        {trend && (
+   106→          <div className={`flex items-center gap-1 text-xs font-medium ${trendUp ? 'text-emerald-400' : 'text-red-400'}`}>
+   107→            {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+   108→            {trend}
+   109→          </div>
+   110→        )}
+   111→      </div>
+   112→      <div>
+   113→        <p className="text-2xl font-bold text-foreground">{value}</p>
+   114→        <p className="text-sm text-muted-foreground">{label}</p>
+   115→      </div>
+   116→    </motion.div>
+   117→  )
+   118→}
+   119→
+   120→export function AdminDashboard({ tab }: AdminDashboardProps) {
+   121→  const { user, setChatOpen, setActiveChatUser } = useAppStore()
+   122→  const [stats, setStats] = useState<any>(null)
+   123→  const [orders, setOrders] = useState<any[]>([])
+   124→  const [allOrders, setAllOrders] = useState<any[]>([])
+   125→  const [users, setUsers] = useState<any[]>([])
+   126→  const [shipments, setShipments] = useState<any[]>([])
+   127→  const [loading, setLoading] = useState(true)
+   128→  const [roleFilter, setRoleFilter] = useState<string>('all')
+   129→  const [verifFilter, setVerifFilter] = useState<string>('all')
+   130→
+   131→  // Revenue state
+   132→  const [revenueData, setRevenueData] = useState<any>(null)
+   133→  const [revenueLoading, setRevenueLoading] = useState(true)
+   134→  const [revenueTypeFilter, setRevenueTypeFilter] = useState<string>('all')
+   135→
+   136→  // Subscription state
+   137→  const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all')
+   138→  const [tierDialogOpen, setTierDialogOpen] = useState(false)
+   139→  const [selectedUser, setSelectedUser] = useState<any>(null)
+   140→  const [newTier, setNewTier] = useState<string>('free')
+   141→  const [tierUpdating, setTierUpdating] = useState(false)
+   142→
+   143→  // Sponsored state
+   144→  const [sponsorDialogOpen, setSponsorDialogOpen] = useState(false)
+   145→  const [sponsorUser, setSponsorUser] = useState<any>(null)
+   146→  const [sponsorExpiry, setSponsorExpiry] = useState<string>('')
+   147→  const [sponsorAmount, setSponsorAmount] = useState<string>('')
+   148→  const [sponsorUpdating, setSponsorUpdating] = useState(false)
+   149→
+   150→  const fetchData = useCallback(async () => {
+   151→    if (!user) return
+   152→    setLoading(true)
+   153→    try {
+   154→      const [statsRes, ordersRes, usersRes, shipmentsRes] = await Promise.all([
+   155→        fetch('/api/stats'),
+   156→        fetch(`/api/orders?userId=${user.id}&role=admin`),
+   157→        fetch('/api/users'),
+   158→        fetch('/api/shipments')
+   159→      ])
+   160→
+   161→      const statsData = await statsRes.json()
+   162→      const ordersData = await ordersRes.json()
+   163→      const usersData = await usersRes.json()
+   164→      const shipmentsData = await shipmentsRes.json()
+   165→
+   166→      if (statsData.realtime) setStats(statsData)
+   167→      if (ordersData.orders) {
+   168→        setAllOrders(ordersData.orders)
+   169→        setOrders(ordersData.orders)
+   170→      }
+   171→      if (usersData.users) setUsers(usersData.users)
+   172→      if (shipmentsData.shipments) setShipments(shipmentsData.shipments)
+   173→    } catch {
+   174→      toast.error('Failed to load admin data')
+   175→    } finally {
+   176→      setLoading(false)
+   177→    }
+   178→  }, [user])
+   179→
+   180→  const fetchRevenueData = useCallback(async () => {
+   181→    setRevenueLoading(true)
+   182→    try {
+   183→      const params = new URLSearchParams()
+   184→      if (revenueTypeFilter !== 'all') params.set('type', revenueTypeFilter)
+   185→      params.set('limit', '200')
+   186→      const res = await fetch(`/api/revenue?${params.toString()}`)
+   187→      const data = await res.json()
+   188→      setRevenueData(data)
+   189→    } catch {
+   190→      toast.error('Failed to load revenue data')
+   191→    } finally {
+   192→      setRevenueLoading(false)
+   193→    }
+   194→  }, [revenueTypeFilter])
+   195→
+   196→  useEffect(() => {
+   197→    fetchData()
+   198→  }, [fetchData])
+   199→
+   200→  useEffect(() => {
+   201→    fetchRevenueData()
+   202→  }, [fetchRevenueData])
+   203→
+   204→  const handleVerifyUser = async (userId: string, status: string) => {
+   205→    try {
+   206→      const res = await fetch('/api/users', {
+   207→        method: 'PATCH',
+   208→        headers: { 'Content-Type': 'application/json' },
+   209→        body: JSON.stringify({ userId, verificationStatus: status })
+   210→      })
+   211→      if (res.ok) {
+   212→        toast.success(`User ${status === 'verified' ? 'verified' : 'rejected'}`)
+   213→        fetchData()
+   214→      } else {
+   215→        toast.error('Failed to update user')
+   216→      }
+   217→    } catch {
+   218→      toast.error('Failed to update user')
+   219→    }
+   220→  }
+   221→
+   222→  const handleUpdateTier = async () => {
+   223→    if (!selectedUser) return
+   224→    setTierUpdating(true)
+   225→    try {
+   226→      const tierInfo = SUBSCRIPTION_TIERS.find(t => t.id === newTier)
+   227→      const res = await fetch('/api/users', {
+   228→        method: 'PATCH',
+   229→        headers: { 'Content-Type': 'application/json' },
+   230→        body: JSON.stringify({
+   231→          userId: selectedUser.id,
+   232→          subscriptionTier: newTier,
+   233→          subscriptionAmount: tierInfo?.price || null,
+   234→          subscriptionExpiry: newTier !== 'free' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+   235→        })
+   236→      })
+   237→      if (res.ok) {
+   238→        toast.success(`Subscription updated to ${tierInfo?.label || newTier}`)
+   239→        setTierDialogOpen(false)
+   240→        setSelectedUser(null)
+   241→        fetchData()
+   242→      } else {
+   243→        toast.error('Failed to update subscription')
+   244→      }
+   245→    } catch {
+   246→      toast.error('Failed to update subscription')
+   247→    } finally {
+   248→      setTierUpdating(false)
+   249→    }
+   250→  }
+   251→
+   252→  const handleUpdateSponsor = async () => {
+   253→    if (!sponsorUser) return
+   254→    setSponsorUpdating(true)
+   255→    try {
+   256→      const res = await fetch('/api/users', {
+   257→        method: 'PATCH',
+   258→        headers: { 'Content-Type': 'application/json' },
+   259→        body: JSON.stringify({
+   260→          userId: sponsorUser.id,
+   261→          isSponsored: true,
+   262→          sponsoredExpiry: sponsorExpiry || null,
+   263→          sponsoredAmount: sponsorAmount ? parseFloat(sponsorAmount) : null,
+   264→        })
+   265→      })
+   266→      if (res.ok) {
+   267→        toast.success(`${sponsorUser.name || 'User'} set as sponsored producer`)
+   268→        setSponsorDialogOpen(false)
+   269→        setSponsorUser(null)
+   270→        setSponsorExpiry('')
+   271→        setSponsorAmount('')
+   272→        fetchData()
+   273→      } else {
+   274→        toast.error('Failed to update sponsor status')
+   275→      }
+   276→    } catch {
+   277→      toast.error('Failed to update sponsor status')
+   278→    } finally {
+   279→      setSponsorUpdating(false)
+   280→    }
+   281→  }
+   282→
+   283→  const handleRemoveSponsor = async (userId: string) => {
+   284→    try {
+   285→      const res = await fetch('/api/users', {
+   286→        method: 'PATCH',
+   287→        headers: { 'Content-Type': 'application/json' },
+   288→        body: JSON.stringify({
+   289→          userId,
+   290→          isSponsored: false,
+   291→          sponsoredExpiry: null,
+   292→          sponsoredAmount: null,
+   293→        })
+   294→      })
+   295→      if (res.ok) {
+   296→        toast.success('Sponsored status removed')
+   297→        fetchData()
+   298→      } else {
+   299→        toast.error('Failed to remove sponsor status')
+   300→      }
+   301→    } catch {
+   302→      toast.error('Failed to remove sponsor status')
+   303→    }
+   304→  }
+   305→
+   306→  const pendingUsers = users.filter(u => u.verificationStatus === 'pending')
+   307→
+   308→  // Prepare chart data
+   309→  const orderStatusData = stats?.orderStatusStats?.map((s: any, i: number) => ({
+   310→    name: s.status, value: s._count.id, color: DONUT_COLORS[i % DONUT_COLORS.length]
+   311→  })) || []
+   312→
+   313→  const categoryData = stats?.categoryStats?.map((s: any, i: number) => ({
+   314→    category: s.category.charAt(0).toUpperCase() + s.category.slice(1),
+   315→    count: s._count.id,
+   316→    avgPrice: Math.round(s._avg.pricePerUnit || 0),
+   317→    color: BAR_COLORS[i % BAR_COLORS.length]
+   318→  })) || []
+   319→
+   320→  const filteredUsers = users.filter(u => {
+   321→    if (roleFilter !== 'all' && u.role !== roleFilter) return false
+   322→    if (verifFilter !== 'all' && u.verificationStatus !== verifFilter) return false
+   323→    return true
+   324→  })
+   325→
+   326→  // Revenue data helpers
+   327→  const revenueSummary = revenueData?.summary || {}
+   328→  const revenueRecords = revenueData?.records || []
+   329→  const totalByType = revenueSummary.totalByType || {}
+   330→
+   331→  const revenueChartData = Object.entries(totalByType).map(([type, amount]) => ({
+   332→    name: REVENUE_TYPE_LABELS[type] || type,
+   333→    value: amount as number,
+   334→    color: REVENUE_TYPE_COLORS[type] || '#6b7280',
+   335→  }))
+   336→
+   337→  const monthlyBreakdown = revenueSummary.monthlyBreakdown || {}
+   338→  const monthlyChartData = Object.entries(monthlyBreakdown)
+   339→    .sort(([a], [b]) => a.localeCompare(b))
+   340→    .slice(-6)
+   341→    .map(([month, data]: [string, any]) => ({
+   342→      month,
+   343→      total: data.total,
+   344→      count: data.count,
+   345→    }))
+   346→
+   347→  // Subscription helpers
+   348→  const subscriptionFilteredUsers = users.filter(u => {
+   349→    if (subscriptionFilter !== 'all') {
+   350→      if (subscriptionFilter === 'sponsored') return u.isSponsored
+   351→      if (subscriptionFilter === 'premium') return u.subscriptionTier && u.subscriptionTier !== 'free'
+   352→      return u.subscriptionTier === subscriptionFilter
+   353→    }
+   354→    return true
+   355→  })
+   356→
+   357→  const sponsoredUsers = users.filter(u => u.isSponsored)
+   358→
+   359→  const getTierBadge = (tier: string | undefined) => {
+   360→    if (!tier || tier === 'free') {
+   361→      return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 border text-xs">Free</Badge>
+   362→    }
+   363→    const tierInfo = SUBSCRIPTION_TIERS.find(t => t.id === tier)
+   364→    if (tier?.startsWith('producer')) {
+   365→      return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">{tierInfo?.label || tier}</Badge>
+   366→    }
+   367→    if (tier?.startsWith('transporter')) {
+   368→      return <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30 border text-xs">{tierInfo?.label || tier}</Badge>
+   369→    }
+   370→    return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 border text-xs">{tier}</Badge>
+   371→  }
+   372→
+   373→  // =================== OVERVIEW TAB ===================
+   374→  if (tab === 'overview') {
+   375→    return (
+   376→      <div className="space-y-6">
+   377→        {/* Stat cards - 6 cards */}
+   378→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   379→          <StatCard
+   380→            icon={<Users className="h-5 w-5" />}
+   381→            value={String(stats?.realtime?.totalUsers || 0)}
+   382→            label="Total Users"
+   383→            trend="+12%"
+   384→            trendUp
+   385→            accentColor="bg-purple-500/15 text-purple-400"
+   386→          />
+   387→          <StatCard
+   388→            icon={<Package className="h-5 w-5" />}
+   389→            value={String(stats?.realtime?.totalProducts || 0)}
+   390→            label="Products"
+   391→            trend="+8%"
+   392→            trendUp
+   393→            accentColor="bg-emerald-500/15 text-emerald-400"
+   394→          />
+   395→          <StatCard
+   396→            icon={<ShoppingCart className="h-5 w-5" />}
+   397→            value={String(stats?.realtime?.totalOrders || 0)}
+   398→            label="Orders"
+   399→            trend="+15%"
+   400→            trendUp
+   401→            accentColor="bg-amber-500/15 text-amber-400"
+   402→          />
+   403→          <StatCard
+   404→            icon={<IndianRupee className="h-5 w-5" />}
+   405→            value={`₹${((stats?.realtime?.totalRevenue || 0) / 1000).toFixed(0)}K`}
+   406→            label="Revenue"
+   407→            trend="+24%"
+   408→            trendUp
+   409→            accentColor="bg-teal-500/15 text-teal-400"
+   410→          />
+   411→          <StatCard
+   412→            icon={<ShieldCheck className="h-5 w-5" />}
+   413→            value={String(stats?.realtime?.verifiedUsers || 0)}
+   414→            label="Verified Users"
+   415→            trend="+5"
+   416→            trendUp
+   417→            accentColor="bg-green-500/15 text-green-400"
+   418→          />
+   419→          <StatCard
+   420→            icon={<Truck className="h-5 w-5" />}
+   421→            value={String(stats?.realtime?.totalShipments || 0)}
+   422→            label="Active Shipments"
+   423→            trend="+3"
+   424→            trendUp
+   425→            accentColor="bg-cyan-500/15 text-cyan-400"
+   426→          />
+   427→        </div>
+   428→
+   429→        {/* Charts row */}
+   430→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   431→          {/* Order status donut */}
+   432→          <div className="glass-card p-6">
+   433→            <h3 className="text-lg font-semibold text-foreground mb-4">Order Status Distribution</h3>
+   434→            {orderStatusData.length === 0 ? (
+   435→              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">No order data available</div>
+   436→            ) : (
+   437→              <>
+   438→                <div className="h-56">
+   439→                  <ResponsiveContainer width="100%" height="100%">
+   440→                    <PieChart>
+   441→                      <Pie
+   442→                        data={orderStatusData}
+   443→                        cx="50%"
+   444→                        cy="50%"
+   445→                        innerRadius={55}
+   446→                        outerRadius={85}
+   447→                        paddingAngle={3}
+   448→                        dataKey="value"
+   449→                      >
+   450→                        {orderStatusData.map((entry: any, index: number) => (
+   451→                          <Cell key={index} fill={entry.color} />
+   452→                        ))}
+   453→                      </Pie>
+   454→                      <Tooltip
+   455→                        contentStyle={{ backgroundColor: 'rgba(15,15,30,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+   456→                      />
+   457→                    </PieChart>
+   458→                  </ResponsiveContainer>
+   459→                </div>
+   460→                <div className="flex flex-wrap gap-3 mt-2 justify-center">
+   461→                  {orderStatusData.map((item: any) => (
+   462→                    <div key={item.name} className="flex items-center gap-2 text-xs">
+   463→                      <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+   464→                      <span className="text-muted-foreground capitalize">{item.name}</span>
+   465→                      <span className="text-foreground font-medium">{item.value}</span>
+   466→                    </div>
+   467→                  ))}
+   468→                </div>
+   469→              </>
+   470→            )}
+   471→          </div>
+   472→
+   473→          {/* Category distribution bar */}
+   474→          <div className="glass-card p-6">
+   475→            <h3 className="text-lg font-semibold text-foreground mb-4">Category Distribution</h3>
+   476→            {categoryData.length === 0 ? (
+   477→              <div className="h-56 flex items-center justify-center text-muted-foreground text-sm">No product data available</div>
+   478→            ) : (
+   479→              <div className="h-56">
+   480→                <ResponsiveContainer width="100%" height="100%">
+   481→                  <BarChart data={categoryData} layout="vertical">
+   482→                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+   483→                    <XAxis type="number" stroke="rgba(255,255,255,0.4)" fontSize={12} />
+   484→                    <YAxis type="category" dataKey="category" stroke="rgba(255,255,255,0.4)" fontSize={11} width={80} />
+   485→                    <Tooltip
+   486→                      contentStyle={{ backgroundColor: 'rgba(15,15,30,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+   487→                    />
+   488→                    <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+   489→                      {categoryData.map((entry: any, index: number) => (
+   490→                        <Cell key={index} fill={entry.color} />
+   491→                      ))}
+   492→                    </Bar>
+   493→                  </BarChart>
+   494→                </ResponsiveContainer>
+   495→              </div>
+   496→            )}
+   497→          </div>
+   498→        </div>
+   499→
+   500→        {/* Recent orders */}
+   501→        <div className="glass-card p-6">
+   502→          <div className="flex items-center justify-between mb-4">
+   503→            <h3 className="text-lg font-semibold text-foreground">Recent Orders</h3>
+   504→            <Button variant="ghost" size="sm" className="text-purple-400 hover:text-purple-300" onClick={() => useAppStore.getState().setDashboardTab('orders')}>
+   505→              View All
+   506→            </Button>
+   507→          </div>
+   508→          {loading ? (
+   509→            <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
+   510→          ) : allOrders.length === 0 ? (
+   511→            <p className="text-muted-foreground text-sm py-8 text-center">No orders yet</p>
+   512→          ) : (
+   513→            <Table>
+   514→              <TableHeader>
+   515→                <TableRow className="border-glass-border hover:bg-transparent">
+   516→                  <TableHead className="text-muted-foreground">Product</TableHead>
+   517→                  <TableHead className="text-muted-foreground">Buyer</TableHead>
+   518→                  <TableHead className="text-muted-foreground">Seller</TableHead>
+   519→                  <TableHead className="text-muted-foreground">Total</TableHead>
+   520→                  <TableHead className="text-muted-foreground">Status</TableHead>
+   521→                </TableRow>
+   522→              </TableHeader>
+   523→              <TableBody>
+   524→                {allOrders.slice(0, 6).map((order) => (
+   525→                  <TableRow key={order.id} className="border-glass-border">
+   526→                    <TableCell className="font-medium text-foreground">{order.product?.name || 'N/A'}</TableCell>
+   527→                    <TableCell className="text-muted-foreground">{order.buyer?.name || order.buyer?.companyName || 'N/A'}</TableCell>
+   528→                    <TableCell className="text-muted-foreground">{order.seller?.name || order.seller?.companyName || 'N/A'}</TableCell>
+   529→                    <TableCell className="text-amber-400 font-medium">₹{order.totalPrice?.toLocaleString()}</TableCell>
+   530→                    <TableCell>
+   531→                      <Badge className={`${orderStatusColors[order.status] || ''} border text-xs`}>
+   532→                        {order.status}
+   533→                      </Badge>
+   534→                    </TableCell>
+   535→                  </TableRow>
+   536→                ))}
+   537→              </TableBody>
+   538→            </Table>
+   539→          )}
+   540→        </div>
+   541→      </div>
+   542→    )
+   543→  }
+   544→
+   545→  // =================== REVENUE TAB ===================
+   546→  if (tab === 'revenue') {
+   547→    const totalRevenue = revenueSummary.totalRevenue || 0
+   548→    const monthlyRevenue = revenueSummary.monthlyRevenue || 0
+   549→    const transactionComm = totalByType.transaction_commission || 0
+   550→    const transportBooking = totalByType.transport_booking_fee || 0
+   551→    const subscriptionRev = totalByType.subscription || 0
+   552→    const sponsoredRev = totalByType.sponsored_listing || 0
+   553→    const escrowRev = totalByType.escrow_fee || 0
+   554→    const logisticsComm = totalByType.logistics_commission || 0
+   555→
+   556→    return (
+   557→      <div className="space-y-6">
+   558→        <div className="flex items-center justify-between flex-wrap gap-3">
+   559→          <h3 className="text-xl font-semibold text-foreground flex items-center gap-2">
+   560→            <BarChart3 className="h-5 w-5 text-emerald-400" />
+   561→            Revenue Dashboard
+   562→          </h3>
+   563→          <Select value={revenueTypeFilter} onValueChange={setRevenueTypeFilter}>
+   564→            <SelectTrigger className="glass-input text-foreground w-48 h-9 text-sm">
+   565→              <Filter className="h-3 w-3 mr-1" />
+   566→              <SelectValue placeholder="Filter type" />
+   567→            </SelectTrigger>
+   568→            <SelectContent>
+   569→              <SelectItem value="all">All Types</SelectItem>
+   570→              <SelectItem value="transaction_commission">Transaction Commission</SelectItem>
+   571→              <SelectItem value="transport_booking_fee">Transport Booking Fee</SelectItem>
+   572→              <SelectItem value="subscription">Subscription</SelectItem>
+   573→              <SelectItem value="logistics_commission">Logistics Commission</SelectItem>
+   574→              <SelectItem value="escrow_fee">Escrow Fee</SelectItem>
+   575→              <SelectItem value="sponsored_listing">Sponsored Listing</SelectItem>
+   576→            </SelectContent>
+   577→          </Select>
+   578→        </div>
+   579→
+   580→        {/* Revenue Overview Cards */}
+   581→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   582→          <StatCard
+   583→            icon={<IndianRupee className="h-5 w-5" />}
+   584→            value={`₹${totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   585→            label="Total Revenue (All Time)"
+   586→            accentColor="bg-emerald-500/15 text-emerald-400"
+   587→          />
+   588→          <StatCard
+   589→            icon={<TrendingUp className="h-5 w-5" />}
+   590→            value={`₹${monthlyRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   591→            label="Monthly Revenue"
+   592→            trend="Current Month"
+   593→            trendUp
+   594→            accentColor="bg-amber-500/15 text-amber-400"
+   595→          />
+   596→          <StatCard
+   597→            icon={<Receipt className="h-5 w-5" />}
+   598→            value={`₹${transactionComm.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   599→            label="Transaction Commission"
+   600→            accentColor="bg-teal-500/15 text-teal-400"
+   601→          />
+   602→          <StatCard
+   603→            icon={<Truck className="h-5 w-5" />}
+   604→            value={`₹${transportBooking.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   605→            label="Transport Booking Fee"
+   606→            accentColor="bg-cyan-500/15 text-cyan-400"
+   607→          />
+   608→          <StatCard
+   609→            icon={<Crown className="h-5 w-5" />}
+   610→            value={`₹${subscriptionRev.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   611→            label="Subscription Revenue"
+   612→            accentColor="bg-purple-500/15 text-purple-400"
+   613→          />
+   614→          <StatCard
+   615→            icon={<Sparkles className="h-5 w-5" />}
+   616→            value={`₹${sponsoredRev.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   617→            label="Sponsored Listing Revenue"
+   618→            accentColor="bg-orange-500/15 text-orange-400"
+   619→          />
+   620→          <StatCard
+   621→            icon={<Wallet className="h-5 w-5" />}
+   622→            value={`₹${escrowRev.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   623→            label="Escrow Fee Revenue"
+   624→            accentColor="bg-blue-500/15 text-blue-400"
+   625→          />
+   626→          <StatCard
+   627→            icon={<ArrowUpRight className="h-5 w-5" />}
+   628→            value={`₹${logisticsComm.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+   629→            label="Logistics Commission"
+   630→            accentColor="bg-green-500/15 text-green-400"
+   631→          />
+   632→        </div>
+   633→
+   634→        {/* Charts row */}
+   635→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   636→          {/* Revenue Breakdown Pie Chart */}
+   637→          <div className="glass-card p-6">
+   638→            <h3 className="text-lg font-semibold text-foreground mb-4">Revenue Breakdown by Type</h3>
+   639→            {revenueChartData.length === 0 ? (
+   640→              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+   641→                <div className="text-center">
+   642→                  <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-30" />
+   643→                  <p>No revenue data yet</p>
+   644→                  <p className="text-xs mt-1">Revenue entries will appear as orders are placed</p>
+   645→                </div>
+   646→              </div>
+   647→            ) : (
+   648→              <>
+   649→                <div className="h-56">
+   650→                  <ResponsiveContainer width="100%" height="100%">
+   651→                    <PieChart>
+   652→                      <Pie
+   653→                        data={revenueChartData}
+   654→                        cx="50%"
+   655→                        cy="50%"
+   656→                        innerRadius={55}
+   657→                        outerRadius={85}
+   658→                        paddingAngle={3}
+   659→                        dataKey="value"
+   660→                      >
+   661→                        {revenueChartData.map((entry: any, index: number) => (
+   662→                          <Cell key={index} fill={entry.color} />
+   663→                        ))}
+   664→                      </Pie>
+   665→                      <Tooltip
+   666→                        contentStyle={{ backgroundColor: 'rgba(15,15,30,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+   667→                        formatter={(value: number) => [`₹${value.toLocaleString('en-IN')}`, '']}
+   668→                      />
+   669→                    </PieChart>
+   670→                  </ResponsiveContainer>
+   671→                </div>
+   672→                <div className="flex flex-wrap gap-3 mt-2 justify-center">
+   673→                  {revenueChartData.map((item: any) => (
+   674→                    <div key={item.name} className="flex items-center gap-2 text-xs">
+   675→                      <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+   676→                      <span className="text-muted-foreground">{item.name}</span>
+   677→                      <span className="text-foreground font-medium">₹{item.value.toLocaleString('en-IN')}</span>
+   678→                    </div>
+   679→                  ))}
+   680→                </div>
+   681→              </>
+   682→            )}
+   683→          </div>
+   684→
+   685→          {/* Monthly Revenue Bar Chart */}
+   686→          <div className="glass-card p-6">
+   687→            <h3 className="text-lg font-semibold text-foreground mb-4">Monthly Revenue Trend</h3>
+   688→            {monthlyChartData.length === 0 ? (
+   689→              <div className="h-56 flex items-center justify-center text-muted-foreground text-sm">
+   690→                <div className="text-center">
+   691→                  <TrendingUp className="h-12 w-12 mx-auto mb-2 opacity-30" />
+   692→                  <p>No monthly data yet</p>
+   693→                </div>
+   694→              </div>
+   695→            ) : (
+   696→              <div className="h-56">
+   697→                <ResponsiveContainer width="100%" height="100%">
+   698→                  <BarChart data={monthlyChartData}>
+   699→                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+   700→                    <XAxis dataKey="month" stroke="rgba(255,255,255,0.4)" fontSize={12} />
+   701→                    <YAxis stroke="rgba(255,255,255,0.4)" fontSize={12} />
+   702→                    <Tooltip
+   703→                      contentStyle={{ backgroundColor: 'rgba(15,15,30,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+   704→                      formatter={(value: number) => [`₹${value.toLocaleString('en-IN')}`, 'Revenue']}
+   705→                    />
+   706→                    <Bar dataKey="total" fill="#10b981" radius={[6, 6, 0, 0]} />
+   707→                  </BarChart>
+   708→                </ResponsiveContainer>
+   709→              </div>
+   710→            )}
+   711→          </div>
+   712→        </div>
+   713→
+   714→        {/* Recent Revenue Entries */}
+   715→        <div className="glass-card p-6">
+   716→          <div className="flex items-center justify-between mb-4">
+   717→            <h3 className="text-lg font-semibold text-foreground">Recent Revenue Entries</h3>
+   718→            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
+   719→              {revenueRecords.length} records
+   720→            </Badge>
+   721→          </div>
+   722→          {revenueLoading ? (
+   723→            <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
+   724→          ) : revenueRecords.length === 0 ? (
+   725→            <div className="text-center py-12">
+   726→              <IndianRupee className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-30" />
+   727→              <p className="text-muted-foreground">No revenue entries yet</p>
+   728→              <p className="text-xs text-muted-foreground mt-1">Revenue will be recorded as orders are placed and subscriptions activated</p>
+   729→            </div>
+   730→          ) : (
+   731→            <div className="max-h-96 overflow-y-auto">
+   732→              <Table>
+   733→                <TableHeader>
+   734→                  <TableRow className="border-glass-border hover:bg-transparent">
+   735→                    <TableHead className="text-muted-foreground">Type</TableHead>
+   736→                    <TableHead className="text-muted-foreground">Amount</TableHead>
+   737→                    <TableHead className="text-muted-foreground">User/Order</TableHead>
+   738→                    <TableHead className="text-muted-foreground">Description</TableHead>
+   739→                    <TableHead className="text-muted-foreground">Date</TableHead>
+   740→                  </TableRow>
+   741→                </TableHeader>
+   742→                <TableBody>
+   743→                  {revenueRecords.map((record: any) => (
+   744→                    <TableRow key={record.id} className="border-glass-border">
+   745→                      <TableCell>
+   746→                        <Badge
+   747→                          className="border text-xs"
+   748→                          style={{
+   749→                            backgroundColor: `${REVENUE_TYPE_COLORS[record.type] || '#6b7280'}20`,
+   750→                            color: REVENUE_TYPE_COLORS[record.type] || '#6b7280',
+   751→                            borderColor: `${REVENUE_TYPE_COLORS[record.type] || '#6b7280'}30`,
+   752→                          }}
+   753→                        >
+   754→                          {REVENUE_TYPE_LABELS[record.type] || record.type}
+   755→                        </Badge>
+   756→                      </TableCell>
+   757→                      <TableCell className="text-emerald-400 font-medium">₹{(record.amount || 0).toLocaleString('en-IN')}</TableCell>
+   758→                      <TableCell className="text-muted-foreground text-xs">
+   759→                        {record.user?.name || record.user?.companyName || '—'}
+   760→                        {record.order && (
+   761→                          <span className="block text-[10px] opacity-60">
+   762→                            Order: {record.orderId?.slice(-8) || '—'}
+   763→                          </span>
+   764→                        )}
+   765→                      </TableCell>
+   766→                      <TableCell className="text-muted-foreground text-xs max-w-[200px] truncate">
+   767→                        {record.description || '—'}
+   768→                      </TableCell>
+   769→                      <TableCell className="text-muted-foreground text-xs">
+   770→                        {record.createdAt ? new Date(record.createdAt).toLocaleDateString('en-IN', {
+   771→                          day: '2-digit', month: 'short', year: 'numeric'
+   772→                        }) : '—'}
+   773→                      </TableCell>
+   774→                    </TableRow>
+   775→                  ))}
+   776→                </TableBody>
+   777→              </Table>
+   778→            </div>
+   779→          )}
+   780→        </div>
+   781→      </div>
+   782→    )
+   783→  }
+   784→
+   785→  // =================== SUBSCRIPTIONS TAB ===================
+   786→  if (tab === 'subscriptions') {
+   787→    return (
+   788→      <div className="space-y-6">
+   789→        <div className="flex items-center justify-between flex-wrap gap-3">
+   790→          <h3 className="text-xl font-semibold text-foreground flex items-center gap-2">
+   791→            <CreditCard className="h-5 w-5 text-purple-400" />
+   792→            Subscription & Sponsor Management
+   793→          </h3>
+   794→          <Select value={subscriptionFilter} onValueChange={setSubscriptionFilter}>
+   795→            <SelectTrigger className="glass-input text-foreground w-48 h-9 text-sm">
+   796→              <Filter className="h-3 w-3 mr-1" />
+   797→              <SelectValue placeholder="Filter" />
+   798→            </SelectTrigger>
+   799→            <SelectContent>
+   800→              <SelectItem value="all">All Users</SelectItem>
+   801→              <SelectItem value="free">Free Tier</SelectItem>
+   802→              <SelectItem value="premium">All Premium</SelectItem>
+   803→              <SelectItem value="producer_premium_monthly">Producer Premium</SelectItem>
+   804→              <SelectItem value="producer_premium_plus">Producer Premium+</SelectItem>
+   805→              <SelectItem value="producer_premium_annual">Producer Annual</SelectItem>
+   806→              <SelectItem value="transporter_premium_monthly">Transporter Premium</SelectItem>
+   807→              <SelectItem value="transporter_premium_plus">Transporter Premium+</SelectItem>
+   808→              <SelectItem value="sponsored">Sponsored</SelectItem>
+   809→            </SelectContent>
+   810→          </Select>
+   811→        </div>
+   812→
+   813→        {/* Subscription Tier Overview */}
+   814→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   815→          <StatCard
+   816→            icon={<Users className="h-5 w-5" />}
+   817→            value={String(users.filter(u => !u.subscriptionTier || u.subscriptionTier === 'free').length)}
+   818→            label="Free Tier Users"
+   819→            accentColor="bg-gray-500/15 text-gray-400"
+   820→          />
+   821→          <StatCard
+   822→            icon={<Crown className="h-5 w-5" />}
+   823→            value={String(users.filter(u => u.subscriptionTier?.startsWith('producer')).length)}
+   824→            label="Producer Premium"
+   825→            accentColor="bg-emerald-500/15 text-emerald-400"
+   826→          />
+   827→          <StatCard
+   828→            icon={<Gem className="h-5 w-5" />}
+   829→            value={String(users.filter(u => u.subscriptionTier?.startsWith('transporter')).length)}
+   830→            label="Transporter Premium"
+   831→            accentColor="bg-teal-500/15 text-teal-400"
+   832→          />
+   833→          <StatCard
+   834→            icon={<Sparkles className="h-5 w-5" />}
+   835→            value={String(sponsoredUsers.length)}
+   836→            label="Sponsored Producers"
+   837→            accentColor="bg-orange-500/15 text-orange-400"
+   838→          />
+   839→        </div>
+   840→
+   841→        {/* Sponsored Producers Section */}
+   842→        <div className="glass-card p-6">
+   843→          <div className="flex items-center justify-between mb-4">
+   844→            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+   845→              <Sparkles className="h-5 w-5 text-orange-400" />
+   846→              Sponsored Producers
+   847→            </h3>
+   848→            <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-xs">
+   849→              {sponsoredUsers.length} active
+   850→            </Badge>
+   851→          </div>
+   852→          {sponsoredUsers.length === 0 ? (
+   853→            <div className="text-center py-8">
+   854→              <Sparkles className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+   855→              <p className="text-muted-foreground text-sm">No sponsored producers yet</p>
+   856→              <p className="text-xs text-muted-foreground mt-1">Set any producer as sponsored from the users list below</p>
+   857→            </div>
+   858→          ) : (
+   859→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   860→              {sponsoredUsers.map((u: any, i: number) => {
+   861→                const isExpired = u.sponsoredExpiry && new Date(u.sponsoredExpiry) < new Date()
+   862→                return (
+   863→                  <motion.div
+   864→                    key={u.id}
+   865→                    initial={{ opacity: 0, y: 10 }}
+   866→                    animate={{ opacity: 1, y: 0 }}
+   867→                    transition={{ delay: i * 0.05 }}
+   868→                    className={`glass-card p-4 border ${isExpired ? 'border-red-500/30' : 'border-orange-500/20'}`}
+   869→                  >
+   870→                    <div className="flex items-start justify-between mb-2">
+   871→                      <div>
+   872→                        <h4 className="font-semibold text-foreground text-sm">{u.name || u.companyName || 'Unknown'}</h4>
+   873→                        <p className="text-xs text-muted-foreground">{u.email}</p>
+   874→                      </div>
+   875→                      {isExpired ? (
+   876→                        <Badge className="bg-red-500/20 text-red-400 border-red-500/30 border text-[10px]">Expired</Badge>
+   877→                      ) : (
+   878→                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px]">Active</Badge>
+   879→                      )}
+   880→                    </div>
+   881→                    <div className="space-y-1 text-xs text-muted-foreground">
+   882→                      {u.sponsoredAmount && (
+   883→                        <div className="flex items-center gap-1">
+   884→                          <Tag className="h-3 w-3" />
+   885→                          <span>₹{u.sponsoredAmount} paid</span>
+   886→                        </div>
+   887→                      )}
+   888→                      {u.sponsoredExpiry && (
+   889→                        <div className="flex items-center gap-1">
+   890→                          <CalendarDays className="h-3 w-3" />
+   891→                          <span>Expires: {new Date(u.sponsoredExpiry).toLocaleDateString('en-IN')}</span>
+   892→                        </div>
+   893→                      )}
+   894→                    </div>
+   895→                    <Button
+   896→                      size="sm"
+   897→                      variant="outline"
+   898→                      className="mt-3 w-full border-red-500/30 text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs h-7"
+   899→                      onClick={() => handleRemoveSponsor(u.id)}
+   900→                    >
+   901→                      <X className="h-3 w-3 mr-1" /> Remove Sponsor
+   902→                    </Button>
+   903→                  </motion.div>
+   904→                )
+   905→              })}
+   906→            </div>
+   907→          )}
+   908→        </div>
+   909→
+   910→        {/* All Users with Subscription Info */}
+   911→        <div className="glass-card p-6">
+   912→          <div className="flex items-center justify-between mb-4">
+   913→            <h3 className="text-lg font-semibold text-foreground">All Users - Subscription Status</h3>
+   914→            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 border text-xs">
+   915→              {subscriptionFilteredUsers.length} users
+   916→            </Badge>
+   917→          </div>
+   918→          {loading ? (
+   919→            <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
+   920→          ) : subscriptionFilteredUsers.length === 0 ? (
+   921→            <div className="text-center py-8">
+   922→              <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+   923→              <p className="text-muted-foreground text-sm">No users match the current filter</p>
+   924→            </div>
+   925→          ) : (
+   926→            <div className="max-h-[600px] overflow-y-auto">
+   927→              <Table>
+   928→                <TableHeader>
+   929→                  <TableRow className="border-glass-border hover:bg-transparent">
+   930→                    <TableHead className="text-muted-foreground">Name</TableHead>
+   931→                    <TableHead className="text-muted-foreground">Role</TableHead>
+   932→                    <TableHead className="text-muted-foreground">Tier</TableHead>
+   933→                    <TableHead className="text-muted-foreground">Expiry</TableHead>
+   934→                    <TableHead className="text-muted-foreground">Sponsored</TableHead>
+   935→                    <TableHead className="text-muted-foreground">Actions</TableHead>
+   936→                  </TableRow>
+   937→                </TableHeader>
+   938→                <TableBody>
+   939→                  {subscriptionFilteredUsers.map((u: any) => {
+   940→                    const isExpired = u.sponsoredExpiry && new Date(u.sponsoredExpiry) < new Date()
+   941→                    const subExpired = u.subscriptionExpiry && new Date(u.subscriptionExpiry) < new Date()
+   942→                    return (
+   943→                      <TableRow key={u.id} className="border-glass-border">
+   944→                        <TableCell className="font-medium text-foreground">
+   945→                          <div>
+   946→                            <p>{u.name || 'N/A'}</p>
+   947→                            <p className="text-xs text-muted-foreground">{u.email}</p>
+   948→                          </div>
+   949→                        </TableCell>
+   950→                        <TableCell>
+   951→                          <Badge className={`${roleColors[u.role] || ''} border text-xs capitalize`}>
+   952→                            {u.role}
+   953→                          </Badge>
+   954→                        </TableCell>
+   955→                        <TableCell>
+   956→                          <div className="flex flex-col gap-1">
+   957→                            {getTierBadge(u.subscriptionTier)}
+   958→                            {subExpired && (
+   959→                              <span className="text-[10px] text-red-400">Expired</span>
+   960→                            )}
+   961→                            {u.subscriptionAmount && (
+   962→                              <span className="text-[10px] text-muted-foreground">{u.subscriptionAmount}</span>
+   963→                            )}
+   964→                          </div>
+   965→                        </TableCell>
+   966→                        <TableCell className="text-muted-foreground text-xs">
+   967→                          {u.subscriptionExpiry
+   968→                            ? new Date(u.subscriptionExpiry).toLocaleDateString('en-IN')
+   969→                            : '—'}
+   970→                        </TableCell>
+   971→                        <TableCell>
+   972→                          {u.isSponsored ? (
+   973→                            <Badge className={`${isExpired ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-orange-500/20 text-orange-400 border-orange-500/30'} border text-xs`}>
+   974→                              {isExpired ? 'Expired' : 'Active'}
+   975→                            </Badge>
+   976→                          ) : (
+   977→                            <span className="text-muted-foreground text-xs">No</span>
+   978→                          )}
+   979→                        </TableCell>
+   980→                        <TableCell>
+   981→                          <div className="flex gap-1">
+   982→                            <Button
+   983→                              size="icon"
+   984→                              variant="ghost"
+   985→                              className="h-7 w-7 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10"
+   986→                              title="Change subscription tier"
+   987→                              onClick={() => {
+   988→                                setSelectedUser(u)
+   989→                                setNewTier(u.subscriptionTier || 'free')
+   990→                                setTierDialogOpen(true)
+   991→                              }}
+   992→                            >
+   993→                              <Crown className="h-3.5 w-3.5" />
+   994→                            </Button>
+   995→                            {u.role === 'producer' && (
+   996→                              <Button
+   997→                                size="icon"
+   998→                                variant="ghost"
+   999→                                className="h-7 w-7 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
+  1000→                                title="Set as sponsored"
+  1001→                                onClick={() => {
+  1002→                                  setSponsorUser(u)
+  1003→                                  setSponsorExpiry('')
+  1004→                                  setSponsorAmount('')
+  1005→                                  setSponsorDialogOpen(true)
+  1006→                                }}
+  1007→                              >
+  1008→                                <Sparkles className="h-3.5 w-3.5" />
+  1009→                              </Button>
+  1010→                            )}
+  1011→                          </div>
+  1012→                        </TableCell>
+  1013→                      </TableRow>
+  1014→                    )
+  1015→                  })}
+  1016→                </TableBody>
+  1017→              </Table>
+  1018→            </div>
+  1019→          )}
+  1020→        </div>
+  1021→
+  1022→        {/* Change Tier Dialog */}
+  1023→        <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
+  1024→          <DialogContent className="glass-card-strong border-glass-border max-w-md">
+  1025→            <DialogHeader>
+  1026→              <DialogTitle className="text-foreground flex items-center gap-2">
+  1027→                <Crown className="h-5 w-5 text-purple-400" />
+  1028→                Change Subscription Tier
+  1029→              </DialogTitle>
+  1030→            </DialogHeader>
+  1031→            {selectedUser && (
+  1032→              <div className="space-y-4 py-2">
+  1033→                <div className="glass-card p-3">
+  1034→                  <p className="text-foreground font-medium">{selectedUser.name || selectedUser.email}</p>
+  1035→                  <p className="text-xs text-muted-foreground">
+  1036→                    Current tier: <span className="text-foreground">{selectedUser.subscriptionTier || 'free'}</span>
+  1037→                  </p>
+  1038→                  <p className="text-xs text-muted-foreground capitalize">Role: {selectedUser.role}</p>
+  1039→                </div>
+  1040→                <div className="space-y-2">
+  1041→                  <label className="text-sm text-muted-foreground">Select New Tier</label>
+  1042→                  <Select value={newTier} onValueChange={setNewTier}>
+  1043→                    <SelectTrigger className="glass-input text-foreground w-full">
+  1044→                      <SelectValue />
+  1045→                    </SelectTrigger>
+  1046→                    <SelectContent>
+  1047→                      {SUBSCRIPTION_TIERS.map(tier => (
+  1048→                        <SelectItem key={tier.id} value={tier.id}>
+  1049→                          <div className="flex items-center gap-2">
+  1050→                            <span>{tier.label}</span>
+  1051→                            <span className="text-muted-foreground text-xs">({tier.price})</span>
+  1052→                          </div>
+  1053→                        </SelectItem>
+  1054→                      ))}
+  1055→                    </SelectContent>
+  1056→                  </Select>
+  1057→                </div>
+  1058→                {newTier !== 'free' && (
+  1059→                  <div className="glass-card p-3 border-purple-500/20">
+  1060→                    <p className="text-xs text-purple-400 font-medium">{SUBSCRIPTION_TIERS.find(t => t.id === newTier)?.label}</p>
+  1061→                    <p className="text-xs text-muted-foreground">{SUBSCRIPTION_TIERS.find(t => t.id === newTier)?.description}</p>
+  1062→                    <p className="text-sm text-foreground font-semibold mt-1">{SUBSCRIPTION_TIERS.find(t => t.id === newTier)?.price}</p>
+  1063→                  </div>
+  1064→                )}
+  1065→              </div>
+  1066→            )}
+  1067→            <DialogFooter className="gap-2">
+  1068→              <Button
+  1069→                variant="outline"
+  1070→                className="border-glass-border text-muted-foreground"
+  1071→                onClick={() => setTierDialogOpen(false)}
+  1072→              >
+  1073→                Cancel
+  1074→              </Button>
+  1075→              <Button
+  1076→                className="bg-purple-600 hover:bg-purple-500 gap-1"
+  1077→                onClick={handleUpdateTier}
+  1078→                disabled={tierUpdating}
+  1079→              >
+  1080→                {tierUpdating ? (
+  1081→                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1082→                ) : (
+  1083→                  <Crown className="h-4 w-4" />
+  1084→                )}
+  1085→                {tierUpdating ? 'Updating...' : 'Update Tier'}
+  1086→              </Button>
+  1087→            </DialogFooter>
+  1088→          </DialogContent>
+  1089→        </Dialog>
+  1090→
+  1091→        {/* Set Sponsor Dialog */}
+  1092→        <Dialog open={sponsorDialogOpen} onOpenChange={setSponsorDialogOpen}>
+  1093→          <DialogContent className="glass-card-strong border-glass-border max-w-md">
+  1094→            <DialogHeader>
+  1095→              <DialogTitle className="text-foreground flex items-center gap-2">
+  1096→                <Sparkles className="h-5 w-5 text-orange-400" />
+  1097→                Set as Sponsored Producer
+  1098→              </DialogTitle>
+  1099→            </DialogHeader>
+  1100→            {sponsorUser && (
+  1101→              <div className="space-y-4 py-2">
+  1102→                <div className="glass-card p-3">
+  1103→                  <p className="text-foreground font-medium">{sponsorUser.name || sponsorUser.email}</p>
+  1104→                  <p className="text-xs text-muted-foreground">{sponsorUser.companyName || 'No company'}</p>
+  1105→                  <p className="text-xs text-muted-foreground">
+  1106→                    Sponsored producers get higher marketplace visibility
+  1107→                  </p>
+  1108→                </div>
+  1109→                <div className="space-y-2">
+  1110→                  <label className="text-sm text-muted-foreground">Sponsor Amount (₹)</label>
+  1111→                  <Select value={sponsorAmount} onValueChange={setSponsorAmount}>
+  1112→                    <SelectTrigger className="glass-input text-foreground w-full">
+  1113→                      <SelectValue placeholder="Select amount" />
+  1114→                    </SelectTrigger>
+  1115→                    <SelectContent>
+  1116→                      <SelectItem value="50">₹50 - Basic Boost</SelectItem>
+  1117→                      <SelectItem value="200">₹200 - Standard</SelectItem>
+  1118→                      <SelectItem value="500">₹500 - Premium</SelectItem>
+  1119→                      <SelectItem value="1000">₹1000 - Featured</SelectItem>
+  1120→                    </SelectContent>
+  1121→                  </Select>
+  1122→                </div>
+  1123→                <div className="space-y-2">
+  1124→                  <label className="text-sm text-muted-foreground">Expiry Date</label>
+  1125→                  <input
+  1126→                    type="date"
+  1127→                    className="glass-input text-foreground w-full px-3 py-2 rounded-lg text-sm"
+  1128→                    value={sponsorExpiry}
+  1129→                    onChange={(e) => setSponsorExpiry(e.target.value)}
+  1130→                    min={new Date().toISOString().split('T')[0]}
+  1131→                  />
+  1132→                </div>
+  1133→              </div>
+  1134→            )}
+  1135→            <DialogFooter className="gap-2">
+  1136→              <Button
+  1137→                variant="outline"
+  1138→                className="border-glass-border text-muted-foreground"
+  1139→                onClick={() => setSponsorDialogOpen(false)}
+  1140→              >
+  1141→                Cancel
+  1142→              </Button>
+  1143→              <Button
+  1144→                className="bg-orange-600 hover:bg-orange-500 gap-1"
+  1145→                onClick={handleUpdateSponsor}
+  1146→                disabled={sponsorUpdating}
+  1147→              >
+  1148→                {sponsorUpdating ? (
+  1149→                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1150→                ) : (
+  1151→                  <Sparkles className="h-4 w-4" />
+  1152→                )}
+  1153→                {sponsorUpdating ? 'Setting...' : 'Set Sponsored'}
+  1154→              </Button>
+  1155→            </DialogFooter>
+  1156→          </DialogContent>
+  1157→        </Dialog>
+  1158→      </div>
+  1159→    )
+  1160→  }
+  1161→
+  1162→  // =================== USERS TAB ===================
+  1163→  if (tab === 'users') {
+  1164→    return (
+  1165→      <div className="space-y-6">
+  1166→        <div className="flex items-center justify-between flex-wrap gap-3">
+  1167→          <h3 className="text-xl font-semibold text-foreground">Users</h3>
+  1168→          <div className="flex items-center gap-3">
+  1169→            <Select value={roleFilter} onValueChange={setRoleFilter}>
+  1170→              <SelectTrigger className="glass-input text-foreground w-36 h-9 text-sm">
+  1171→                <Filter className="h-3 w-3 mr-1" />
+  1172→                <SelectValue placeholder="Role" />
+  1173→              </SelectTrigger>
+  1174→              <SelectContent>
+  1175→                <SelectItem value="all">All Roles</SelectItem>
+  1176→                <SelectItem value="producer">Producer</SelectItem>
+  1177→                <SelectItem value="buyer">Buyer</SelectItem>
+  1178→                <SelectItem value="transporter">Transporter</SelectItem>
+  1179→                <SelectItem value="admin">Admin</SelectItem>
+  1180→              </SelectContent>
+  1181→            </Select>
+  1182→            <Select value={verifFilter} onValueChange={setVerifFilter}>
+  1183→              <SelectTrigger className="glass-input text-foreground w-36 h-9 text-sm">
+  1184→                <SelectValue placeholder="Status" />
+  1185→              </SelectTrigger>
+  1186→              <SelectContent>
+  1187→                <SelectItem value="all">All Status</SelectItem>
+  1188→                <SelectItem value="verified">Verified</SelectItem>
+  1189→                <SelectItem value="pending">Pending</SelectItem>
+  1190→                <SelectItem value="rejected">Rejected</SelectItem>
+  1191→              </SelectContent>
+  1192→            </Select>
+  1193→          </div>
+  1194→        </div>
+  1195→
+  1196→        {loading ? (
+  1197→          <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+  1198→        ) : filteredUsers.length === 0 ? (
+  1199→          <div className="glass-card p-12 text-center">
+  1200→            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1201→            <p className="text-muted-foreground">No users found</p>
+  1202→          </div>
+  1203→        ) : (
+  1204→          <div className="glass-card overflow-hidden">
+  1205→            <Table>
+  1206→              <TableHeader>
+  1207→                <TableRow className="border-glass-border hover:bg-transparent">
+  1208→                  <TableHead className="text-muted-foreground">Name</TableHead>
+  1209→                  <TableHead className="text-muted-foreground">Email</TableHead>
+  1210→                  <TableHead className="text-muted-foreground">Role</TableHead>
+  1211→                  <TableHead className="text-muted-foreground">Company</TableHead>
+  1212→                  <TableHead className="text-muted-foreground">State</TableHead>
+  1213→                  <TableHead className="text-muted-foreground">Verification</TableHead>
+  1214→                  <TableHead className="text-muted-foreground">Joined</TableHead>
+  1215→                  <TableHead className="text-muted-foreground">Actions</TableHead>
+  1216→                </TableRow>
+  1217→              </TableHeader>
+  1218→              <TableBody>
+  1219→                {filteredUsers.map((u) => (
+  1220→                  <TableRow key={u.id} className="border-glass-border">
+  1221→                    <TableCell className="font-medium text-foreground">{u.name || 'N/A'}</TableCell>
+  1222→                    <TableCell className="text-muted-foreground text-xs">{u.email}</TableCell>
+  1223→                    <TableCell>
+  1224→                      <Badge className={`${roleColors[u.role] || ''} border text-xs capitalize`}>
+  1225→                        {u.role}
+  1226→                      </Badge>
+  1227→                    </TableCell>
+  1228→                    <TableCell className="text-muted-foreground text-sm">{u.companyName || '—'}</TableCell>
+  1229→                    <TableCell className="text-muted-foreground text-sm">{u.state || '—'}</TableCell>
+  1230→                    <TableCell>
+  1231→                      <Badge className={`${verificationColors[u.verificationStatus] || ''} border text-xs capitalize`}>
+  1232→                        {u.verificationStatus}
+  1233→                      </Badge>
+  1234→                    </TableCell>
+  1235→                    <TableCell className="text-muted-foreground text-xs">{new Date(u.createdAt).toLocaleDateString()}</TableCell>
+  1236→                    <TableCell>
+  1237→                      {u.verificationStatus === 'pending' && (
+  1238→                        <div className="flex gap-1">
+  1239→                          <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleVerifyUser(u.id, 'verified')}>
+  1240→                            <Check className="h-3.5 w-3.5" />
+  1241→                          </Button>
+  1242→                          <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => handleVerifyUser(u.id, 'rejected')}>
+  1243→                            <X className="h-3.5 w-3.5" />
+  1244→                          </Button>
+  1245→                        </div>
+  1246→                      )}
+  1247→                    </TableCell>
+  1248→                  </TableRow>
+  1249→                ))}
+  1250→              </TableBody>
+  1251→            </Table>
+  1252→          </div>
+  1253→        )}
+  1254→      </div>
+  1255→    )
+  1256→  }
+  1257→
+  1258→  // =================== VERIFICATION TAB ===================
+  1259→  if (tab === 'verification') {
+  1260→    return (
+  1261→      <div className="space-y-6">
+  1262→        <div className="flex items-center justify-between">
+  1263→          <h3 className="text-xl font-semibold text-foreground">Verification Requests</h3>
+  1264→          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 border text-xs">
+  1265→            {pendingUsers.length} pending
+  1266→          </Badge>
+  1267→        </div>
+  1268→
+  1269→        {pendingUsers.length === 0 ? (
+  1270→          <div className="glass-card p-12 text-center">
+  1271→            <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1272→            <p className="text-muted-foreground">No pending verification requests</p>
+  1273→          </div>
+  1274→        ) : (
+  1275→          <div className="space-y-4">
+  1276→            {pendingUsers.map((u, i) => (
+  1277→              <motion.div
+  1278→                key={u.id}
+  1279→                initial={{ opacity: 0, y: 15 }}
+  1280→                animate={{ opacity: 1, y: 0 }}
+  1281→                transition={{ delay: i * 0.05 }}
+  1282→                className="glass-card p-5 space-y-3"
+  1283→              >
+  1284→                <div className="flex items-start justify-between">
+  1285→                  <div>
+  1286→                    <h4 className="font-semibold text-foreground">{u.name || 'Unnamed User'}</h4>
+  1287→                    <p className="text-xs text-muted-foreground">{u.email}</p>
+  1288→                  </div>
+  1289→                  <Badge className={`${roleColors[u.role] || ''} border text-xs capitalize`}>{u.role}</Badge>
+  1290→                </div>
+  1291→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+  1292→                  <div>
+  1293→                    <p className="text-muted-foreground text-xs">Company</p>
+  1294→                    <p className="text-foreground">{u.companyName || '—'}</p>
+  1295→                  </div>
+  1296→                  <div>
+  1297→                    <p className="text-muted-foreground text-xs">GST</p>
+  1298→                    <p className="text-foreground">{u.gstNumber || '—'}</p>
+  1299→                  </div>
+  1300→                  <div>
+  1301→                    <p className="text-muted-foreground text-xs">State</p>
+  1302→                    <p className="text-foreground">{u.state || '—'}</p>
+  1303→                  </div>
+  1304→                  <div>
+  1305→                    <p className="text-muted-foreground text-xs">Joined</p>
+  1306→                    <p className="text-foreground text-xs">{new Date(u.createdAt).toLocaleDateString()}</p>
+  1307→                  </div>
+  1308→                </div>
+  1309→                <div className="pt-2 border-t border-glass-border flex gap-2">
+  1310→                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 gap-1 text-xs" onClick={() => handleVerifyUser(u.id, 'verified')}>
+  1311→                    <Check className="h-3 w-3" /> Approve
+  1312→                  </Button>
+  1313→                  <Button size="sm" variant="outline" className="border-red-500/30 text-red-400 hover:text-red-300 hover:bg-red-500/10 gap-1 text-xs" onClick={() => handleVerifyUser(u.id, 'rejected')}>
+  1314→                    <X className="h-3 w-3" /> Reject
+  1315→                  </Button>
+  1316→                </div>
+  1317→              </motion.div>
+  1318→            ))}
+  1319→          </div>
+  1320→        )}
+  1321→      </div>
+  1322→    )
+  1323→  }
+  1324→
+  1325→  // =================== ORDERS TAB ===================
+  1326→  if (tab === 'orders') {
+  1327→    return (
+  1328→      <div className="space-y-6">
+  1329→        <h3 className="text-xl font-semibold text-foreground">All Orders</h3>
+  1330→        {loading ? (
+  1331→          <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+  1332→        ) : allOrders.length === 0 ? (
+  1333→          <div className="glass-card p-12 text-center">
+  1334→            <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1335→            <p className="text-muted-foreground">No orders yet</p>
+  1336→          </div>
+  1337→        ) : (
+  1338→          <div className="glass-card overflow-hidden">
+  1339→            <Table>
+  1340→              <TableHeader>
+  1341→                <TableRow className="border-glass-border hover:bg-transparent">
+  1342→                  <TableHead className="text-muted-foreground">ID</TableHead>
+  1343→                  <TableHead className="text-muted-foreground">Product</TableHead>
+  1344→                  <TableHead className="text-muted-foreground">Buyer</TableHead>
+  1345→                  <TableHead className="text-muted-foreground">Seller</TableHead>
+  1346→                  <TableHead className="text-muted-foreground">Qty</TableHead>
+  1347→                  <TableHead className="text-muted-foreground">Total</TableHead>
+  1348→                  <TableHead className="text-muted-foreground">Date</TableHead>
+  1349→                  <TableHead className="text-muted-foreground">Status</TableHead>
+  1350→                </TableRow>
+  1351→              </TableHeader>
+  1352→              <TableBody>
+  1353→                {allOrders.map((order) => (
+  1354→                  <TableRow key={order.id} className="border-glass-border">
+  1355→                    <TableCell className="text-muted-foreground text-xs font-mono">{order.id.slice(-8)}</TableCell>
+  1356→                    <TableCell className="font-medium text-foreground">{order.product?.name || 'N/A'}</TableCell>
+  1357→                    <TableCell className="text-muted-foreground">{order.buyer?.name || order.buyer?.companyName || 'N/A'}</TableCell>
+  1358→                    <TableCell className="text-muted-foreground">{order.seller?.name || order.seller?.companyName || 'N/A'}</TableCell>
+  1359→                    <TableCell className="text-muted-foreground">{order.quantity} {order.product?.unit || ''}</TableCell>
+  1360→                    <TableCell className="text-amber-400 font-medium">₹{order.totalPrice?.toLocaleString()}</TableCell>
+  1361→                    <TableCell className="text-muted-foreground text-xs">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+  1362→                    <TableCell>
+  1363→                      <Badge className={`${orderStatusColors[order.status] || ''} border text-xs`}>
+  1364→                        {order.status}
+  1365→                      </Badge>
+  1366→                    </TableCell>
+  1367→                  </TableRow>
+  1368→                ))}
+  1369→              </TableBody>
+  1370→            </Table>
+  1371→          </div>
+  1372→        )}
+  1373→      </div>
+  1374→    )
+  1375→  }
+  1376→
+  1377→  // =================== SHIPMENTS TAB ===================
+  1378→  if (tab === 'shipments') {
+  1379→    return (
+  1380→      <div className="space-y-6">
+  1381→        <h3 className="text-xl font-semibold text-foreground">All Shipments</h3>
+  1382→        {loading ? (
+  1383→          <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+  1384→        ) : shipments.length === 0 ? (
+  1385→          <div className="glass-card p-12 text-center">
+  1386→            <Truck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1387→            <p className="text-muted-foreground">No shipments yet</p>
+  1388→          </div>
+  1389→        ) : (
+  1390→          <div className="space-y-3 max-h-[700px] overflow-y-auto">
+  1391→            {shipments.map((shipment, i) => (
+  1392→              <motion.div
+  1393→                key={shipment.id}
+  1394→                initial={{ opacity: 0, y: 10 }}
+  1395→                animate={{ opacity: 1, y: 0 }}
+  1396→                transition={{ delay: i * 0.03 }}
+  1397→                className="glass-card p-4 space-y-2"
+  1398→              >
+  1399→                <div className="flex items-start justify-between">
+  1400→                  <div>
+  1401→                    <h4 className="font-semibold text-foreground text-sm">
+  1402→                      {shipment.order?.product?.name || 'Shipment'} — {shipment.id.slice(-8)}
+  1403→                    </h4>
+  1404→                    <p className="text-xs text-muted-foreground">
+  1405→                      {shipment.transporter?.name || shipment.transporter?.companyName || 'Unassigned'}
+  1406→                    </p>
+  1407→                  </div>
+  1408→                  <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-xs`}>
+  1409→                    {shipment.status.replace('_', ' ')}
+  1410→                  </Badge>
+  1411→                </div>
+  1412→                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+  1413→                  <div>
+  1414→                    <p className="text-muted-foreground">Origin</p>
+  1415→                    <p className="text-foreground">{shipment.origin}</p>
+  1416→                  </div>
+  1417→                  <div>
+  1418→                    <p className="text-muted-foreground">Destination</p>
+  1419→                    <p className="text-foreground">{shipment.destination}</p>
+  1420→                  </div>
+  1421→                  <div>
+  1422→                    <p className="text-muted-foreground">Distance</p>
+  1423→                    <p className="text-foreground">{shipment.distance || '—'} km</p>
+  1424→                  </div>
+  1425→                  <div>
+  1426→                    <p className="text-muted-foreground">Bids</p>
+  1427→                    <p className="text-amber-400 font-medium">{shipment.transportBids?.length || 0}</p>
+  1428→                  </div>
+  1429→                  <div>
+  1430→                    <p className="text-muted-foreground">Created</p>
+  1431→                    <p className="text-foreground">{new Date(shipment.createdAt).toLocaleDateString()}</p>
+  1432→                  </div>
+  1433→                </div>
+  1434→              </motion.div>
+  1435→            ))}
+  1436→          </div>
+  1437→        )}
+  1438→      </div>
+  1439→    )
+  1440→  }
+  1441→
+  1442→  // =================== MESSAGES TAB ===================
+  1443→  if (tab === 'messages') {
+  1444→    const allParticipants: any[] = []
+  1445→    const seen = new Set<string>()
+  1446→    users.forEach(u => {
+  1447→      if (u.id !== user?.id && !seen.has(u.id)) {
+  1448→        seen.add(u.id)
+  1449→        allParticipants.push({ id: u.id, name: u.name || u.email, role: u.role })
+  1450→      }
+  1451→    })
+  1452→
+  1453→    return (
+  1454→      <div className="space-y-6">
+  1455→        <h3 className="text-xl font-semibold text-foreground">Messages</h3>
+  1456→        {allParticipants.length === 0 ? (
+  1457→          <div className="glass-card p-12 text-center">
+  1458→            <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1459→            <p className="text-muted-foreground">No users to message yet</p>
+  1460→          </div>
+  1461→        ) : (
+  1462→          <div className="space-y-2 max-h-[600px] overflow-y-auto">
+  1463→            {allParticipants.slice(0, 20).map((participant: any, i: number) => (
+  1464→              <motion.button
+  1465→                key={participant.id}
+  1466→                initial={{ opacity: 0, x: -20 }}
+  1467→                animate={{ opacity: 1, x: 0 }}
+  1468→                transition={{ delay: i * 0.03 }}
+  1469→                className="w-full glass-card p-4 flex items-center gap-4 hover:border-purple-500/30 transition-colors text-left"
+  1470→                onClick={() => { setActiveChatUser(participant.id); setChatOpen(true) }}
+  1471→              >
+  1472→                <div className="h-10 w-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-semibold text-sm">
+  1473→                  {participant.name.slice(0, 2).toUpperCase()}
+  1474→                </div>
+  1475→                <div className="flex-1 min-w-0">
+  1476→                  <p className="font-medium text-foreground truncate">{participant.name}</p>
+  1477→                  <p className="text-xs text-muted-foreground capitalize">{participant.role}</p>
+  1478→                </div>
+  1479→                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+  1480→              </motion.button>
+  1481→            ))}
+  1482→          </div>
+  1483→        )}
+  1484→      </div>
+  1485→    )
+  1486→  }
+  1487→
+  1488→  // =================== PROFILE TAB (Default) ===================
+  1489→  return (
+  1490→    <div className="glass-card p-6 text-center">
+  1491→      <Shield className="h-12 w-12 text-purple-400 mx-auto mb-4" />
+  1492→      <h3 className="text-xl font-semibold text-foreground mb-2">Profile Settings</h3>
+  1493→      <p className="text-muted-foreground mb-4">Manage your account details and verification status</p>
+  1494→      <Button className="bg-purple-600 hover:bg-purple-500 gap-2" onClick={() => useAppStore.getState().setView('profile')}>
+  1495→        <Shield className="h-4 w-4" /> Go to Profile
+  1496→      </Button>
+  1497→    </div>
+  1498→  )
+  1499→}
+  1500→

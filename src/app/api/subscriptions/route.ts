@@ -20,11 +20,23 @@ export async function GET(request: Request) {
     }
 
     // Fetch user's current subscription
-    const { data: user, error } = await supabase
+    // Try with V4 columns first, fallback without
+    let { data: user, error } = await supabase
       .from('User')
       .select('id, name, email, role, subscriptionTier, subscriptionStatus, subscriptionExpiry, subscriptionAmount, subscriptionStartedAt, isSponsored, sponsoredExpiry')
       .eq('id', userId)
       .maybeSingle()
+
+    if (error && (error.code === '42703' || error.message?.includes('does not exist'))) {
+      // V4 columns don't exist, try without them
+      const fallback = await supabase
+        .from('User')
+        .select('id, name, email, role, subscriptionTier, subscriptionExpiry, subscriptionAmount, isSponsored, sponsoredExpiry')
+        .eq('id', userId)
+        .maybeSingle()
+      user = fallback.data
+      error = fallback.error
+    }
 
     if (error) {
       console.error('Subscription fetch error:', error)

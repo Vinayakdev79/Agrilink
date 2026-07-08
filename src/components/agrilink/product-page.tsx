@@ -34,6 +34,7 @@ import {
   BadgeCheck,
   Eye,
   TrendingUp,
+  Phone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -84,6 +85,10 @@ interface Product {
   deliveryHandledByProducer?: boolean
   deliveryFee?: number
   freeDelivery?: boolean
+  deliveryType?: 'platform' | 'producer' | 'local'
+  localTransporterName?: string
+  localTransporterPhone?: string
+  localTransporterVehicle?: string
 }
 
 interface ProducerInfo {
@@ -731,6 +736,10 @@ export function ProductPage() {
       deliveryHandledByProducer: product.deliveryHandledByProducer || false,
       deliveryFee: product.deliveryFee || 0,
       freeDelivery: product.freeDelivery || false,
+      deliveryType: product.deliveryType || 'platform',
+      localTransporterName: product.localTransporterName || '',
+      localTransporterPhone: product.localTransporterPhone || '',
+      localTransporterVehicle: product.localTransporterVehicle || '',
     })
     toast.success(`${product.name} added to cart`)
   }, [user, product, orderQty, addToCart, setView])
@@ -764,6 +773,10 @@ export function ProductPage() {
       deliveryHandledByProducer: p.deliveryHandledByProducer || false,
       deliveryFee: p.deliveryFee || 0,
       freeDelivery: p.freeDelivery || false,
+      deliveryType: p.deliveryType || 'platform',
+      localTransporterName: p.localTransporterName || '',
+      localTransporterPhone: p.localTransporterPhone || '',
+      localTransporterVehicle: p.localTransporterVehicle || '',
     })
     toast.success(`${p.name} added to cart`)
   }, [user, addToCart, setView])
@@ -1102,21 +1115,66 @@ export function ProductPage() {
 
             {/* Delivery Options Card - V4 */}
             <div className={`glass-card p-4 space-y-2 border ${
-              product.deliveryHandledByProducer
-                ? product.freeDelivery
-                  ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
-                  : 'border-teal-500/30 bg-teal-500/[0.04]'
-                : 'border-sky-500/20 bg-sky-500/[0.03]'
+              product.deliveryType === 'local'
+                ? 'border-amber-500/30 bg-amber-500/[0.04]'
+                : product.deliveryHandledByProducer
+                  ? product.freeDelivery
+                    ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+                    : 'border-teal-500/30 bg-teal-500/[0.04]'
+                  : 'border-sky-500/20 bg-sky-500/[0.03]'
             }`}>
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Truck className={`w-4 h-4 ${
-                  product.deliveryHandledByProducer
-                    ? product.freeDelivery ? 'text-emerald-400' : 'text-teal-400'
-                    : 'text-sky-400'
+                  product.deliveryType === 'local'
+                    ? 'text-amber-400'
+                    : product.deliveryHandledByProducer
+                      ? product.freeDelivery ? 'text-emerald-400' : 'text-teal-400'
+                      : 'text-sky-400'
                 }`} />
                 Delivery Options
               </h3>
-              {product.deliveryHandledByProducer ? (
+              {product.deliveryType === 'local' ? (
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">🚚</span>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-400">Delivery: Producer's Transporter</p>
+                      <p className="text-[11px] text-muted-foreground">The producer will assign their own local transporter to deliver this order.</p>
+                    </div>
+                  </div>
+                  {product.localTransporterName && (
+                    <div className="glass-card p-3 border border-amber-500/15 mt-2">
+                      <p className="text-[10px] text-muted-foreground mb-1.5">Transporter Details</p>
+                      <div className="grid grid-cols-1 gap-1.5 text-xs">
+                        {product.localTransporterName && (
+                          <div className="flex items-center gap-2">
+                            <User className="h-3 w-3 text-amber-400" />
+                            <span className="text-foreground font-medium">{product.localTransporterName}</span>
+                          </div>
+                        )}
+                        {product.localTransporterPhone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3 w-3 text-amber-400" />
+                            <a href={`tel:${product.localTransporterPhone}`} className="text-foreground font-medium hover:text-amber-400 transition-colors">{product.localTransporterPhone}</a>
+                          </div>
+                        )}
+                        {product.localTransporterVehicle && (
+                          <div className="flex items-center gap-2">
+                            <Truck className="h-3 w-3 text-amber-400" />
+                            <span className="text-foreground font-medium">{product.localTransporterVehicle}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {(product.deliveryFee || 0) > 0 && !product.freeDelivery && (
+                    <p className="text-[11px] text-muted-foreground">Delivery fee: ₹{(product.deliveryFee || 0).toLocaleString('en-IN')}</p>
+                  )}
+                  {product.freeDelivery && (
+                    <p className="text-[11px] text-emerald-400">Free delivery</p>
+                  )}
+                </div>
+              ) : product.deliveryHandledByProducer ? (
                 product.freeDelivery ? (
                   <div className="flex items-start gap-2">
                     <span className="text-base">🚚</span>

@@ -1,0 +1,1628 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { useAppStore } from '@/lib/store'
+     6→import { computePlatformFee } from '@/lib/razorpay'
+     7→import { toast } from 'sonner'
+     8→import {
+     9→  ArrowLeft,
+    10→  MapPin,
+    11→  IndianRupee,
+    12→  MessageSquare,
+    13→  Share2,
+    14→  Star,
+    15→  Leaf,
+    16→  Package,
+    17→  Truck,
+    18→  Clock,
+    19→  Droplets,
+    20→  ThermometerSun,
+    21→  Calendar,
+    22→  Award,
+    23→  CheckCircle2,
+    24→  XCircle,
+    25→  Minus,
+    26→  Plus,
+    27→  ShoppingCart,
+    28→  ChevronRight,
+    29→  Sprout,
+    30→  Send,
+    31→  AlertTriangle,
+    32→  Info,
+    33→  User,
+    34→  BadgeCheck,
+    35→  Eye,
+    36→  TrendingUp,
+    37→} from 'lucide-react'
+    38→import { Button } from '@/components/ui/button'
+    39→import { Input } from '@/components/ui/input'
+    40→import { Badge } from '@/components/ui/badge'
+    41→import { Label } from '@/components/ui/label'
+    42→import { Separator } from '@/components/ui/separator'
+    43→import { Skeleton } from '@/components/ui/skeleton'
+    44→import { Textarea } from '@/components/ui/textarea'
+    45→
+    46→// ─── Types ────────────────────────────────────────────────────────────────────
+    47→interface Seller {
+    48→  id: string
+    49→  name: string
+    50→  companyName?: string
+    51→  verificationStatus: string
+    52→  state?: string
+    53→  city?: string
+    54→}
+    55→
+    56→interface Product {
+    57→  id: string
+    58→  sellerId: string
+    59→  category: string
+    60→  name: string
+    61→  description?: string
+    62→  quantity: number
+    63→  unit: string
+    64→  pricePerUnit: number
+    65→  minOrderQty?: number
+    66→  location: string
+    67→  state?: string
+    68→  qualityGrade?: string
+    69→  images?: string
+    70→  imageUrl?: string
+    71→  harvestDate?: string
+    72→  freshness?: string
+    73→  cropVariety?: string
+    74→  isOrganic?: boolean
+    75→  pesticidesUsed?: string
+    76→  moistureContent?: string
+    77→  shelfLife?: string
+    78→  storageCondition?: string
+    79→  certifications?: string
+    80→  isActive: boolean
+    81→  createdAt: string
+    82→  seller: Seller
+    83→  // V4 delivery handling
+    84→  deliveryHandledByProducer?: boolean
+    85→  deliveryFee?: number
+    86→  freeDelivery?: boolean
+    87→}
+    88→
+    89→interface ProducerInfo {
+    90→  id: string
+    91→  name: string
+    92→  email: string
+    93→  role: string
+    94→  companyName?: string
+    95→  phone?: string
+    96→  state?: string
+    97→  city?: string
+    98→  verificationStatus: string
+    99→  farmName?: string
+   100→  farmSize?: string
+   101→  farmLocation?: string
+   102→  yearsExperience?: number
+   103→  certifications?: string
+   104→  totalTransactions?: number
+   105→  avgRating?: number
+   106→  totalReviews?: number
+   107→}
+   108→
+   109→interface Review {
+   110→  id: string
+   111→  reviewerId: string
+   112→  targetId: string
+   113→  productId?: string
+   114→  rating: number
+   115→  comment?: string
+   116→  createdAt: string
+   117→  reviewer?: { name: string; companyName?: string }
+   118→}
+   119→
+   120→// ─── Constants ────────────────────────────────────────────────────────────────
+   121→const CATEGORY_COLORS: Record<string, string> = {
+   122→  grains: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+   123→  vegetables: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+   124→  fruits: 'bg-rose-500/15 text-rose-400 border-rose-500/25',
+   125→  spices: 'bg-orange-500/15 text-orange-400 border-orange-500/25',
+   126→  dairy: 'bg-sky-500/15 text-sky-400 border-sky-500/25',
+   127→  poultry: 'bg-lime-500/15 text-lime-400 border-lime-500/25',
+   128→  pulses: 'bg-violet-500/15 text-violet-400 border-violet-500/25',
+   129→  oilseeds: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
+   130→}
+   131→
+   132→const GRADE_COLORS: Record<string, string> = {
+   133→  A: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+   134→  B: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+   135→  C: 'bg-red-500/15 text-red-400 border-red-500/25',
+   136→}
+   137→
+   138→const CATEGORY_GRADIENTS: Record<string, string> = {
+   139→  grains: 'from-amber-900/40 to-amber-700/20',
+   140→  vegetables: 'from-emerald-900/40 to-emerald-700/20',
+   141→  fruits: 'from-rose-900/40 to-rose-700/20',
+   142→  spices: 'from-orange-900/40 to-orange-700/20',
+   143→  dairy: 'from-sky-900/40 to-sky-700/20',
+   144→  poultry: 'from-lime-900/40 to-lime-700/20',
+   145→  pulses: 'from-violet-900/40 to-violet-700/20',
+   146→  oilseeds: 'from-yellow-900/40 to-yellow-700/20',
+   147→}
+   148→
+   149→const CATEGORY_ICONS: Record<string, string> = {
+   150→  grains: '🌾',
+   151→  vegetables: '🥬',
+   152→  fruits: '🥭',
+   153→  spices: '🌶️',
+   154→  dairy: '🥛',
+   155→  poultry: '🍗',
+   156→  pulses: '🫘',
+   157→  oilseeds: '🌻',
+   158→}
+   159→
+   160→const TRANSPORT_ESTIMATE_RATE = 0.035 // 3.5%
+   161→const PLATFORM_FEE_RATE = 0.02 // 2%
+   162→
+   163→// ─── Animation Variants ───────────────────────────────────────────────────────
+   164→const fadeUp = {
+   165→  hidden: { opacity: 0, y: 24 },
+   166→  visible: {
+   167→    opacity: 1,
+   168→    y: 0,
+   169→    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+   170→  },
+   171→}
+   172→
+   173→const staggerContainer = {
+   174→  hidden: { opacity: 0 },
+   175→  visible: {
+   176→    opacity: 1,
+   177→    transition: { staggerChildren: 0.08, delayChildren: 0.1 },
+   178→  },
+   179→}
+   180→
+   181→// ─── Stock Bar Component ──────────────────────────────────────────────────────
+   182→function StockBar({ quantity, maxRef = 500 }: { quantity: number; maxRef?: number }) {
+   183→  const pct = Math.min(100, (quantity / maxRef) * 100)
+   184→  const barColor = quantity < 10 ? 'bg-red-400' : quantity < 50 ? 'bg-amber-400' : 'bg-emerald-400'
+   185→  const glowColor = quantity < 10 ? 'shadow-red-400/40' : quantity < 50 ? 'shadow-amber-400/40' : 'shadow-emerald-400/40'
+   186→  return (
+   187→    <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+   188→      <motion.div
+   189→        initial={{ width: 0 }}
+   190→        animate={{ width: `${pct}%` }}
+   191→        transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+   192→        className={`h-full rounded-full ${barColor} shadow-sm ${glowColor}`}
+   193→      />
+   194→    </div>
+   195→  )
+   196→}
+   197→
+   198→// ─── Star Rating Display ──────────────────────────────────────────────────────
+   199→function StarRating({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' | 'lg' }) {
+   200→  const sizeClass = size === 'lg' ? 'w-5 h-5' : size === 'md' ? 'w-4 h-4' : 'w-3.5 h-3.5'
+   201→  return (
+   202→    <div className="flex items-center gap-0.5">
+   203→      {[1, 2, 3, 4, 5].map((star) => (
+   204→        <Star
+   205→          key={star}
+   206→          className={`${sizeClass} ${
+   207→            star <= Math.round(rating)
+   208→              ? 'text-amber-400 fill-amber-400'
+   209→              : 'text-muted-foreground/30'
+   210→          }`}
+   211→        />
+   212→      ))}
+   213→    </div>
+   214→  )
+   215→}
+   216→
+   217→// ─── Interactive Star Rating (for review form) ────────────────────────────────
+   218→function InteractiveStarRating({ value, onChange }: { value: number; onChange: (val: number) => void }) {
+   219→  const [hover, setHover] = useState(0)
+   220→  return (
+   221→    <div className="flex items-center gap-1">
+   222→      {[1, 2, 3, 4, 5].map((star) => (
+   223→        <button
+   224→          key={star}
+   225→          type="button"
+   226→          onClick={() => onChange(star)}
+   227→          onMouseEnter={() => setHover(star)}
+   228→          onMouseLeave={() => setHover(0)}
+   229→          className="transition-transform hover:scale-110"
+   230→        >
+   231→          <Star
+   232→            className={`w-6 h-6 ${
+   233→              star <= (hover || value)
+   234→                ? 'text-amber-400 fill-amber-400'
+   235→                : 'text-muted-foreground/30'
+   236→            } transition-colors`}
+   237→          />
+   238→        </button>
+   239→      ))}
+   240→      {value > 0 && (
+   241→        <span className="text-sm text-muted-foreground ml-2">{value}/5</span>
+   242→      )}
+   243→    </div>
+   244→  )
+   245→}
+   246→
+   247→// ─── Loading Skeleton ─────────────────────────────────────────────────────────
+   248→function ProductPageSkeleton() {
+   249→  return (
+   250→    <div className="min-h-screen bg-background">
+   251→      <div className="sticky top-0 z-40 glass-card-strong mx-4 sm:mx-6 mt-4 px-4 sm:px-6 py-3 flex items-center gap-4">
+   252→        <Skeleton className="h-8 w-8 rounded-lg" />
+   253→        <Skeleton className="h-5 w-40 rounded-lg" />
+   254→        <div className="flex-1" />
+   255→        <Skeleton className="h-8 w-8 rounded-lg" />
+   256→        <Skeleton className="h-8 w-8 rounded-lg" />
+   257→      </div>
+   258→      <div className="px-4 sm:px-6 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+   259→        <div className="glass-card p-4">
+   260→          <Skeleton className="aspect-square w-full rounded-xl" />
+   261→          <div className="flex gap-2 mt-3">
+   262→            {[1, 2, 3, 4].map((i) => (
+   263→              <Skeleton key={i} className="h-16 w-16 rounded-lg" />
+   264→            ))}
+   265→          </div>
+   266→        </div>
+   267→        <div className="space-y-4">
+   268→          <Skeleton className="h-8 w-3/4 rounded-lg" />
+   269→          <Skeleton className="h-10 w-40 rounded-lg" />
+   270→          <Skeleton className="h-140 w-full rounded-xl" />
+   271→          <Skeleton className="h-32 w-full rounded-xl" />
+   272→          <Skeleton className="h-24 w-full rounded-xl" />
+   273→        </div>
+   274→      </div>
+   275→    </div>
+   276→  )
+   277→}
+   278→
+   279→// ─── Similar Product Card (Redesigned) ────────────────────────────────────────
+   280→function SimilarProductCard({ product, onClick, onAddToCart }: { product: Product; onClick: () => void; onAddToCart: () => void }) {
+   281→  const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   282→  const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
+   283→  const emoji = CATEGORY_ICONS[product.category] || '📦'
+   284→  const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+   285→  const isLowStock = product.quantity < 10
+   286→  const isVerified = product.seller.verificationStatus === 'verified'
+   287→
+   288→  return (
+   289→    <motion.div
+   290→      whileHover={{ y: -6, scale: 1.02 }}
+   291→      transition={{ duration: 0.25, ease: 'easeOut' }}
+   292→      className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer group relative"
+   293→    >
+   294→      {/* Hover glow effect */}
+   295→      <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-emerald-500/[0.07] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+   296→
+   297→      {/* Image Area */}
+   298→      <div className="aspect-[4/3] relative overflow-hidden" onClick={onClick}>
+   299→        {productImage ? (
+   300→          <img
+   301→            src={productImage}
+   302→            alt={product.name}
+   303→            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+   304→            onError={(e) => {
+   305→              (e.target as HTMLImageElement).style.display = 'none'
+   306→              const parent = (e.target as HTMLImageElement).parentElement
+   307→              if (parent) {
+   308→                const fallback = parent.querySelector('.img-fallback') as HTMLElement
+   309→                if (fallback) fallback.style.display = 'flex'
+   310→              }
+   311→            }}
+   312→          />
+   313→        ) : null}
+   314→        <div className={`img-fallback w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center ${productImage ? 'hidden' : ''}`}>
+   315→          <span className="text-5xl drop-shadow-lg">{emoji}</span>
+   316→        </div>
+   317→
+   318→        {/* Overlay gradient at bottom */}
+   319→        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+   320→
+   321→        {/* Category Badge */}
+   322→        <span className={`absolute top-2.5 left-2.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg border backdrop-blur-md ${catColor}`}>
+   323→          {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+   324→        </span>
+   325→
+   326→        {/* Quality Grade */}
+   327→        {product.qualityGrade && (
+   328→          <span className={`absolute top-2.5 right-2.5 text-[10px] font-bold px-2 py-0.5 rounded-lg border backdrop-blur-md ${GRADE_COLORS[product.qualityGrade] || ''}`}>
+   329→            Grade {product.qualityGrade}
+   330→          </span>
+   331→        )}
+   332→
+   333→        {/* Low Stock Warning */}
+   334→        {isLowStock && (
+   335→          <span className="absolute bottom-2.5 left-2.5 text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/80 text-white backdrop-blur-sm flex items-center gap-1">
+   336→            <AlertTriangle className="w-2.5 h-2.5" />
+   337→            Low Stock
+   338→          </span>
+   339→        )}
+   340→
+   341→        {/* Quick View Button on hover */}
+   342→        <motion.button
+   343→          initial={{ opacity: 0, scale: 0.8 }}
+   344→          whileHover={{ scale: 1.1 }}
+   345→          className="absolute top-2.5 right-2.5 w-8 h-8 rounded-xl bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 z-10"
+   346→          style={product.qualityGrade ? { top: '2.5rem' } : {}}
+   347→          onClick={(e) => {
+   348→            e.stopPropagation()
+   349→            onClick()
+   350→          }}
+   351→        >
+   352→          <Eye className="w-3.5 h-3.5" />
+   353→        </motion.button>
+   354→      </div>
+   355→
+   356→      {/* Content */}
+   357→      <div className="p-3.5 space-y-2.5 relative">
+   358→        {/* Product Name */}
+   359→        <h4 className="text-sm font-semibold text-foreground truncate leading-tight">{product.name}</h4>
+   360→
+   361→        {/* Price with ₹ symbol */}
+   362→        <div className="flex items-baseline gap-1">
+   363→          <span className="text-amber-400 font-bold text-base">₹{product.pricePerUnit.toLocaleString('en-IN')}</span>
+   364→          <span className="text-[10px] text-muted-foreground font-medium">/ {product.unit}</span>
+   365→        </div>
+   366→
+   367→        {/* Available Quantity with Stock Indicator */}
+   368→        <div className="space-y-1.5">
+   369→          <div className="flex items-center justify-between">
+   370→            <div className="flex items-center gap-1.5">
+   371→              <Package className={`w-3 h-3 ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`} />
+   372→              <span className={`text-[11px] font-semibold ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`}>
+   373→                {product.quantity.toLocaleString('en-IN')} {product.unit}
+   374→              </span>
+   375→            </div>
+   376→            {isLowStock && (
+   377→              <span className="text-[9px] font-bold text-red-400 flex items-center gap-0.5">
+   378→                <AlertTriangle className="w-2.5 h-2.5" />
+   379→                Hurry!
+   380→              </span>
+   381→            )}
+   382→          </div>
+   383→          <StockBar quantity={product.quantity} />
+   384→        </div>
+   385→
+   386→        {/* Producer Name with Avatar */}
+   387→        <div className="flex items-center gap-2 pt-0.5">
+   388→          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-500/30 to-emerald-700/30 border border-emerald-500/20 flex items-center justify-center shrink-0">
+   389→            <span className="text-[8px] font-bold text-emerald-400">
+   390→              {(product.seller.companyName || product.seller.name).charAt(0).toUpperCase()}
+   391→            </span>
+   392→          </div>
+   393→          <span className="text-[11px] text-muted-foreground truncate flex-1">
+   394→            {product.seller.companyName || product.seller.name}
+   395→          </span>
+   396→          {isVerified && (
+   397→            <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+   398→          )}
+   399→        </div>
+   400→
+   401→        {/* Add to Cart Button */}
+   402→        <Button
+   403→          size="sm"
+   404→          className="w-full h-8 text-xs font-semibold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 hover:border-emerald-500/40 transition-all backdrop-blur-sm"
+   405→          variant="outline"
+   406→          onClick={(e) => {
+   407→            e.stopPropagation()
+   408→            onAddToCart()
+   409→          }}
+   410→        >
+   411→          <ShoppingCart className="w-3 h-3 mr-1.5" />
+   412→          Add to Cart
+   413→        </Button>
+   414→      </div>
+   415→    </motion.div>
+   416→  )
+   417→}
+   418→
+   419→// ─── Producer Product Card (Redesigned) ───────────────────────────────────────
+   420→function ProducerProductCard({ product, onClick, onAddToCart, producerName, isVerified }: { product: Product; onClick: () => void; onAddToCart: () => void; producerName: string; isVerified: boolean }) {
+   421→  const catColor = CATEGORY_COLORS[product.category] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   422→  const gradient = CATEGORY_GRADIENTS[product.category] || 'from-gray-900/40 to-gray-700/20'
+   423→  const emoji = CATEGORY_ICONS[product.category] || '📦'
+   424→  const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : null)
+   425→  const isLowStock = product.quantity < 10
+   426→
+   427→  return (
+   428→    <motion.div
+   429→      whileHover={{ y: -6, scale: 1.02 }}
+   430→      transition={{ duration: 0.25, ease: 'easeOut' }}
+   431→      className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer group relative"
+   432→    >
+   433→      {/* Hover glow effect */}
+   434→      <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-amber-500/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+   435→
+   436→      {/* Image Area */}
+   437→      <div className="aspect-[4/3] relative overflow-hidden" onClick={onClick}>
+   438→        {productImage ? (
+   439→          <img
+   440→            src={productImage}
+   441→            alt={product.name}
+   442→            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+   443→            onError={(e) => {
+   444→              (e.target as HTMLImageElement).style.display = 'none'
+   445→              const parent = (e.target as HTMLImageElement).parentElement
+   446→              if (parent) {
+   447→                const fallback = parent.querySelector('.img-fallback') as HTMLElement
+   448→                if (fallback) fallback.style.display = 'flex'
+   449→              }
+   450→            }}
+   451→          />
+   452→        ) : null}
+   453→        <div className={`img-fallback w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center ${productImage ? 'hidden' : ''}`}>
+   454→          <span className="text-5xl drop-shadow-lg">{emoji}</span>
+   455→        </div>
+   456→
+   457→        {/* Overlay gradient at bottom */}
+   458→        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+   459→
+   460→        {/* Category Badge */}
+   461→        <span className={`absolute top-2.5 left-2.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg border backdrop-blur-md ${catColor}`}>
+   462→          {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+   463→        </span>
+   464→
+   465→        {/* Same Producer Badge */}
+   466→        <span className="absolute top-2.5 right-2.5 text-[9px] font-bold px-2 py-0.5 rounded-lg border backdrop-blur-md bg-emerald-500/20 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
+   467→          <BadgeCheck className="w-2.5 h-2.5" />
+   468→          Same Producer
+   469→        </span>
+   470→
+   471→        {/* Low Stock Warning */}
+   472→        {isLowStock && (
+   473→          <span className="absolute bottom-2.5 left-2.5 text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/80 text-white backdrop-blur-sm flex items-center gap-1">
+   474→            <AlertTriangle className="w-2.5 h-2.5" />
+   475→            Low Stock
+   476→          </span>
+   477→        )}
+   478→
+   479→        {/* Quick View Button on hover */}
+   480→        <motion.button
+   481→          initial={{ opacity: 0, scale: 0.8 }}
+   482→          whileHover={{ scale: 1.1 }}
+   483→          className="absolute bottom-2.5 right-2.5 w-8 h-8 rounded-xl bg-black/50 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 z-10"
+   484→          onClick={(e) => {
+   485→            e.stopPropagation()
+   486→            onClick()
+   487→          }}
+   488→        >
+   489→          <Eye className="w-3.5 h-3.5" />
+   490→        </motion.button>
+   491→      </div>
+   492→
+   493→      {/* Content */}
+   494→      <div className="p-3.5 space-y-2.5 relative">
+   495→        {/* Product Name */}
+   496→        <h4 className="text-sm font-semibold text-foreground truncate leading-tight">{product.name}</h4>
+   497→
+   498→        {/* Price per unit */}
+   499→        <div className="flex items-baseline gap-1">
+   500→          <span className="text-amber-400 font-bold text-base">₹{product.pricePerUnit.toLocaleString('en-IN')}</span>
+   501→          <span className="text-[10px] text-muted-foreground font-medium">/ {product.unit}</span>
+   502→        </div>
+   503→
+   504→        {/* Available Quantity with Stock Bar */}
+   505→        <div className="space-y-1.5">
+   506→          <div className="flex items-center justify-between">
+   507→            <div className="flex items-center gap-1.5">
+   508→              <Package className={`w-3 h-3 ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`} />
+   509→              <span className={`text-[11px] font-semibold ${isLowStock ? 'text-red-400' : 'text-emerald-400'}`}>
+   510→                {product.quantity.toLocaleString('en-IN')} {product.unit} available
+   511→              </span>
+   512→            </div>
+   513→          </div>
+   514→          <StockBar quantity={product.quantity} />
+   515→        </div>
+   516→
+   517→        {/* Producer Info with Verified Badge */}
+   518→        <div className="flex items-center gap-2 pt-0.5">
+   519→          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-500/30 to-emerald-700/30 border border-emerald-500/20 flex items-center justify-center shrink-0">
+   520→            <span className="text-[8px] font-bold text-emerald-400">
+   521→              {producerName.charAt(0).toUpperCase()}
+   522→            </span>
+   523→          </div>
+   524→          <span className="text-[11px] text-muted-foreground truncate flex-1">
+   525→            {producerName}
+   526→          </span>
+   527→          {isVerified && (
+   528→            <div className="flex items-center gap-0.5 shrink-0">
+   529→              <BadgeCheck className="w-3.5 h-3.5 text-emerald-400" />
+   530→              <span className="text-[9px] font-semibold text-emerald-400">Verified</span>
+   531→            </div>
+   532→          )}
+   533→        </div>
+   534→
+   535→        {/* Add to Cart Button */}
+   536→        <Button
+   537→          size="sm"
+   538→          className="w-full h-8 text-xs font-semibold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 hover:border-emerald-500/40 transition-all backdrop-blur-sm"
+   539→          variant="outline"
+   540→          onClick={(e) => {
+   541→            e.stopPropagation()
+   542→            onAddToCart()
+   543→          }}
+   544→        >
+   545→          <ShoppingCart className="w-3 h-3 mr-1.5" />
+   546→          Add to Cart
+   547→        </Button>
+   548→      </div>
+   549→    </motion.div>
+   550→  )
+   551→}
+   552→
+   553→// ─── Main Product Page ────────────────────────────────────────────────────────
+   554→export function ProductPage() {
+   555→  const {
+   556→    selectedProductId,
+   557→    setSelectedProductId,
+   558→    setView,
+   559→    setSelectedProducerId,
+   560→    setActiveChatUser,
+   561→    setChatOpen,
+   562→    user,
+   563→    addToCart,
+   564→    setCartOpen,
+   565→  } = useAppStore()
+   566→
+   567→  const [product, setProduct] = useState<Product | null>(null)
+   568→  const [producer, setProducer] = useState<ProducerInfo | null>(null)
+   569→  const [loading, setLoading] = useState(true)
+   570→  const [orderQty, setOrderQty] = useState(1)
+   571→  const [selectedImageIdx, setSelectedImageIdx] = useState(0)
+   572→  const [sellerProducts, setSellerProducts] = useState<Product[]>([])
+   573→  const [similarProducts, setSimilarProducts] = useState<Product[]>([])
+   574→  const [reviews, setReviews] = useState<Review[]>([])
+   575→
+   576→  // Review form state
+   577→  const [reviewRating, setReviewRating] = useState(0)
+   578→  const [reviewComment, setReviewComment] = useState('')
+   579→  const [submittingReview, setSubmittingReview] = useState(false)
+   580→
+   581→  // Fetch product by ID
+   582→  const fetchProduct = useCallback(async () => {
+   583→    if (!selectedProductId) return
+   584→    setLoading(true)
+   585→    try {
+   586→      const res = await fetch(`/api/products?id=${selectedProductId}`)
+   587→      const data = await res.json()
+   588→      if (res.ok && data.product) {
+   589→        setProduct(data.product)
+   590→        setOrderQty(data.product.minOrderQty || 1)
+   591→      } else {
+   592→        // Fallback: fetch all and filter
+   593→        const allRes = await fetch('/api/products')
+   594→        const allData = await allRes.json()
+   595→        const found = (allData.products || []).find((p: Product) => p.id === selectedProductId)
+   596→        if (found) {
+   597→          setProduct(found)
+   598→          setOrderQty(found.minOrderQty || 1)
+   599→        } else {
+   600→          toast.error('Product not found')
+   601→          setView('marketplace')
+   602→        }
+   603→      }
+   604→    } catch {
+   605→      toast.error('Failed to load product')
+   606→      setView('marketplace')
+   607→    } finally {
+   608→      setLoading(false)
+   609→    }
+   610→  }, [selectedProductId, setView])
+   611→
+   612→  useEffect(() => {
+   613→    fetchProduct()
+   614→  }, [fetchProduct])
+   615→
+   616→  // Fetch producer details
+   617→  useEffect(() => {
+   618→    if (!product?.sellerId) return
+   619→    const fetchProducer = async () => {
+   620→      try {
+   621→        const res = await fetch(`/api/users?id=${product.sellerId}`)
+   622→        const data = await res.json()
+   623→        if (data.user) {
+   624→          setProducer(data.user as ProducerInfo)
+   625→        }
+   626→      } catch {
+   627→        // silently fail
+   628→      }
+   629→    }
+   630→    fetchProducer()
+   631→  }, [product?.sellerId])
+   632→
+   633→  // Fetch seller's other products
+   634→  useEffect(() => {
+   635→    if (!product?.sellerId || !product?.id) return
+   636→    const fetchSellerProducts = async () => {
+   637→      try {
+   638→        const res = await fetch(`/api/products?sellerId=${product.sellerId}`)
+   639→        const data = await res.json()
+   640→        setSellerProducts((data.products || []).filter((p: Product) => p.id !== product.id).slice(0, 8))
+   641→      } catch {
+   642→        setSellerProducts([])
+   643→      }
+   644→    }
+   645→    fetchSellerProducts()
+   646→  }, [product?.sellerId, product?.id])
+   647→
+   648→  // Fetch similar category products
+   649→  useEffect(() => {
+   650→    if (!product?.category || !product?.id) return
+   651→    const fetchSimilar = async () => {
+   652→      try {
+   653→        const res = await fetch(`/api/products?category=${product.category}`)
+   654→        const data = await res.json()
+   655→        setSimilarProducts((data.products || []).filter((p: Product) => p.id !== product.id && p.sellerId !== product.sellerId).slice(0, 8))
+   656→      } catch {
+   657→        setSimilarProducts([])
+   658→      }
+   659→    }
+   660→    fetchSimilar()
+   661→  }, [product?.category, product?.id, product?.sellerId])
+   662→
+   663→  // Fetch reviews - try by productId first, fallback to seller reviews
+   664→  useEffect(() => {
+   665→    if (!product?.id || !product?.sellerId) return
+   666→    const fetchReviews = async () => {
+   667→      try {
+   668→        // First try fetching reviews filtered by productId
+   669→        const productRes = await fetch(`/api/reviews?targetId=${product.sellerId}&productId=${product.id}`)
+   670→        if (productRes.ok) {
+   671→          const productData = await productRes.json()
+   672→          if (productData.reviews && productData.reviews.length > 0) {
+   673→            setReviews(productData.reviews)
+   674→            return
+   675→          }
+   676→        }
+   677→
+   678→        // Fallback: fetch seller reviews
+   679→        const sellerRes = await fetch(`/api/reviews?targetId=${product.sellerId}`)
+   680→        if (sellerRes.ok) {
+   681→          const sellerData = await sellerRes.json()
+   682→          if (sellerData.reviews && sellerData.reviews.length > 0) {
+   683→            setReviews(sellerData.reviews)
+   684→            return
+   685→          }
+   686→        }
+   687→
+   688→        // Fallback to mock reviews if no real ones exist
+   689→        setReviews([
+   690→          { id: '1', reviewerId: 'r1', targetId: product.sellerId, productId: product.id, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged. Will order again!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar', companyName: 'RK Traders' } },
+   691→          { id: '2', reviewerId: 'r2', targetId: product.sellerId, productId: product.id, rating: 4, comment: 'Good quality and timely delivery. Slight delay in communication but overall satisfied.', createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), reviewer: { name: 'Priya Sharma', companyName: 'Sharma Enterprises' } },
+   692→          { id: '3', reviewerId: 'r3', targetId: product.sellerId, productId: product.id, rating: 5, comment: 'Best supplier we have worked with. Consistent quality every time.', createdAt: new Date(Date.now() - 86400000 * 7).toISOString(), reviewer: { name: 'Amit Patel' } },
+   693→        ])
+   694→      } catch {
+   695→        setReviews([
+   696→          { id: '1', reviewerId: 'r1', targetId: product.sellerId, productId: product.id, rating: 5, comment: 'Excellent quality produce. Very fresh and well-packaged!', createdAt: new Date().toISOString(), reviewer: { name: 'Rajesh Kumar' } },
+   697→          { id: '2', reviewerId: 'r2', targetId: product.sellerId, productId: product.id, rating: 4, comment: 'Good quality and timely delivery. Recommended.', createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), reviewer: { name: 'Priya Sharma' } },
+   698→        ])
+   699→      }
+   700→    }
+   701→    fetchReviews()
+   702→  }, [product?.id, product?.sellerId])
+   703→
+   704→  // Handle Add to Cart for current product
+   705→  const handleAddToCart = useCallback(() => {
+   706→    if (!user) {
+   707→      toast.error('Please sign in to add items to cart')
+   708→      setView('auth')
+   709→      return
+   710→    }
+   711→    if (user.role !== 'buyer' && user.role !== 'admin') {
+   712→      toast.error('Only buyers can add items to cart')
+   713→      return
+   714→    }
+   715→    if (!product) return
+   716→
+   717→    const productImage = product.imageUrl || (product.images ? product.images.split(',')[0] : undefined)
+   718→    addToCart({
+   719→      productId: product.id,
+   720→      productName: product.name,
+   721→      productImage,
+   722→      sellerId: product.sellerId,
+   723→      sellerName: product.seller.companyName || product.seller.name,
+   724→      quantity: orderQty,
+   725→      unit: product.unit,
+   726→      pricePerUnit: product.pricePerUnit,
+   727→      minOrderQty: product.minOrderQty || 1,
+   728→      maxQuantity: product.quantity,
+   729→      location: product.location,
+   730→      state: product.state,
+   731→      deliveryHandledByProducer: product.deliveryHandledByProducer || false,
+   732→      deliveryFee: product.deliveryFee || 0,
+   733→      freeDelivery: product.freeDelivery || false,
+   734→    })
+   735→    toast.success(`${product.name} added to cart`)
+   736→  }, [user, product, orderQty, addToCart, setView])
+   737→
+   738→  // Handle Add to Cart for related/similar product
+   739→  const handleQuickAddToCart = useCallback((p: Product) => {
+   740→    if (!user) {
+   741→      toast.error('Please sign in to add items to cart')
+   742→      setView('auth')
+   743→      return
+   744→    }
+   745→    if (user.role !== 'buyer' && user.role !== 'admin') {
+   746→      toast.error('Only buyers can add items to cart')
+   747→      return
+   748→    }
+   749→
+   750→    const productImage = p.imageUrl || (p.images ? p.images.split(',')[0] : undefined)
+   751→    addToCart({
+   752→      productId: p.id,
+   753→      productName: p.name,
+   754→      productImage,
+   755→      sellerId: p.sellerId,
+   756→      sellerName: p.seller.companyName || p.seller.name,
+   757→      quantity: p.minOrderQty || 1,
+   758→      unit: p.unit,
+   759→      pricePerUnit: p.pricePerUnit,
+   760→      minOrderQty: p.minOrderQty || 1,
+   761→      maxQuantity: p.quantity,
+   762→      location: p.location,
+   763→      state: p.state,
+   764→      deliveryHandledByProducer: p.deliveryHandledByProducer || false,
+   765→      deliveryFee: p.deliveryFee || 0,
+   766→      freeDelivery: p.freeDelivery || false,
+   767→    })
+   768→    toast.success(`${p.name} added to cart`)
+   769→  }, [user, addToCart, setView])
+   770→
+   771→  // Handle Buy Now (add to cart + open cart)
+   772→  const handleBuyNow = () => {
+   773→    handleAddToCart()
+   774→    setCartOpen(true)
+   775→  }
+   776→
+   777→  // Handle submit review - include productId
+   778→  const handleSubmitReview = async () => {
+   779→    if (!user) {
+   780→      toast.error('Please sign in to write a review')
+   781→      setView('auth')
+   782→      return
+   783→    }
+   784→    if (!product) return
+   785→    if (reviewRating === 0) {
+   786→      toast.error('Please select a rating')
+   787→      return
+   788→    }
+   789→    if (!reviewComment.trim()) {
+   790→      toast.error('Please write a comment')
+   791→      return
+   792→    }
+   793→
+   794→    setSubmittingReview(true)
+   795→    try {
+   796→      const res = await fetch('/api/reviews', {
+   797→        method: 'POST',
+   798→        headers: { 'Content-Type': 'application/json' },
+   799→        body: JSON.stringify({
+   800→          reviewerId: user.id,
+   801→          targetId: product.sellerId,
+   802→          productId: product.id,
+   803→          rating: reviewRating,
+   804→          comment: reviewComment.trim(),
+   805→        }),
+   806→      })
+   807→      if (res.ok) {
+   808→        const data = await res.json()
+   809→        setReviews((prev) => [data.review || {
+   810→          id: Date.now().toString(),
+   811→          reviewerId: user.id,
+   812→          targetId: product.sellerId,
+   813→          productId: product.id,
+   814→          rating: reviewRating,
+   815→          comment: reviewComment.trim(),
+   816→          createdAt: new Date().toISOString(),
+   817→          reviewer: { name: user.name, companyName: user.companyName },
+   818→        }, ...prev])
+   819→        setReviewRating(0)
+   820→        setReviewComment('')
+   821→        toast.success('Review submitted successfully!')
+   822→      } else {
+   823→        const data = await res.json()
+   824→        toast.error(data.error || 'Failed to submit review')
+   825→      }
+   826→    } catch {
+   827→      toast.error('Failed to submit review')
+   828→    } finally {
+   829→      setSubmittingReview(false)
+   830→    }
+   831→  }
+   832→
+   833→  // Handle share
+   834→  const handleShare = async () => {
+   835→    if (navigator.share) {
+   836→      try {
+   837→        await navigator.share({
+   838→          title: product?.name || 'AgriLink Product',
+   839→          text: `Check out ${product?.name} on AgriLink - ₹${product?.pricePerUnit.toLocaleString('en-IN')}/${product?.unit}`,
+   840→          url: window.location.href,
+   841→        })
+   842→      } catch {
+   843→        // User cancelled
+   844→      }
+   845→    } else {
+   846→      try {
+   847→        await navigator.clipboard.writeText(window.location.href)
+   848→        toast.success('Link copied to clipboard!')
+   849→      } catch {
+   850→        toast.error('Failed to copy link')
+   851→      }
+   852→    }
+   853→  }
+   854→
+   855→  // Parse images
+   856→  const imageList = product?.images ? product.images.split(',').filter(Boolean) : []
+   857→  const allImages = product?.imageUrl ? [product.imageUrl, ...imageList] : imageList.length > 0 ? imageList : []
+   858→
+   859→  // Compute total price
+   860→  const totalPrice = product ? orderQty * product.pricePerUnit : 0
+   861→  // V4: compute platform fee using the new revenue model (₹1000 flat if subtotal > ₹10,000 else ₹0)
+   862→  const computedPlatformFee = product ? computePlatformFee(totalPrice) : 0
+   863→  // V4: producer-handled delivery fee (waived when freeDelivery)
+   864→  const producerDeliveryFee = product && product.deliveryHandledByProducer && !product.freeDelivery ? (product.deliveryFee || 0) : 0
+   865→
+   866→  // Category helpers
+   867→  const catColor = CATEGORY_COLORS[product?.category || ''] || 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+   868→  const gradient = CATEGORY_GRADIENTS[product?.category || ''] || 'from-gray-900/40 to-gray-700/20'
+   869→  const emoji = CATEGORY_ICONS[product?.category || ''] || '📦'
+   870→  const gradeColor = GRADE_COLORS[product?.qualityGrade || ''] || ''
+   871→
+   872→  // Certifications
+   873→  const productCerts = product?.certifications ? product.certifications.split(',').map((c) => c.trim()).filter(Boolean) : []
+   874→
+   875→  // Average review rating
+   876→  const avgRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0
+   877→
+   878→  // Format date
+   879→  const formatDate = (dateStr?: string) => {
+   880→    if (!dateStr) return 'N/A'
+   881→    try {
+   882→      return new Date(dateStr).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+   883→    } catch {
+   884→      return 'N/A'
+   885→    }
+   886→  }
+   887→
+   888→  if (loading) return <ProductPageSkeleton />
+   889→  if (!product) return null
+   890→
+   891→  return (
+   892→    <div className="min-h-screen bg-background">
+   893→      {/* Background decorations */}
+   894→      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+   895→        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/5 rounded-full blur-[120px]" />
+   896→        <div className="absolute top-1/3 -left-20 w-72 h-72 bg-amber-500/4 rounded-full blur-[100px]" />
+   897→      </div>
+   898→
+   899→      <div className="relative z-10">
+   900→        {/* ─── Sticky Top Bar ──────────────────────────────────────────────────── */}
+   901→        <motion.div
+   902→          initial={{ opacity: 0, y: -20 }}
+   903→          animate={{ opacity: 1, y: 0 }}
+   904→          transition={{ duration: 0.5 }}
+   905→          className="sticky top-0 z-40 glass-card-strong mx-4 sm:mx-6 mt-4 px-4 sm:px-6 py-3 flex items-center gap-3"
+   906→        >
+   907→          <Button
+   908→            variant="ghost"
+   909→            size="sm"
+   910→            className="text-muted-foreground hover:text-foreground shrink-0"
+   911→            onClick={() => setView('marketplace')}
+   912→          >
+   913→            <ArrowLeft className="w-4 h-4 mr-1.5" />
+   914→            <span className="hidden sm:inline">Back</span>
+   915→          </Button>
+   916→
+   917→          <div className="flex-1 min-w-0">
+   918→            <h1 className="text-sm sm:text-base font-bold text-foreground truncate">{product.name}</h1>
+   919→          </div>
+   920→
+   921→          <Button
+   922→            variant="ghost"
+   923→            size="sm"
+   924→            className="text-muted-foreground hover:text-foreground shrink-0"
+   925→            onClick={() => {
+   926→              setActiveChatUser(product.sellerId)
+   927→              setChatOpen(true)
+   928→            }}
+   929→          >
+   930→            <MessageSquare className="w-4 h-4" />
+   931→            <span className="hidden sm:inline ml-1.5">Chat</span>
+   932→          </Button>
+   933→
+   934→          <Button
+   935→            variant="ghost"
+   936→            size="sm"
+   937→            className="text-muted-foreground hover:text-foreground shrink-0"
+   938→            onClick={handleShare}
+   939→          >
+   940→            <Share2 className="w-4 h-4" />
+   941→          </Button>
+   942→        </motion.div>
+   943→
+   944→        {/* ─── Main Content (2-column on desktop) ─────────────────────────────── */}
+   945→        <motion.div
+   946→          variants={staggerContainer}
+   947→          initial="hidden"
+   948→          animate="visible"
+   949→          className="px-4 sm:px-6 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6"
+   950→        >
+   951→          {/* ─── Left Column: Product Images ──────────────────────────────────── */}
+   952→          <motion.div variants={fadeUp} className="space-y-4">
+   953→            {/* Main Image Area */}
+   954→            <div className="glass-card p-4">
+   955→              <div className={`aspect-square rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center relative overflow-hidden`}>
+   956→                {allImages.length > 0 ? (
+   957→                  <img
+   958→                    src={allImages[selectedImageIdx] || ''}
+   959→                    alt={product.name}
+   960→                    className="w-full h-full object-cover rounded-xl"
+   961→                    onError={(e) => {
+   962→                      (e.target as HTMLImageElement).style.display = 'none'
+   963→                    }}
+   964→                  />
+   965→                ) : (
+   966→                  <span className="text-7xl">{emoji}</span>
+   967→                )}
+   968→
+   969→                {/* Quality Grade Badge */}
+   970→                {product.qualityGrade && (
+   971→                  <div className={`absolute top-3 left-3 text-sm font-bold px-3 py-1.5 rounded-xl border backdrop-blur-sm ${gradeColor}`}>
+   972→                    Grade {product.qualityGrade}
+   973→                  </div>
+   974→                )}
+   975→
+   976→                {/* Organic Badge */}
+   977→                {product.isOrganic && (
+   978→                  <div className="absolute top-3 right-3 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-sm font-semibold px-3 py-1.5 rounded-xl backdrop-blur-sm flex items-center gap-1.5">
+   979→                    <Leaf className="w-3.5 h-3.5" />
+   980→                    Organic
+   981→                  </div>
+   982→                )}
+   983→              </div>
+   984→
+   985→              {/* Thumbnail Strip */}
+   986→              {allImages.length > 1 && (
+   987→                <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+   988→                  {allImages.map((img, idx) => (
+   989→                    <button
+   990→                      key={idx}
+   991→                      onClick={() => setSelectedImageIdx(idx)}
+   992→                      className={`w-16 h-16 rounded-lg border-2 overflow-hidden shrink-0 transition-all ${
+   993→                        idx === selectedImageIdx
+   994→                          ? 'border-emerald-400 shadow-lg shadow-emerald-500/20'
+   995→                          : 'border-white/10 hover:border-white/25'
+   996→                      }`}
+   997→                    >
+   998→                      <img
+   999→                        src={img}
+  1000→                        alt={`${product.name} ${idx + 1}`}
+  1001→                        className="w-full h-full object-cover"
+  1002→                        onError={(e) => {
+  1003→                          (e.target as HTMLImageElement).style.display = 'none'
+  1004→                        }}
+  1005→                      />
+  1006→                    </button>
+  1007→                  ))}
+  1008→                </div>
+  1009→              )}
+  1010→
+  1011→              {/* If no images, show placeholder thumbnails with category emoji */}
+  1012→              {allImages.length === 0 && (
+  1013→                <div className="flex gap-2 mt-3">
+  1014→                  {[0, 1, 2, 3].map((idx) => (
+  1015→                    <div
+  1016→                      key={idx}
+  1017→                      className={`w-16 h-16 rounded-lg border-2 overflow-hidden shrink-0 flex items-center justify-center ${
+  1018→                        idx === 0 ? 'border-emerald-400' : 'border-white/10'
+  1019→                      }`}
+  1020→                      style={{ background: 'oklch(1 0 0 / 5%)' }}
+  1021→                    >
+  1022→                      <span className="text-2xl">{emoji}</span>
+  1023→                    </div>
+  1024→                  ))}
+  1025→                </div>
+  1026→              )}
+  1027→            </div>
+  1028→
+  1029→            {/* Delivery Estimation Card - Simplified */}
+  1030→            <div className="glass-card p-4 space-y-3 border border-emerald-500/10">
+  1031→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1032→                <Truck className="w-4 h-4 text-emerald-400" />
+  1033→                Delivery Estimate
+  1034→              </h3>
+  1035→              <div className="space-y-2">
+  1036→                <div className="flex items-center justify-between text-sm">
+  1037→                  <span className="text-muted-foreground flex items-center gap-1.5">
+  1038→                    <MapPin className="w-3 h-3 text-emerald-400" /> From
+  1039→                  </span>
+  1040→                  <span className="font-medium text-foreground text-xs">{product.location}{product.state ? `, ${product.state}` : ''}</span>
+  1041→                </div>
+  1042→                <div className="flex items-center justify-between text-sm">
+  1043→                  <span className="text-muted-foreground flex items-center gap-1.5">
+  1044→                    <Clock className="w-3 h-3 text-amber-400" /> Est. Delivery
+  1045→                  </span>
+  1046→                  <span className="font-medium text-foreground">2-5 business days</span>
+  1047→                </div>
+  1048→                <Separator className="bg-white/5" />
+  1049→                <div className="flex items-center justify-between text-sm">
+  1050→                  <span className="text-muted-foreground">Est. Transport Cost</span>
+  1051→                  <div className="text-right">
+  1052→                    <span className="text-amber-400 font-semibold">₹{Math.round(totalPrice * TRANSPORT_ESTIMATE_RATE).toLocaleString('en-IN')}</span>
+  1053→                    <p className="text-[10px] text-muted-foreground/60">~3.5% of order value (estimate only)</p>
+  1054→                  </div>
+  1055→                </div>
+  1056→                <div className="flex items-center justify-between text-sm">
+  1057→                  <span className="text-muted-foreground">Platform Fee</span>
+  1058→                  <div className="text-right">
+  1059→                    {computedPlatformFee === 0 ? (
+  1060→                      <>
+  1061→                        <span className="text-emerald-400 font-semibold">FREE</span>
+  1062→                        <p className="text-[10px] text-muted-foreground/60">No fee on orders ≤ ₹10,000</p>
+  1063→                      </>
+  1064→                    ) : (
+  1065→                      <>
+  1066→                        <span className="text-foreground font-semibold">₹{computedPlatformFee.toLocaleString('en-IN')}</span>
+  1067→                        <p className="text-[10px] text-muted-foreground/60">Flat fee on orders &gt; ₹10,000</p>
+  1068→                      </>
+  1069→                    )}
+  1070→                  </div>
+  1071→                </div>
+  1072→                <div className="flex items-center justify-between text-sm">
+  1073→                  <span className="text-muted-foreground flex items-center gap-1.5">
+  1074→                    <Truck className="w-3 h-3 text-emerald-400" /> Delivery Fee
+  1075→                  </span>
+  1076→                  <div className="text-right">
+  1077→                    {product.deliveryHandledByProducer ? (
+  1078→                      product.freeDelivery ? (
+  1079→                        <>
+  1080→                          <span className="text-emerald-400 font-semibold">FREE</span>
+  1081→                          <p className="text-[10px] text-muted-foreground/60">Producer offers free delivery</p>
+  1082→                        </>
+  1083→                      ) : producerDeliveryFee > 0 ? (
+  1084→                        <>
+  1085→                          <span className="text-foreground font-semibold">₹{producerDeliveryFee.toLocaleString('en-IN')}</span>
+  1086→                          <p className="text-[10px] text-muted-foreground/60">Set by producer</p>
+  1087→                        </>
+  1088→                      ) : (
+  1089→                        <span className="text-muted-foreground text-xs">—</span>
+  1090→                      )
+  1091→                    ) : (
+  1092→                      <>
+  1093→                        <span className="text-sky-400/80 font-medium text-xs">Arranged by AgroBridge</span>
+  1094→                        <p className="text-[10px] text-muted-foreground/60">₹30 booking fee at checkout</p>
+  1095→                      </>
+  1096→                    )}
+  1097→                  </div>
+  1098→                </div>
+  1099→              </div>
+  1100→              <p className="text-[10px] text-muted-foreground/60">Transport & platform fees are estimates. Final cost calculated at checkout.</p>
+  1101→            </div>
+  1102→
+  1103→            {/* Delivery Options Card - V4 */}
+  1104→            <div className={`glass-card p-4 space-y-2 border ${
+  1105→              product.deliveryHandledByProducer
+  1106→                ? product.freeDelivery
+  1107→                  ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+  1108→                  : 'border-teal-500/30 bg-teal-500/[0.04]'
+  1109→                : 'border-sky-500/20 bg-sky-500/[0.03]'
+  1110→            }`}>
+  1111→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1112→                <Truck className={`w-4 h-4 ${
+  1113→                  product.deliveryHandledByProducer
+  1114→                    ? product.freeDelivery ? 'text-emerald-400' : 'text-teal-400'
+  1115→                    : 'text-sky-400'
+  1116→                }`} />
+  1117→                Delivery Options
+  1118→              </h3>
+  1119→              {product.deliveryHandledByProducer ? (
+  1120→                product.freeDelivery ? (
+  1121→                  <div className="flex items-start gap-2">
+  1122→                    <span className="text-base">🚚</span>
+  1123→                    <div>
+  1124→                      <p className="text-sm font-semibold text-emerald-400">FREE Delivery by Producer</p>
+  1125→                      <p className="text-[11px] text-muted-foreground">This producer handles delivery at no extra cost to you.</p>
+  1126→                    </div>
+  1127→                  </div>
+  1128→                ) : (product.deliveryFee || 0) > 0 ? (
+  1129→                  <div className="flex items-start gap-2">
+  1130→                    <span className="text-base">🚚</span>
+  1131→                    <div>
+  1132→                      <p className="text-sm font-semibold text-teal-400">Delivery by Producer — ₹{(product.deliveryFee || 0).toLocaleString('en-IN')}</p>
+  1133→                      <p className="text-[11px] text-muted-foreground">The producer will deliver this order directly for the fee shown above.</p>
+  1134→                    </div>
+  1135→                  </div>
+  1136→                ) : (
+  1137→                  <div className="flex items-start gap-2">
+  1138→                    <span className="text-base">🚚</span>
+  1139→                    <div>
+  1140→                      <p className="text-sm font-semibold text-emerald-400">Delivery by Producer</p>
+  1141→                      <p className="text-[11px] text-muted-foreground">The producer will handle delivery directly.</p>
+  1142→                    </div>
+  1143→                  </div>
+  1144→                )
+  1145→              ) : (
+  1146→                <div className="flex items-start gap-2">
+  1147→                  <span className="text-base">🚚</span>
+  1148→                  <div>
+  1149→                    <p className="text-sm font-semibold text-sky-400">Transport arranged via AgroBridge</p>
+  1150→                    <p className="text-[11px] text-muted-foreground">A ₹30 booking fee applies. AgroBridge connects you with verified transporters.</p>
+  1151→                  </div>
+  1152→                </div>
+  1153→              )}
+  1154→            </div>
+  1155→          </motion.div>
+  1156→
+  1157→          {/* ─── Right Column: Product Details ────────────────────────────────── */}
+  1158→          <motion.div variants={fadeUp} className="space-y-5">
+  1159→            {/* 1. Product Title & Price */}
+  1160→            <div className="glass-card p-6 space-y-4">
+  1161→              <div className="flex items-center gap-2 flex-wrap">
+  1162→                <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${catColor}`}>
+  1163→                  {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+  1164→                </span>
+  1165→                {product.isOrganic && (
+  1166→                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg border bg-emerald-500/15 text-emerald-400 border-emerald-500/25 flex items-center gap-1">
+  1167→                    <Leaf className="w-3 h-3" />
+  1168→                    Organic
+  1169→                  </span>
+  1170→                )}
+  1171→              </div>
+  1172→
+  1173→              <h2 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">{product.name}</h2>
+  1174→
+  1175→              {/* Price - ONLY actual price set by producer */}
+  1176→              <div className="flex items-end gap-2">
+  1177→                <div className="flex items-baseline gap-1">
+  1178→                  <IndianRupee className="w-6 h-6 text-emerald-400" />
+  1179→                  <span className="text-3xl sm:text-4xl font-bold text-foreground">
+  1180→                    {product.pricePerUnit.toLocaleString('en-IN')}
+  1181→                  </span>
+  1182→                </div>
+  1183→                <span className="text-base text-muted-foreground mb-1">/ {product.unit}</span>
+  1184→              </div>
+  1185→
+  1186→              {/* Available Quantity - Prominent Display */}
+  1187→              <div className="flex items-center gap-3">
+  1188→                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+  1189→                  product.quantity < 10
+  1190→                    ? 'bg-red-500/10 border-red-500/25'
+  1191→                    : 'bg-emerald-500/10 border-emerald-500/25'
+  1192→                }`}>
+  1193→                  <Package className={`w-4 h-4 ${product.quantity < 10 ? 'text-red-400' : 'text-emerald-400'}`} />
+  1194→                  <span className={`text-sm font-bold ${product.quantity < 10 ? 'text-red-400' : 'text-emerald-400'}`}>
+  1195→                    {product.quantity.toLocaleString('en-IN')} units available
+  1196→                  </span>
+  1197→                </div>
+  1198→                {product.quantity < 10 && (
+  1199→                  <div className="flex items-center gap-1 text-red-400">
+  1200→                    <AlertTriangle className="w-4 h-4" />
+  1201→                    <span className="text-xs font-semibold">Low stock!</span>
+  1202→                  </div>
+  1203→                )}
+  1204→              </div>
+  1205→
+  1206→              {/* Location */}
+  1207→              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+  1208→                <MapPin className="w-4 h-4 text-emerald-400" />
+  1209→                <span>{product.location}{product.state ? `, ${product.state}` : ''}</span>
+  1210→              </div>
+  1211→            </div>
+  1212→
+  1213→            {/* 2. Crop Details Card */}
+  1214→            <div className="glass-card p-5 space-y-4">
+  1215→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1216→                <Sprout className="w-4 h-4 text-emerald-400" />
+  1217→                Crop Details
+  1218→              </h3>
+  1219→              <div className="grid grid-cols-2 gap-3">
+  1220→                <div className="glass-card p-3">
+  1221→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Variety</p>
+  1222→                  <p className="text-sm font-semibold text-foreground">{product.cropVariety || 'Standard'}</p>
+  1223→                </div>
+  1224→                <div className="glass-card p-3">
+  1225→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+  1226→                    <Calendar className="w-3 h-3" /> Harvest Date
+  1227→                  </p>
+  1228→                  <p className="text-sm font-semibold text-foreground">{formatDate(product.harvestDate)}</p>
+  1229→                </div>
+  1230→                <div className="glass-card p-3">
+  1231→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Freshness</p>
+  1232→                  <p className="text-sm font-semibold text-foreground">{product.freshness || 'Fresh'}</p>
+  1233→                </div>
+  1234→                <div className="glass-card p-3">
+  1235→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+  1236→                    <Droplets className="w-3 h-3" /> Moisture
+  1237→                  </p>
+  1238→                  <p className="text-sm font-semibold text-foreground">{product.moistureContent || 'N/A'}</p>
+  1239→                </div>
+  1240→                <div className="glass-card p-3">
+  1241→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+  1242→                    <Clock className="w-3 h-3" /> Shelf Life
+  1243→                  </p>
+  1244→                  <p className="text-sm font-semibold text-foreground">{product.shelfLife || 'N/A'}</p>
+  1245→                </div>
+  1246→                <div className="glass-card p-3">
+  1247→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+  1248→                    <ThermometerSun className="w-3 h-3" /> Storage
+  1249→                  </p>
+  1250→                  <p className="text-sm font-semibold text-foreground">{product.storageCondition || 'N/A'}</p>
+  1251→                </div>
+  1252→              </div>
+  1253→            </div>
+  1254→
+  1255→            {/* 3. Quality & Certifications Card */}
+  1256→            <div className="glass-card p-5 space-y-4">
+  1257→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1258→                <Award className="w-4 h-4 text-emerald-400" />
+  1259→                Quality & Certifications
+  1260→              </h3>
+  1261→              <div className="space-y-3">
+  1262→                <div className="flex items-center justify-between">
+  1263→                  <span className="text-sm text-muted-foreground">Quality Grade</span>
+  1264→                  <span className={`text-sm font-bold px-3 py-1 rounded-lg border ${gradeColor}`}>
+  1265→                    {product.qualityGrade || 'N/A'}
+  1266→                  </span>
+  1267→                </div>
+  1268→                <div className="flex items-center justify-between">
+  1269→                  <span className="text-sm text-muted-foreground">Organic Status</span>
+  1270→                  {product.isOrganic ? (
+  1271→                    <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
+  1272→                      <CheckCircle2 className="w-4 h-4" />
+  1273→                      Certified Organic
+  1274→                    </span>
+  1275→                  ) : (
+  1276→                    <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+  1277→                      <XCircle className="w-4 h-4" />
+  1278→                      Conventional
+  1279→                    </span>
+  1280→                  )}
+  1281→                </div>
+  1282→                <div className="flex items-center justify-between">
+  1283→                  <span className="text-sm text-muted-foreground">Pesticides Used</span>
+  1284→                  <span className="text-sm font-medium text-foreground">{product.pesticidesUsed || 'Not specified'}</span>
+  1285→                </div>
+  1286→                {productCerts.length > 0 && (
+  1287→                  <div className="pt-2">
+  1288→                    <p className="text-xs text-muted-foreground mb-2">Certifications</p>
+  1289→                    <div className="flex flex-wrap gap-2">
+  1290→                      {productCerts.map((cert, idx) => (
+  1291→                        <span
+  1292→                          key={idx}
+  1293→                          className="text-xs font-medium px-2.5 py-1 rounded-lg border bg-amber-500/10 text-amber-400 border-amber-500/20"
+  1294→                        >
+  1295→                          {cert}
+  1296→                        </span>
+  1297→                      ))}
+  1298→                    </div>
+  1299→                  </div>
+  1300→                )}
+  1301→              </div>
+  1302→            </div>
+  1303→
+  1304→            {/* 4. Availability & Pricing Card */}
+  1305→            <div className="glass-card p-5 space-y-3">
+  1306→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1307→                <Package className="w-4 h-4 text-emerald-400" />
+  1308→                Availability & Pricing
+  1309→              </h3>
+  1310→              <div className="grid grid-cols-3 gap-3">
+  1311→                <div className={`glass-card p-3 text-center ${product.quantity < 10 ? 'border border-red-500/20' : ''}`}>
+  1312→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Available</p>
+  1313→                  <p className={`text-base font-bold ${product.quantity < 10 ? 'text-red-400' : 'text-foreground'}`}>{product.quantity.toLocaleString('en-IN')}</p>
+  1314→                  <p className="text-[10px] text-muted-foreground">{product.unit}</p>
+  1315→                  {product.quantity < 10 && (
+  1316→                    <p className="text-[9px] text-red-400 font-semibold mt-0.5">Low stock!</p>
+  1317→                  )}
+  1318→                </div>
+  1319→                <div className="glass-card p-3 text-center">
+  1320→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Min Order</p>
+  1321→                  <p className="text-base font-bold text-foreground">{product.minOrderQty || 1}</p>
+  1322→                  <p className="text-[10px] text-muted-foreground">{product.unit}</p>
+  1323→                </div>
+  1324→                <div className="glass-card p-3 text-center">
+  1325→                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Price</p>
+  1326→                  <p className="text-base font-bold text-emerald-400">₹{product.pricePerUnit.toLocaleString('en-IN')}</p>
+  1327→                  <p className="text-[10px] text-muted-foreground">per {product.unit}</p>
+  1328→                </div>
+  1329→              </div>
+  1330→            </div>
+  1331→
+  1332→            {/* 5. Add to Cart / Buy Now Section */}
+  1333→            <div className="glass-card-strong p-5 space-y-4">
+  1334→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1335→                <ShoppingCart className="w-4 h-4 text-emerald-400" />
+  1336→                Add to Cart
+  1337→              </h3>
+  1338→
+  1339→              <div className="flex items-center gap-4">
+  1340→                {/* Quantity Input */}
+  1341→                <div className="flex items-center gap-0">
+  1342→                  <Button
+  1343→                    variant="outline"
+  1344→                    size="sm"
+  1345→                    className="h-10 w-10 rounded-l-xl rounded-r-none border-white/10 hover:bg-white/10"
+  1346→                    onClick={() => setOrderQty(Math.max(product.minOrderQty || 1, orderQty - 1))}
+  1347→                    disabled={orderQty <= (product.minOrderQty || 1)}
+  1348→                  >
+  1349→                    <Minus className="w-4 h-4" />
+  1350→                  </Button>
+  1351→                  <Input
+  1352→                    type="number"
+  1353→                    min={product.minOrderQty || 1}
+  1354→                    max={product.quantity}
+  1355→                    value={orderQty}
+  1356→                    onChange={(e) => setOrderQty(Math.max(product.minOrderQty || 1, Math.min(product.quantity, Number(e.target.value) || 1)))}
+  1357→                    className="h-10 w-20 text-center rounded-none border-white/10 bg-white/5 text-base font-semibold"
+  1358→                  />
+  1359→                  <Button
+  1360→                    variant="outline"
+  1361→                    size="sm"
+  1362→                    className="h-10 w-10 rounded-r-xl rounded-l-none border-white/10 hover:bg-white/10"
+  1363→                    onClick={() => setOrderQty(Math.min(product.quantity, orderQty + 1))}
+  1364→                    disabled={orderQty >= product.quantity}
+  1365→                  >
+  1366→                    <Plus className="w-4 h-4" />
+  1367→                  </Button>
+  1368→                </div>
+  1369→
+  1370→                {/* Total Price */}
+  1371→                <div className="flex-1 text-right">
+  1372→                  <p className="text-xs text-muted-foreground">Total</p>
+  1373→                  <div className="flex items-baseline justify-end gap-1">
+  1374→                    <IndianRupee className="w-4 h-4 text-emerald-400" />
+  1375→                    <span className="text-xl font-bold text-foreground">{totalPrice.toLocaleString('en-IN')}</span>
+  1376→                  </div>
+  1377→                </div>
+  1378→              </div>
+  1379→
+  1380→              {/* Action Buttons */}
+  1381→              <div className="grid grid-cols-2 gap-3">
+  1382→                <Button
+  1383→                  className="h-11 text-sm font-semibold bg-white/10 hover:bg-white/15 text-foreground border border-white/10"
+  1384→                  variant="outline"
+  1385→                  onClick={handleAddToCart}
+  1386→                >
+  1387→                  <ShoppingCart className="w-4 h-4 mr-2" />
+  1388→                  Add to Cart
+  1389→                </Button>
+  1390→                <Button
+  1391→                  className="h-11 text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+  1392→                  onClick={handleBuyNow}
+  1393→                >
+  1394→                  Buy Now
+  1395→                  <ChevronRight className="w-4 h-4 ml-1" />
+  1396→                </Button>
+  1397→              </div>
+  1398→            </div>
+  1399→
+  1400→            {/* 6. Producer Info Card */}
+  1401→            {producer && (
+  1402→              <div
+  1403→                className="glass-card p-4 cursor-pointer hover:bg-white/[0.04] transition-colors"
+  1404→                onClick={() => {
+  1405→                  setSelectedProducerId(product.sellerId)
+  1406→                  setView('producer-profile')
+  1407→                }}
+  1408→              >
+  1409→                <div className="flex items-center gap-3">
+  1410→                  <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-lg font-bold text-emerald-400">
+  1411→                    {(producer.companyName || producer.name).charAt(0).toUpperCase()}
+  1412→                  </div>
+  1413→                  <div className="flex-1 min-w-0">
+  1414→                    <h4 className="text-sm font-semibold text-foreground truncate">
+  1415→                      {producer.companyName || producer.name}
+  1416→                    </h4>
+  1417→                    <p className="text-xs text-muted-foreground truncate">
+  1418→                      {producer.farmName && `${producer.farmName} · `}{producer.city}{producer.state ? `, ${producer.state}` : ''}
+  1419→                    </p>
+  1420→                    {producer.avgRating !== undefined && producer.avgRating > 0 && (
+  1421→                      <div className="flex items-center gap-1.5 mt-1">
+  1422→                        <StarRating rating={producer.avgRating} size="sm" />
+  1423→                        <span className="text-xs text-muted-foreground">
+  1424→                          {producer.avgRating.toFixed(1)} ({producer.totalReviews || 0})
+  1425→                        </span>
+  1426→                      </div>
+  1427→                    )}
+  1428→                  </div>
+  1429→                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+  1430→                </div>
+  1431→              </div>
+  1432→            )}
+  1433→
+  1434→            {/* 7. Reviews Section */}
+  1435→            <div className="glass-card p-5 space-y-4">
+  1436→              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+  1437→                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+  1438→                Reviews
+  1439→                {reviews.length > 0 && (
+  1440→                  <span className="text-xs text-muted-foreground font-normal">
+  1441→                    {avgRating.toFixed(1)} avg · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+  1442→                  </span>
+  1443→                )}
+  1444→              </h3>
+  1445→
+  1446→              {/* Review Form */}
+  1447→              {user && user.role === 'buyer' && (
+  1448→                <div className="glass-card p-4 space-y-3 border border-white/10">
+  1449→                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Write a Review</h4>
+  1450→                  <InteractiveStarRating value={reviewRating} onChange={setReviewRating} />
+  1451→                  <Textarea
+  1452→                    value={reviewComment}
+  1453→                    onChange={(e) => setReviewComment(e.target.value)}
+  1454→                    placeholder="Share your experience with this product..."
+  1455→                    className="min-h-[80px] bg-white/5 border-white/10 text-sm resize-none"
+  1456→                  />
+  1457→                  <Button
+  1458→                    size="sm"
+  1459→                    className="bg-emerald-500 hover:bg-emerald-400 text-white"
+  1460→                    onClick={handleSubmitReview}
+  1461→                    disabled={submittingReview || reviewRating === 0}
+  1462→                  >
+  1463→                    {submittingReview ? (
+  1464→                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1465→                    ) : (
+  1466→                      <>
+  1467→                        <Send className="w-3.5 h-3.5 mr-1.5" />
+  1468→                        Submit Review
+  1469→                      </>
+  1470→                    )}
+  1471→                  </Button>
+  1472→                </div>
+  1473→              )}
+  1474→
+  1475→              {/* Reviews List */}
+  1476→              <div className="space-y-3 max-h-96 overflow-y-auto">
+  1477→                {reviews.length === 0 ? (
+  1478→                  <div className="text-center py-6">
+  1479→                    <Star className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+  1480→                    <p className="text-sm text-muted-foreground">No reviews yet</p>
+  1481→                    <p className="text-xs text-muted-foreground/60">Be the first to review this product</p>
+  1482→                  </div>
+  1483→                ) : (
+  1484→                  reviews.map((review) => (
+  1485→                    <div key={review.id} className="glass-card p-3 space-y-2">
+  1486→                      <div className="flex items-center justify-between">
+  1487→                        <div className="flex items-center gap-2">
+  1488→                          <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center text-xs font-bold text-emerald-400">
+  1489→                            {(review.reviewer?.name || 'U').charAt(0).toUpperCase()}
+  1490→                          </div>
+  1491→                          <div>
+  1492→                            <p className="text-xs font-semibold text-foreground">{review.reviewer?.name || 'Anonymous'}</p>
+  1493→                            {review.reviewer?.companyName && (
+  1494→                              <p className="text-[10px] text-muted-foreground">{review.reviewer.companyName}</p>
+  1495→                            )}
+  1496→                          </div>
+  1497→                        </div>
+  1498→                        <div className="flex items-center gap-1.5">
+  1499→                          <StarRating rating={review.rating} size="sm" />
+  1500→                          <span className="text-[10px] text-muted-foreground">
+  1501→                            {new Date(review.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+  1502→                          </span>
+  1503→                        </div>
+  1504→                      </div>
+  1505→                      {review.comment && (
+  1506→                        <p className="text-xs text-muted-foreground leading-relaxed">{review.comment}</p>
+  1507→                      )}
+  1508→                    </div>
+  1509→                  ))
+  1510→                )}
+  1511→              </div>
+  1512→            </div>
+  1513→          </motion.div>
+  1514→        </motion.div>
+  1515→
+  1516→        {/* ─── Similar Products Section ─────────────────────────────────────────── */}
+  1517→        {similarProducts.length > 0 && (
+  1518→          <motion.div
+  1519→            initial={{ opacity: 0, y: 30 }}
+  1520→            animate={{ opacity: 1, y: 0 }}
+  1521→            transition={{ duration: 0.5, delay: 0.3 }}
+  1522→            className="px-4 sm:px-6 mt-10"
+  1523→          >
+  1524→            <div className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl p-5 sm:p-6">
+  1525→              {/* Section Header */}
+  1526→              <div className="flex items-center justify-between mb-5">
+  1527→                <div className="flex items-center gap-3">
+  1528→                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+  1529→                    <Package className="w-4.5 h-4.5 text-emerald-400" />
+  1530→                  </div>
+  1531→                  <div>
+  1532→                    <h3 className="text-base sm:text-lg font-bold text-foreground">Similar Products</h3>
+  1533→                    <p className="text-xs text-muted-foreground">From other producers in the same category</p>
+  1534→                  </div>
+  1535→                </div>
+  1536→                <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground">
+  1537→                  {similarProducts.length} product{similarProducts.length !== 1 ? 's' : ''}
+  1538→                </Badge>
+  1539→              </div>
+  1540→
+  1541→              {/* Mobile: Horizontal scroll | Desktop: Grid */}
+  1542→              <div className="flex gap-4 overflow-x-auto pb-2 sm:pb-0 lg:grid lg:grid-cols-4 sm:grid-cols-3 sm:overflow-visible scrollbar-thin">
+  1543→                {similarProducts.map((sp, idx) => (
+  1544→                  <motion.div
+  1545→                    key={sp.id}
+  1546→                    initial={{ opacity: 0, y: 20 }}
+  1547→                    animate={{ opacity: 1, y: 0 }}
+  1548→                    transition={{ duration: 0.4, delay: idx * 0.05 }}
+  1549→                    className="min-w-[220px] sm:min-w-0 flex-shrink-0 lg:flex-shrink"
+  1550→                  >
+  1551→                    <SimilarProductCard
+  1552→                      product={sp}
+  1553→                      onClick={() => {
+  1554→                        setSelectedProductId(sp.id)
+  1555→                        setSelectedImageIdx(0)
+  1556→                        window.scrollTo({ top: 0, behavior: 'smooth' })
+  1557→                      }}
+  1558→                      onAddToCart={() => handleQuickAddToCart(sp)}
+  1559→                    />
+  1560→                  </motion.div>
+  1561→                ))}
+  1562→              </div>
+  1563→            </div>
+  1564→          </motion.div>
+  1565→        )}
+  1566→
+  1567→        {/* ─── Other Products From This Producer ─────────────────────────────── */}
+  1568→        {sellerProducts.length > 0 && (
+  1569→          <motion.div
+  1570→            initial={{ opacity: 0, y: 30 }}
+  1571→            animate={{ opacity: 1, y: 0 }}
+  1572→            transition={{ duration: 0.5, delay: 0.4 }}
+  1573→            className="px-4 sm:px-6 mt-6 mb-10"
+  1574→          >
+  1575→            <div className="bg-white/[0.03] border border-white/10 backdrop-blur-sm rounded-2xl p-5 sm:p-6">
+  1576→              {/* Section Header */}
+  1577→              <div className="flex items-center justify-between mb-5">
+  1578→                <div className="flex items-center gap-3">
+  1579→                  <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+  1580→                    <Award className="w-4.5 h-4.5 text-amber-400" />
+  1581→                  </div>
+  1582→                  <div>
+  1583→                    <h3 className="text-base sm:text-lg font-bold text-foreground">Other Products From This Producer</h3>
+  1584→                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+  1585→                      {producer?.companyName || product.seller.companyName || product.seller.name}
+  1586→                      {(producer?.verificationStatus === 'verified' || product.seller.verificationStatus === 'verified') && (
+  1587→                        <BadgeCheck className="w-3 h-3 text-emerald-400" />
+  1588→                      )}
+  1589→                    </p>
+  1590→                  </div>
+  1591→                </div>
+  1592→                <Badge variant="outline" className="text-[10px] border-white/10 text-muted-foreground">
+  1593→                  {sellerProducts.length} product{sellerProducts.length !== 1 ? 's' : ''}
+  1594→                </Badge>
+  1595→              </div>
+  1596→
+  1597→              {/* Mobile: Horizontal scroll | Desktop: Grid */}
+  1598→              <div className="flex gap-4 overflow-x-auto pb-2 sm:pb-0 lg:grid lg:grid-cols-4 sm:grid-cols-3 sm:overflow-visible scrollbar-thin">
+  1599→                {sellerProducts.map((sp, idx) => (
+  1600→                  <motion.div
+  1601→                    key={sp.id}
+  1602→                    initial={{ opacity: 0, y: 20 }}
+  1603→                    animate={{ opacity: 1, y: 0 }}
+  1604→                    transition={{ duration: 0.4, delay: idx * 0.05 }}
+  1605→                    className="min-w-[220px] sm:min-w-0 flex-shrink-0 lg:flex-shrink"
+  1606→                  >
+  1607→                    <ProducerProductCard
+  1608→                      product={sp}
+  1609→                      onClick={() => {
+  1610→                        setSelectedProductId(sp.id)
+  1611→                        setSelectedImageIdx(0)
+  1612→                        window.scrollTo({ top: 0, behavior: 'smooth' })
+  1613→                      }}
+  1614→                      onAddToCart={() => handleQuickAddToCart(sp)}
+  1615→                      producerName={producer?.companyName || product.seller.companyName || product.seller.name}
+  1616→                      isVerified={producer?.verificationStatus === 'verified' || product.seller.verificationStatus === 'verified'}
+  1617→                    />
+  1618→                  </motion.div>
+  1619→                ))}
+  1620→              </div>
+  1621→            </div>
+  1622→          </motion.div>
+  1623→        )}
+  1624→      </div>
+  1625→    </div>
+  1626→  )
+  1627→}
+  1628→

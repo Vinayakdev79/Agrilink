@@ -70,6 +70,10 @@ interface Product {
   deliveryHandledByProducer?: boolean
   deliveryFee?: number
   freeDelivery?: boolean
+  deliveryType?: 'platform' | 'producer' | 'local'
+  localTransporterName?: string
+  localTransporterPhone?: string
+  localTransporterVehicle?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -243,6 +247,10 @@ function ProductCard({
       deliveryHandledByProducer: product.deliveryHandledByProducer || false,
       deliveryFee: product.deliveryFee || 0,
       freeDelivery: product.freeDelivery || false,
+      deliveryType: product.deliveryType || 'platform',
+      localTransporterName: product.localTransporterName || '',
+      localTransporterPhone: product.localTransporterPhone || '',
+      localTransporterVehicle: product.localTransporterVehicle || '',
     })
     toast.success(`${product.name} added to cart`)
   }
@@ -303,6 +311,18 @@ function ProductCard({
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-teal-500/20 text-teal-400 border-teal-500/30 flex items-center gap-0.5">
                 <Truck className="w-2.5 h-2.5" />
                 Delivery ₹{product.deliveryFee}
+              </span>
+            )}
+            {product.deliveryType === 'local' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-amber-500/20 text-amber-400 border-amber-500/30 flex items-center gap-0.5">
+                <Truck className="w-2.5 h-2.5" />
+                Producer's Transporter
+              </span>
+            )}
+            {product.deliveryHandledByProducer && !product.freeDelivery && !(product.deliveryFee > 0) && product.deliveryType !== 'local' && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md border backdrop-blur-sm bg-emerald-500/15 text-emerald-400 border-emerald-500/25 flex items-center gap-0.5">
+                <Truck className="w-2.5 h-2.5" />
+                Delivery by Producer
               </span>
             )}
           </div>

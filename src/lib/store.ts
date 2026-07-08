@@ -59,6 +59,10 @@ export interface CartItem {
   deliveryHandledByProducer?: boolean
   deliveryFee?: number
   freeDelivery?: boolean
+  deliveryType?: 'platform' | 'producer' | 'local'
+  localTransporterName?: string
+  localTransporterPhone?: string
+  localTransporterVehicle?: string
 }
 
 interface AppState {

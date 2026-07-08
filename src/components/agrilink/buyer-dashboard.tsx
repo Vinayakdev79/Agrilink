@@ -4,7 +4,7 @@ import { useAppStore } from '@/lib/store'
 import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
-  ClipboardList, ShoppingCart, IndianRupee, Users, Store, Plus,
+  ShoppingCart, IndianRupee, Users, Store,
   MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
   ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield,
   Eye, Gavel, Phone, Crosshair, CalendarDays, User, Leaf,
@@ -16,7 +16,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -31,6 +30,7 @@ import {
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
+import { SubscriptionCard } from '@/components/agrilink/subscription-card'
 
 interface BuyerDashboardProps {
   tab: string
@@ -55,7 +55,8 @@ const statusColors: Record<string, string> = {
 }
 
 const paymentStatusColors: Record<string, string> = {
-  advance_paid: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  pending: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  advance_paid: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   unpaid: 'bg-red-500/20 text-red-400 border-red-500/30',
 }
@@ -74,8 +75,6 @@ const shipmentStatusColors: Record<string, string> = {
   in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
   delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
 }
-
-const categories = ['grains', 'vegetables', 'fruits', 'spices', 'dairy', 'poultry', 'pulses', 'oilseeds']
 
 function StatCard({ icon, value, label, trend, trendUp }: {
   icon: React.ReactNode; value: string; label: string; trend?: string; trendUp?: boolean
@@ -130,7 +129,7 @@ function PaymentBreakdown({ order }: { order: any }) {
         <h5 className="text-sm font-semibold text-foreground">Payment Breakdown</h5>
         {order.paymentStatus && (
           <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px] ml-auto`}>
-            {order.paymentStatus === 'advance_paid' ? '50% Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus.replace('_', ' ')}
+            {order.paymentStatus === 'advance_paid' ? 'Advance Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus === 'pending' ? 'Pending' : order.paymentStatus.replace('_', ' ')}
           </Badge>
         )}
       </div>
@@ -184,12 +183,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
   const { user, setChatOpen, setActiveChatUser, setView, setMarketplaceCategory, setSelectedProducerId } = useAppStore()
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [reqOpen, setReqOpen] = useState(false)
-  const [reqForm, setReqForm] = useState({
-    productType: '', category: '', quantityNeeded: '', unit: 'kg',
-    deliveryLocation: '', deliveryState: '', maxBudget: '', description: ''
-  })
-  const [requirements, setRequirements] = useState<any[]>([])
+
   const [shipmentForm, setShipmentForm] = useState<{
     open: boolean; orderId: string; origin: string; destination: string; budgetMin: string; budgetMax: string
   }>({
@@ -266,19 +260,6 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
   useEffect(() => {
     if (tab === 'producers') fetchProducers()
   }, [tab, fetchProducers])
-
-  const handleCreateRequirement = () => {
-    const newReq = {
-      id: `req_${Date.now()}`,
-      ...reqForm,
-      status: 'open',
-      createdAt: new Date().toISOString()
-    }
-    setRequirements(prev => [newReq, ...prev])
-    toast.success('Requirement created!')
-    setReqOpen(false)
-    setReqForm({ productType: '', category: '', quantityNeeded: '', unit: 'kg', deliveryLocation: '', deliveryState: '', maxBudget: '', description: '' })
-  }
 
   const handleCreateShipment = async () => {
     try {
@@ -453,7 +434,6 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
     })
   }
 
-  const activeProcurements = requirements.filter(r => r.status === 'open').length
   const totalOrders = orders.length
   const savings = Math.round(orders.filter(o => o.status === 'delivered').reduce((s, o) => s + (o.totalPrice || 0), 0) * 0.12)
   const suppliers = [...new Set(orders.map(o => o.seller?.id).filter(Boolean))].length
@@ -468,6 +448,20 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
           <StatCard icon={<Users className="h-5 w-5" />} value={String(suppliers)} label="Suppliers" trend="+2" trendUp />
           <StatCard icon={<CheckCircle className="h-5 w-5" />} value={String(orders.filter(o => o.status === 'delivered').length)} label="Delivered" trend="+8%" trendUp />
         </div>
+
+        {/* Subscription card */}
+        <SubscriptionCard
+          userId={user?.id || ''}
+          userName={user?.name}
+          userEmail={user?.email}
+          rolePlanId="buyer_pro"
+          accentColor="amber"
+          onSubscriptionChanged={() => {
+            if (user?.id) {
+              fetch(`/api/users?id=${user.id}`).then(r => r.json()).then(() => {}).catch(() => {})
+            }
+          }}
+        />
 
         {/* Charts row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -558,175 +552,10 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
           <Button className="bg-amber-600 hover:bg-amber-500 gap-2" onClick={() => { setMarketplaceCategory('all'); setView('marketplace') }}>
             <Search className="h-4 w-4" /> Search Products
           </Button>
-          <Button variant="outline" className="border-glass-border gap-2" onClick={() => setReqOpen(true)}>
-            <Plus className="h-4 w-4" /> Create Requirement
-          </Button>
           <Button variant="outline" className="border-glass-border gap-2" onClick={() => { setMarketplaceCategory('all'); setView('marketplace') }}>
             <Store className="h-4 w-4" /> View Marketplace
           </Button>
         </div>
-
-        {/* Requirement Dialog */}
-        <Dialog open={reqOpen} onOpenChange={setReqOpen}>
-          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-foreground">Create Requirement</DialogTitle>
-              <DialogDescription className="text-muted-foreground">Post your procurement requirement for suppliers to see</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label className="text-foreground">Product Type</Label>
-                <Input className="glass-input text-foreground" placeholder="e.g. Organic Basmati Rice" value={reqForm.productType} onChange={e => setReqForm(p => ({ ...p, productType: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Category</Label>
-                  <Select value={reqForm.category} onValueChange={v => setReqForm(p => ({ ...p, category: v }))}>
-                    <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
-                    <SelectContent>
-                      {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Quantity Needed</Label>
-                  <Input type="number" className="glass-input text-foreground" placeholder="100" value={reqForm.quantityNeeded} onChange={e => setReqForm(p => ({ ...p, quantityNeeded: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Delivery Location</Label>
-                  <Input className="glass-input text-foreground" placeholder="e.g. Mumbai" value={reqForm.deliveryLocation} onChange={e => setReqForm(p => ({ ...p, deliveryLocation: e.target.value }))} />
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">State</Label>
-                  <Input className="glass-input text-foreground" placeholder="e.g. Maharashtra" value={reqForm.deliveryState} onChange={e => setReqForm(p => ({ ...p, deliveryState: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-foreground">Max Budget (₹)</Label>
-                <Input type="number" className="glass-input text-foreground" placeholder="50000" value={reqForm.maxBudget} onChange={e => setReqForm(p => ({ ...p, maxBudget: e.target.value }))} />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-foreground">Description</Label>
-                <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your requirement..." value={reqForm.description} onChange={e => setReqForm(p => ({ ...p, description: e.target.value }))} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" className="border-glass-border" onClick={() => setReqOpen(false)}>Cancel</Button>
-              <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleCreateRequirement}>Create Requirement</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-    )
-  }
-
-  if (tab === 'procurement') {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-foreground">Sourcing & Requirements</h3>
-          <Dialog open={reqOpen} onOpenChange={setReqOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-amber-600 hover:bg-amber-500 gap-2">
-                <Plus className="h-4 w-4" /> New Requirement
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="text-foreground">Create Requirement</DialogTitle>
-                <DialogDescription className="text-muted-foreground">Post your procurement requirement</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Product Type</Label>
-                  <Input className="glass-input text-foreground" placeholder="e.g. Organic Basmati Rice" value={reqForm.productType} onChange={e => setReqForm(p => ({ ...p, productType: e.target.value }))} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Category</Label>
-                    <Select value={reqForm.category} onValueChange={v => setReqForm(p => ({ ...p, category: v }))}>
-                      <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
-                        {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Quantity</Label>
-                    <Input type="number" className="glass-input text-foreground" placeholder="100" value={reqForm.quantityNeeded} onChange={e => setReqForm(p => ({ ...p, quantityNeeded: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Delivery Location</Label>
-                    <Input className="glass-input text-foreground" placeholder="e.g. Mumbai" value={reqForm.deliveryLocation} onChange={e => setReqForm(p => ({ ...p, deliveryLocation: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-foreground">Max Budget (₹)</Label>
-                    <Input type="number" className="glass-input text-foreground" placeholder="50000" value={reqForm.maxBudget} onChange={e => setReqForm(p => ({ ...p, maxBudget: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-foreground">Description</Label>
-                  <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your requirement..." value={reqForm.description} onChange={e => setReqForm(p => ({ ...p, description: e.target.value }))} />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" className="border-glass-border" onClick={() => setReqOpen(false)}>Cancel</Button>
-                <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleCreateRequirement}>Create Requirement</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {requirements.length === 0 ? (
-          <div className="glass-card p-12 text-center">
-            <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No procurement requirements yet. Create one to get started!</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {requirements.map((req, i) => (
-              <motion.div
-                key={req.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="glass-card p-5 space-y-2"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-semibold text-foreground">{req.productType || 'Unnamed Requirement'}</h4>
-                    <p className="text-xs text-muted-foreground capitalize">{req.category}</p>
-                  </div>
-                  <Badge className={`${req.status === 'open' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'} border text-xs`}>
-                    {req.status}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Quantity</p>
-                    <p className="text-foreground">{req.quantityNeeded} {req.unit}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Location</p>
-                    <p className="text-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{req.deliveryLocation || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Budget</p>
-                    <p className="text-amber-400 font-medium">₹{parseInt(req.maxBudget || '0').toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Created</p>
-                    <p className="text-foreground text-xs">{new Date(req.createdAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
       </div>
     )
   }
@@ -750,8 +579,8 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
               const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
               const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
               const isExternalTransport = shipment?.isExternal || shipment?.isExternalTransporter
-              const canPayRemaining = order.paymentStatus === 'advance_paid' && order.status === 'delivered'
               const remainingAmount = order.remainingAmount || Math.round((order.totalPayable || order.totalPrice || 0) * 0.5 * 100) / 100
+              const canPayRemaining = order.paymentStatus === 'advance_paid' && remainingAmount > 0 && order.status !== 'cancelled'
               const isExpanded = expandedOrders.has(order.id)
 
               return (
@@ -798,7 +627,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                           </Badge>
                           {order.paymentStatus && (
                             <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px]`}>
-                              {order.paymentStatus === 'advance_paid' ? '50% Paid' : order.paymentStatus === 'full_paid' ? 'Paid' : order.paymentStatus}
+                              {order.paymentStatus === 'advance_paid' ? 'Advance Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus === 'pending' ? 'Pending' : order.paymentStatus.replace('_', ' ')}
                             </Badge>
                           )}
                         </div>
@@ -1081,7 +910,7 @@ export function BuyerDashboard({ tab }: BuyerDashboardProps) {
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-foreground">Payment Due</p>
-                            <p className="text-xs text-muted-foreground">Remaining 50% payment pending for this delivered order</p>
+                            <p className="text-xs text-muted-foreground">Remaining payment of ₹{remainingAmount.toLocaleString()} is pending for this order</p>
                           </div>
                         </div>
                         <Button

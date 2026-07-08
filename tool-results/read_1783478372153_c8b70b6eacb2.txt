@@ -1,0 +1,1858 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useAppStore } from '@/lib/store'
+     4→     4→import { useEffect, useState, useCallback } from 'react'
+     5→     5→import { motion } from 'framer-motion'
+     6→     6→import {
+     7→     7→  ClipboardList, ShoppingCart, IndianRupee, Users, Store, Plus,
+     8→     8→  MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
+     9→     9→  ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield,
+    10→    10→  Eye, Gavel, Phone, Crosshair, CalendarDays, User, Leaf,
+    11→    11→  Wallet, CreditCard, ExternalLink, ShieldCheck
+    12→    12→} from 'lucide-react'
+    13→    13→import { openRazorpayCheckout } from '@/lib/razorpay-client'
+    14→    14→import { Button } from '@/components/ui/button'
+    15→    15→import { Badge } from '@/components/ui/badge'
+    16→    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→    17→import { Input } from '@/components/ui/input'
+    18→    18→import { Label } from '@/components/ui/label'
+    19→    19→import { Textarea } from '@/components/ui/textarea'
+    20→    20→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    21→    21→import {
+    22→    22→  Dialog, DialogContent, DialogDescription, DialogFooter,
+    23→    23→  DialogHeader, DialogTitle, DialogTrigger
+    24→    24→} from '@/components/ui/dialog'
+    25→    25→import {
+    26→    26→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    27→    27→} from '@/components/ui/table'
+    28→    28→import {
+    29→    29→  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid
+    30→    30→} from 'recharts'
+    31→    31→import { toast } from 'sonner'
+    32→    32→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    33→    33→import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
+    34→    34→
+    35→    35→interface BuyerDashboardProps {
+    36→    36→  tab: string
+    37→    37→}
+    38→    38→
+    39→    39→const categorySpendData = [
+    40→    40→  { name: 'Grains', value: 450000, color: '#10b981' },
+    41→    41→  { name: 'Spices', value: 280000, color: '#f59e0b' },
+    42→    42→  { name: 'Vegetables', value: 190000, color: '#14b8a6' },
+    43→    43→  { name: 'Fruits', value: 150000, color: '#8b5cf6' },
+    44→    44→  { name: 'Dairy', value: 120000, color: '#ef4444' },
+    45→    45→  { name: 'Pulses', value: 95000, color: '#06b6d4' },
+    46→    46→]
+    47→    47→
+    48→    48→const statusColors: Record<string, string> = {
+    49→    49→  negotiating: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    50→    50→  confirmed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    51→    51→  shipped: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    52→    52→  delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
+    53→    53→  cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+    54→    54→  disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    55→    55→}
+    56→    56→
+    57→    57→const paymentStatusColors: Record<string, string> = {
+    58→    58→  advance_paid: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    59→    59→  full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    60→    60→  unpaid: 'bg-red-500/20 text-red-400 border-red-500/30',
+    61→    61→}
+    62→    62→
+    63→    63→const bidStatusColors: Record<string, string> = {
+    64→    64→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    65→    65→  accepted: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    66→    66→  rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
+    67→    67→}
+    68→    68→
+    69→    69→const shipmentStatusColors: Record<string, string> = {
+    70→    70→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    71→    71→  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    72→    72→  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    73→    73→  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    74→    74→  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    75→    75→  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    76→    76→}
+    77→    77→
+    78→    78→const categories = ['grains', 'vegetables', 'fruits', 'spices', 'dairy', 'poultry', 'pulses', 'oilseeds']
+    79→    79→
+    80→    80→function StatCard({ icon, value, label, trend, trendUp }: {
+    81→    81→  icon: React.ReactNode; value: string; label: string; trend?: string; trendUp?: boolean
+    82→    82→}) {
+    83→    83→  return (
+    84→    84→    <motion.div
+    85→    85→      initial={{ opacity: 0, y: 20 }}
+    86→    86→      animate={{ opacity: 1, y: 0 }}
+    87→    87→      className="glass-card p-5 flex flex-col gap-3"
+    88→    88→    >
+    89→    89→      <div className="flex items-center justify-between">
+    90→    90→        <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400">
+    91→    91→          {icon}
+    92→    92→        </div>
+    93→    93→        {trend && (
+    94→    94→          <div className={`flex items-center gap-1 text-xs font-medium ${trendUp ? 'text-emerald-400' : 'text-red-400'}`}>
+    95→    95→            {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+    96→    96→            {trend}
+    97→    97→          </div>
+    98→    98→        )}
+    99→    99→      </div>
+   100→   100→      <div>
+   101→   101→        <p className="text-2xl font-bold text-foreground">{value}</p>
+   102→   102→        <p className="text-sm text-muted-foreground">{label}</p>
+   103→   103→      </div>
+   104→   104→    </motion.div>
+   105→   105→  )
+   106→   106→}
+   107→   107→
+   108→   108→// Payment Breakdown Component
+   109→   109→function PaymentBreakdown({ order }: { order: any }) {
+   110→   110→  const quantity = order.quantity || 0
+   111→   111→  const unitPrice = order.unitPrice || order.product?.pricePerUnit || 0
+   112→   112→  const productCost = quantity * unitPrice
+   113→   113→  const platformFee = order.platformFee || Math.round(productCost * 0.02 * 100) / 100
+   114→   114→  const transportBookingFee = order.transportBookingFee || 30
+   115→   115→  const isFreeDelivery = order.freeDelivery || order.product?.freeDelivery
+   116→   116→  const deliveryFee = order.deliveryFee || 0
+   117→   117→  const total = order.totalPayable || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
+   118→   118→  const advancePaid = order.advanceAmount || Math.round(total * 0.5 * 100) / 100
+   119→   119→  const remaining = order.remainingAmount || Math.round(total * 0.5 * 100) / 100
+   120→   120→
+   121→   121→  return (
+   122→   122→    <motion.div
+   123→   123→      initial={{ opacity: 0, height: 0 }}
+   124→   124→      animate={{ opacity: 1, height: 'auto' }}
+   125→   125→      exit={{ opacity: 0, height: 0 }}
+   126→   126→      className="glass-card p-4 border border-amber-500/15 bg-amber-500/[0.03]"
+   127→   127→    >
+   128→   128→      <div className="flex items-center gap-2 mb-3">
+   129→   129→        <CreditCard className="h-4 w-4 text-amber-400" />
+   130→   130→        <h5 className="text-sm font-semibold text-foreground">Payment Breakdown</h5>
+   131→   131→        {order.paymentStatus && (
+   132→   132→          <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px] ml-auto`}>
+   133→   133→            {order.paymentStatus === 'advance_paid' ? '50% Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus.replace('_', ' ')}
+   134→   134→          </Badge>
+   135→   135→        )}
+   136→   136→      </div>
+   137→   137→      <div className="space-y-1.5 text-xs">
+   138→   138→        <div className="flex justify-between">
+   139→   139→          <span className="text-muted-foreground">Product Cost ({quantity} × ₹{unitPrice.toLocaleString()})</span>
+   140→   140→          <span className="text-foreground font-medium">₹{productCost.toLocaleString()}</span>
+   141→   141→        </div>
+   142→   142→        <div className="flex justify-between">
+   143→   143→          <span className="text-muted-foreground">Platform Fee (2%)</span>
+   144→   144→          <span className="text-foreground font-medium">₹{platformFee.toLocaleString()}</span>
+   145→   145→        </div>
+   146→   146→        <div className="flex justify-between">
+   147→   147→          <span className="text-muted-foreground">Transport Booking Fee</span>
+   148→   148→          <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString()}</span>
+   149→   149→        </div>
+   150→   150→        {/* Delivery Fee row — FREE badge or charged amount */}
+   151→   151→        {isFreeDelivery ? (
+   152→   152→          <div className="flex justify-between items-center">
+   153→   153→            <span className="text-muted-foreground">Delivery Fee</span>
+   154→   154→            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-[10px]">FREE</Badge>
+   155→   155→          </div>
+   156→   156→        ) : deliveryFee > 0 ? (
+   157→   157→          <div className="flex justify-between">
+   158→   158→            <span className="text-muted-foreground">Delivery Fee</span>
+   159→   159→            <span className="text-foreground font-medium">₹{deliveryFee.toLocaleString()}</span>
+   160→   160→          </div>
+   161→   161→        ) : null}
+   162→   162→        <div className="flex justify-between pt-1.5 border-t border-glass-border">
+   163→   163→          <span className="text-foreground font-semibold">Total</span>
+   164→   164→          <span className="text-amber-400 font-bold">₹{total.toLocaleString()}</span>
+   165→   165→        </div>
+   166→   166→        <div className="flex justify-between pt-1 border-t border-dashed border-glass-border">
+   167→   167→          <span className="text-emerald-400">Advance Paid (50%)</span>
+   168→   168→          <span className="text-emerald-400 font-medium">₹{advancePaid.toLocaleString()}</span>
+   169→   169→        </div>
+   170→   170→        <div className="flex justify-between">
+   171→   171→          <span className={order.paymentStatus === 'full_paid' ? 'text-emerald-400' : 'text-orange-400'}>
+   172→   172→            {order.paymentStatus === 'full_paid' ? 'Remaining (Paid)' : 'Remaining (50%)'}
+   173→   173→          </span>
+   174→   174→          <span className={order.paymentStatus === 'full_paid' ? 'text-emerald-400 font-medium' : 'text-orange-400 font-bold'}>
+   175→   175→            ₹{remaining.toLocaleString()}
+   176→   176→          </span>
+   177→   177→        </div>
+   178→   178→      </div>
+   179→   179→    </motion.div>
+   180→   180→  )
+   181→   181→}
+   182→   182→
+   183→   183→export function BuyerDashboard({ tab }: BuyerDashboardProps) {
+   184→   184→  const { user, setChatOpen, setActiveChatUser, setView, setMarketplaceCategory, setSelectedProducerId } = useAppStore()
+   185→   185→  const [orders, setOrders] = useState<any[]>([])
+   186→   186→  const [loading, setLoading] = useState(true)
+   187→   187→  const [reqOpen, setReqOpen] = useState(false)
+   188→   188→  const [reqForm, setReqForm] = useState({
+   189→   189→    productType: '', category: '', quantityNeeded: '', unit: 'kg',
+   190→   190→    deliveryLocation: '', deliveryState: '', maxBudget: '', description: ''
+   191→   191→  })
+   192→   192→  const [requirements, setRequirements] = useState<any[]>([])
+   193→   193→  const [shipmentForm, setShipmentForm] = useState<{
+   194→   194→    open: boolean; orderId: string; origin: string; destination: string; budgetMin: string; budgetMax: string
+   195→   195→  }>({
+   196→   196→    open: false, orderId: '', origin: '', destination: '', budgetMin: '', budgetMax: ''
+   197→   197→  })
+   198→   198→  // Producers tab state
+   199→   199→  const [producers, setProducers] = useState<any[]>([])
+   200→   200→  const [producersLoading, setProducersLoading] = useState(false)
+   201→   201→  const [producerSearch, setProducerSearch] = useState('')
+   202→   202→  const [producerStateFilter, setProducerStateFilter] = useState('')
+   203→   203→  const [producerCertFilter, setProducerCertFilter] = useState('')
+   204→   204→  const [organicOnly, setOrganicOnly] = useState(false)
+   205→   205→  const [producerSort, setProducerSort] = useState('rating')
+   206→   206→
+   207→   207→  // Bid visibility state
+   208→   208→  const [bidsDialogOpen, setBidsDialogOpen] = useState(false)
+   209→   209→  const [bidsForShipment, setBidsForShipment] = useState<any[]>([])
+   210→   210→  const [bidsLoading, setBidsLoading] = useState(false)
+   211→   211→  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null)
+   212→   212→
+   213→   213→  // Shipment tracking state
+   214→   214→  const [trackingShipment, setTrackingShipment] = useState<any>(null)
+   215→   215→  const [trackerOpen, setTrackerOpen] = useState(false)
+   216→   216→
+   217→   217→  // Shipments for this buyer
+   218→   218→  const [myShipments, setMyShipments] = useState<any[]>([])
+   219→   219→
+   220→   220→  // Pay remaining state
+   221→   221→  const [payingRemaining, setPayingRemaining] = useState<string | null>(null)
+   222→   222→
+   223→   223→  // Expanded orders for payment breakdown
+   224→   224→  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+   225→   225→
+   226→   226→  const fetchData = useCallback(async () => {
+   227→   227→    if (!user) return
+   228→   228→    setLoading(true)
+   229→   229→    try {
+   230→   230→      const ordersRes = await fetch(`/api/orders?userId=${user.id}&role=buyer`)
+   231→   231→      const ordersData = await ordersRes.json()
+   232→   232→      if (ordersData.orders) setOrders(ordersData.orders)
+   233→   233→
+   234→   234→      // Fetch shipments for this buyer
+   235→   235→      const shipRes = await fetch('/api/shipments')
+   236→   236→      const shipData = await shipRes.json()
+   237→   237→      const allShipments = shipData.shipments || []
+   238→   238→      // Filter shipments that belong to this buyer's orders
+   239→   239→      const buyerOrderIds = new Set((ordersData.orders || []).map((o: any) => o.id))
+   240→   240→      const buyerShips = allShipments.filter((s: any) => buyerOrderIds.has(s.orderId))
+   241→   241→      setMyShipments(buyerShips)
+   242→   242→    } catch {
+   243→   243→      toast.error('Failed to load data')
+   244→   244→    } finally {
+   245→   245→      setLoading(false)
+   246→   246→    }
+   247→   247→  }, [user])
+   248→   248→
+   249→   249→  useEffect(() => {
+   250→   250→    fetchData()
+   251→   251→  }, [fetchData])
+   252→   252→
+   253→   253→  const fetchProducers = useCallback(async () => {
+   254→   254→    setProducersLoading(true)
+   255→   255→    try {
+   256→   256→      const res = await fetch('/api/users?role=producer')
+   257→   257→      const data = await res.json()
+   258→   258→      if (data.users) setProducers(data.users)
+   259→   259→    } catch {
+   260→   260→      toast.error('Failed to load producers')
+   261→   261→    } finally {
+   262→   262→      setProducersLoading(false)
+   263→   263→    }
+   264→   264→  }, [])
+   265→   265→
+   266→   266→  useEffect(() => {
+   267→   267→    if (tab === 'producers') fetchProducers()
+   268→   268→  }, [tab, fetchProducers])
+   269→   269→
+   270→   270→  const handleCreateRequirement = () => {
+   271→   271→    const newReq = {
+   272→   272→      id: `req_${Date.now()}`,
+   273→   273→      ...reqForm,
+   274→   274→      status: 'open',
+   275→   275→      createdAt: new Date().toISOString()
+   276→   276→    }
+   277→   277→    setRequirements(prev => [newReq, ...prev])
+   278→   278→    toast.success('Requirement created!')
+   279→   279→    setReqOpen(false)
+   280→   280→    setReqForm({ productType: '', category: '', quantityNeeded: '', unit: 'kg', deliveryLocation: '', deliveryState: '', maxBudget: '', description: '' })
+   281→   281→  }
+   282→   282→
+   283→   283→  const handleCreateShipment = async () => {
+   284→   284→    try {
+   285→   285→      const body: Record<string, unknown> = {
+   286→   286→        orderId: shipmentForm.orderId,
+   287→   287→        origin: shipmentForm.origin,
+   288→   288→        destination: shipmentForm.destination,
+   289→   289→      }
+   290→   290→      if (shipmentForm.budgetMin) body.budgetMin = shipmentForm.budgetMin
+   291→   291→      if (shipmentForm.budgetMax) body.budgetMax = shipmentForm.budgetMax
+   292→   292→
+   293→   293→      const res = await fetch('/api/shipments', {
+   294→   294→        method: 'POST',
+   295→   295→        headers: { 'Content-Type': 'application/json' },
+   296→   296→        body: JSON.stringify(body)
+   297→   297→      })
+   298→   298→      if (res.ok) {
+   299→   299→        toast.success('Shipment created! Transporters will be notified.')
+   300→   300→        setShipmentForm({ open: false, orderId: '', origin: '', destination: '', budgetMin: '', budgetMax: '' })
+   301→   301→        fetchData()
+   302→   302→      } else {
+   303→   303→        toast.error('Failed to create shipment')
+   304→   304→      }
+   305→   305→    } catch {
+   306→   306→      toast.error('Failed to create shipment')
+   307→   307→    }
+   308→   308→  }
+   309→   309→
+   310→   310→  // View bids for a shipment
+   311→   311→  const handleViewBids = async (shipmentId: string) => {
+   312→   312→    setBidsLoading(true)
+   313→   313→    setBidsDialogOpen(true)
+   314→   314→    try {
+   315→   315→      const res = await fetch(`/api/transport-bids?shipmentId=${shipmentId}`)
+   316→   316→      const data = await res.json()
+   317→   317→      if (data.bids) {
+   318→   318→        setBidsForShipment(data.bids)
+   319→   319→      }
+   320→   320→    } catch {
+   321→   321→      toast.error('Failed to load bids')
+   322→   322→    } finally {
+   323→   323→      setBidsLoading(false)
+   324→   324→    }
+   325→   325→  }
+   326→   326→
+   327→   327→  // Accept a bid
+   328→   328→  const handleAcceptBid = async (bidId: string) => {
+   329→   329→    setAcceptingBidId(bidId)
+   330→   330→    try {
+   331→   331→      const res = await fetch('/api/transport-bids', {
+   332→   332→        method: 'PATCH',
+   333→   333→        headers: { 'Content-Type': 'application/json' },
+   334→   334→        body: JSON.stringify({ bidId, status: 'accepted' })
+   335→   335→      })
+   336→   336→      if (res.ok) {
+   337→   337→        toast.success('Bid accepted! Transporter has been assigned.')
+   338→   338→        setBidsDialogOpen(false)
+   339→   339→        fetchData()
+   340→   340→      } else {
+   341→   341→        const data = await res.json()
+   342→   342→        toast.error(data.error || 'Failed to accept bid')
+   343→   343→      }
+   344→   344→    } catch {
+   345→   345→      toast.error('Failed to accept bid')
+   346→   346→    } finally {
+   347→   347→      setAcceptingBidId(null)
+   348→   348→    }
+   349→   349→  }
+   350→   350→
+   351→   351→  // Track shipment
+   352→   352→  const handleTrackShipment = (shipment: any) => {
+   353→   353→    setTrackingShipment(shipment)
+   354→   354→    setTrackerOpen(true)
+   355→   355→  }
+   356→   356→
+   357→   357→  // Find shipment for a given order
+   358→   358→  const getShipmentForOrder = (orderId: string) => {
+   359→   359→    return myShipments.find((s: any) => s.orderId === orderId)
+   360→   360→  }
+   361→   361→
+   362→   362→  // Pay remaining amount — 3-step Razorpay flow (create-order → checkout → verify)
+   363→   363→  const handlePayRemaining = async (orderId: string, amount: number) => {
+   364→   364→    setPayingRemaining(orderId)
+   365→   365→    try {
+   366→   366→      // 1. Create Razorpay order (server returns demoMode if keys are absent)
+   367→   367→      const createRes = await fetch('/api/payments/razorpay/create-order', {
+   368→   368→        method: 'POST',
+   369→   369→        headers: { 'Content-Type': 'application/json' },
+   370→   370→        body: JSON.stringify({
+   371→   371→          type: 'remaining',
+   372→   372→          orderId,
+   373→   373→          amount,
+   374→   374→          userId: user?.id,
+   375→   375→          description: 'Remaining payment for order',
+   376→   376→        }),
+   377→   377→      })
+   378→   378→      if (!createRes.ok) {
+   379→   379→        const e = await createRes.json().catch(() => ({}))
+   380→   380→        toast.error(e.error || 'Failed to initiate payment')
+   381→   381→        return
+   382→   382→      }
+   383→   383→      const {
+   384→   384→        orderId: razorpayOrderId,
+   385→   385→        amount: amountPaise,
+   386→   386→        demoMode,
+   387→   387→        keyId,
+   388→   388→      } = await createRes.json()
+   389→   389→
+   390→   390→      // 2. Open Razorpay checkout (auto-succeeds in demo mode)
+   391→   391→      await new Promise<void>((resolve, reject) => {
+   392→   392→        openRazorpayCheckout({
+   393→   393→          orderId: razorpayOrderId,
+   394→   394→          amount: amountPaise,
+   395→   395→          keyId,
+   396→   396→          demoMode,
+   397→   397→          name: 'AgriLink',
+   398→   398→          description: 'Remaining payment',
+   399→   399→          prefill: { name: user?.name, email: user?.email, contact: user?.phone },
+   400→   400→          onSuccess: async (paymentId, signature, rzpOrderId) => {
+   401→   401→            try {
+   402→   402→              // 3. Verify signature & persist payment status
+   403→   403→              const verifyRes = await fetch('/api/payments/razorpay/verify', {
+   404→   404→                method: 'POST',
+   405→   405→                headers: { 'Content-Type': 'application/json' },
+   406→   406→                body: JSON.stringify({
+   407→   407→                  type: 'remaining',
+   408→   408→                  razorpayOrderId: rzpOrderId,
+   409→   409→                  razorpayPaymentId: paymentId,
+   410→   410→                  razorpaySignature: signature,
+   411→   411→                  orderId,
+   412→   412→                  userId: user?.id,
+   413→   413→                  amount,
+   414→   414→                }),
+   415→   415→              })
+   416→   416→              if (!verifyRes.ok) {
+   417→   417→                const e = await verifyRes.json().catch(() => ({}))
+   418→   418→                toast.error(e.error || 'Payment verification failed')
+   419→   419→                reject(new Error('verify failed'))
+   420→   420→                return
+   421→   421→              }
+   422→   422→              toast.success('Remaining payment completed successfully!')
+   423→   423→              fetchData()
+   424→   424→              resolve()
+   425→   425→            } catch (err) {
+   426→   426→              toast.error('Payment verification failed')
+   427→   427→              reject(err)
+   428→   428→            }
+   429→   429→          },
+   430→   430→          onDismiss: () => {
+   431→   431→            toast.info('Payment cancelled')
+   432→   432→            resolve()
+   433→   433→          },
+   434→   434→        })
+   435→   435→      })
+   436→   436→    } catch {
+   437→   437→      toast.error('Failed to process payment')
+   438→   438→    } finally {
+   439→   439→      setPayingRemaining(null)
+   440→   440→    }
+   441→   441→  }
+   442→   442→
+   443→   443→  // Toggle payment breakdown
+   444→   444→  const togglePaymentBreakdown = (orderId: string) => {
+   445→   445→    setExpandedOrders(prev => {
+   446→   446→      const next = new Set(prev)
+   447→   447→      if (next.has(orderId)) {
+   448→   448→        next.delete(orderId)
+   449→   449→      } else {
+   450→   450→        next.add(orderId)
+   451→   451→      }
+   452→   452→      return next
+   453→   453→    })
+   454→   454→  }
+   455→   455→
+   456→   456→  const activeProcurements = requirements.filter(r => r.status === 'open').length
+   457→   457→  const totalOrders = orders.length
+   458→   458→  const savings = Math.round(orders.filter(o => o.status === 'delivered').reduce((s, o) => s + (o.totalPrice || 0), 0) * 0.12)
+   459→   459→  const suppliers = [...new Set(orders.map(o => o.seller?.id).filter(Boolean))].length
+   460→   460→
+   461→   461→  if (tab === 'overview') {
+   462→   462→    return (
+   463→   463→      <div className="space-y-6">
+   464→   464→        {/* Stat cards */}
+   465→   465→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   466→   466→          <StatCard icon={<ShoppingCart className="h-5 w-5" />} value={String(totalOrders)} label="Orders Placed" trend="+15%" trendUp />
+   467→   467→          <StatCard icon={<IndianRupee className="h-5 w-5" />} value={`₹${(savings / 1000).toFixed(0)}K`} label="Savings" trend="+18%" trendUp />
+   468→   468→          <StatCard icon={<Users className="h-5 w-5" />} value={String(suppliers)} label="Suppliers" trend="+2" trendUp />
+   469→   469→          <StatCard icon={<CheckCircle className="h-5 w-5" />} value={String(orders.filter(o => o.status === 'delivered').length)} label="Delivered" trend="+8%" trendUp />
+   470→   470→        </div>
+   471→   471→
+   472→   472→        {/* Charts row */}
+   473→   473→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   474→   474→          {/* Category spend pie chart */}
+   475→   475→          <div className="glass-card p-6">
+   476→   476→            <h3 className="text-lg font-semibold text-foreground mb-4">Category Spend</h3>
+   477→   477→            <div className="h-64">
+   478→   478→              <ResponsiveContainer width="100%" height="100%">
+   479→   479→                <PieChart>
+   480→   480→                  <Pie
+   481→   481→                    data={categorySpendData}
+   482→   482→                    cx="50%"
+   483→   483→                    cy="50%"
+   484→   484→                    innerRadius={60}
+   485→   485→                    outerRadius={90}
+   486→   486→                    paddingAngle={4}
+   487→   487→                    dataKey="value"
+   488→   488→                  >
+   489→   489→                    {categorySpendData.map((entry, index) => (
+   490→   490→                      <Cell key={index} fill={entry.color} />
+   491→   491→                    ))}
+   492→   492→                  </Pie>
+   493→   493→                  <Tooltip
+   494→   494→                    contentStyle={{ backgroundColor: 'rgba(15,15,30,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+   495→   495→                    formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Spend']}
+   496→   496→                  />
+   497→   497→                </PieChart>
+   498→   498→              </ResponsiveContainer>
+   499→   499→            </div>
+   500→   500→            <div className="flex flex-wrap gap-3 mt-2 justify-center">
+   501→   501→              {categorySpendData.map((item) => (
+   502→   502→                <div key={item.name} className="flex items-center gap-2 text-xs">
+   503→   503→                  <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+   504→   504→                  <span className="text-muted-foreground">{item.name}</span>
+   505→   505→                </div>
+   506→   506→              ))}
+   507→   507→            </div>
+   508→   508→          </div>
+   509→   509→
+   510→   510→          {/* Recent orders */}
+   511→   511→          <div className="glass-card p-6">
+   512→   512→            <div className="flex items-center justify-between mb-4">
+   513→   513→              <h3 className="text-lg font-semibold text-foreground">Recent Orders</h3>
+   514→   514→              <Button variant="ghost" size="sm" className="text-amber-400 hover:text-amber-300" onClick={() => useAppStore.getState().setDashboardTab('orders')}>
+   515→   515→                View All
+   516→   516→              </Button>
+   517→   517→            </div>
+   518→   518→            {loading ? (
+   519→   519→              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 rounded-lg" />)}</div>
+   520→   520→            ) : orders.length === 0 ? (
+   521→   521→              <p className="text-muted-foreground text-sm py-8 text-center">No orders yet</p>
+   522→   522→            ) : (
+   523→   523→              <div className="space-y-2 max-h-56 overflow-y-auto">
+   524→   524→                {orders.slice(0, 5).map((order) => {
+   525→   525→                  const shipment = getShipmentForOrder(order.id)
+   526→   526→                  return (
+   527→   527→                    <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-glass-border">
+   528→   528→                      <div>
+   529→   529→                        <p className="text-sm font-medium text-foreground">{order.product?.name || 'N/A'}</p>
+   530→   530→                        <p className="text-xs text-muted-foreground">{order.seller?.name || order.seller?.companyName || 'Unknown'}</p>
+   531→   531→                      </div>
+   532→   532→                      <div className="text-right">
+   533→   533→                        <p className="text-sm text-amber-400 font-medium">₹{order.totalPrice?.toLocaleString()}</p>
+   534→   534→                        <div className="flex items-center gap-1.5 justify-end">
+   535→   535→                          <Badge className={`${statusColors[order.status] || ''} border text-[10px]`}>{order.status}</Badge>
+   536→   536→                          {shipment && ['picked_up', 'in_transit'].includes(shipment.status) && (
+   537→   537→                            <Button
+   538→   538→                              size="sm"
+   539→   539→                              variant="ghost"
+   540→   540→                              className="h-5 w-5 p-0 text-cyan-400 hover:text-cyan-300"
+   541→   541→                              onClick={() => handleTrackShipment(shipment)}
+   542→   542→                            >
+   543→   543→                              <Crosshair className="h-3 w-3" />
+   544→   544→                            </Button>
+   545→   545→                          )}
+   546→   546→                        </div>
+   547→   547→                      </div>
+   548→   548→                    </div>
+   549→   549→                  )
+   550→   550→                })}
+   551→   551→              </div>
+   552→   552→            )}
+   553→   553→          </div>
+   554→   554→        </div>
+   555→   555→
+   556→   556→        {/* Quick actions */}
+   557→   557→        <div className="flex flex-wrap gap-3">
+   558→   558→          <Button className="bg-amber-600 hover:bg-amber-500 gap-2" onClick={() => { setMarketplaceCategory('all'); setView('marketplace') }}>
+   559→   559→            <Search className="h-4 w-4" /> Search Products
+   560→   560→          </Button>
+   561→   561→          <Button variant="outline" className="border-glass-border gap-2" onClick={() => setReqOpen(true)}>
+   562→   562→            <Plus className="h-4 w-4" /> Create Requirement
+   563→   563→          </Button>
+   564→   564→          <Button variant="outline" className="border-glass-border gap-2" onClick={() => { setMarketplaceCategory('all'); setView('marketplace') }}>
+   565→   565→            <Store className="h-4 w-4" /> View Marketplace
+   566→   566→          </Button>
+   567→   567→        </div>
+   568→   568→
+   569→   569→        {/* Requirement Dialog */}
+   570→   570→        <Dialog open={reqOpen} onOpenChange={setReqOpen}>
+   571→   571→          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+   572→   572→            <DialogHeader>
+   573→   573→              <DialogTitle className="text-foreground">Create Requirement</DialogTitle>
+   574→   574→              <DialogDescription className="text-muted-foreground">Post your procurement requirement for suppliers to see</DialogDescription>
+   575→   575→            </DialogHeader>
+   576→   576→            <div className="grid gap-4 py-4">
+   577→   577→              <div className="grid gap-2">
+   578→   578→                <Label className="text-foreground">Product Type</Label>
+   579→   579→                <Input className="glass-input text-foreground" placeholder="e.g. Organic Basmati Rice" value={reqForm.productType} onChange={e => setReqForm(p => ({ ...p, productType: e.target.value }))} />
+   580→   580→              </div>
+   581→   581→              <div className="grid grid-cols-2 gap-4">
+   582→   582→                <div className="grid gap-2">
+   583→   583→                  <Label className="text-foreground">Category</Label>
+   584→   584→                  <Select value={reqForm.category} onValueChange={v => setReqForm(p => ({ ...p, category: v }))}>
+   585→   585→                    <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
+   586→   586→                    <SelectContent>
+   587→   587→                      {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
+   588→   588→                    </SelectContent>
+   589→   589→                  </Select>
+   590→   590→                </div>
+   591→   591→                <div className="grid gap-2">
+   592→   592→                  <Label className="text-foreground">Quantity Needed</Label>
+   593→   593→                  <Input type="number" className="glass-input text-foreground" placeholder="100" value={reqForm.quantityNeeded} onChange={e => setReqForm(p => ({ ...p, quantityNeeded: e.target.value }))} />
+   594→   594→                </div>
+   595→   595→              </div>
+   596→   596→              <div className="grid grid-cols-2 gap-4">
+   597→   597→                <div className="grid gap-2">
+   598→   598→                  <Label className="text-foreground">Delivery Location</Label>
+   599→   599→                  <Input className="glass-input text-foreground" placeholder="e.g. Mumbai" value={reqForm.deliveryLocation} onChange={e => setReqForm(p => ({ ...p, deliveryLocation: e.target.value }))} />
+   600→   600→                </div>
+   601→   601→                <div className="grid gap-2">
+   602→   602→                  <Label className="text-foreground">State</Label>
+   603→   603→                  <Input className="glass-input text-foreground" placeholder="e.g. Maharashtra" value={reqForm.deliveryState} onChange={e => setReqForm(p => ({ ...p, deliveryState: e.target.value }))} />
+   604→   604→                </div>
+   605→   605→              </div>
+   606→   606→              <div className="grid gap-2">
+   607→   607→                <Label className="text-foreground">Max Budget (₹)</Label>
+   608→   608→                <Input type="number" className="glass-input text-foreground" placeholder="50000" value={reqForm.maxBudget} onChange={e => setReqForm(p => ({ ...p, maxBudget: e.target.value }))} />
+   609→   609→              </div>
+   610→   610→              <div className="grid gap-2">
+   611→   611→                <Label className="text-foreground">Description</Label>
+   612→   612→                <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your requirement..." value={reqForm.description} onChange={e => setReqForm(p => ({ ...p, description: e.target.value }))} />
+   613→   613→              </div>
+   614→   614→            </div>
+   615→   615→            <DialogFooter>
+   616→   616→              <Button variant="outline" className="border-glass-border" onClick={() => setReqOpen(false)}>Cancel</Button>
+   617→   617→              <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleCreateRequirement}>Create Requirement</Button>
+   618→   618→            </DialogFooter>
+   619→   619→          </DialogContent>
+   620→   620→        </Dialog>
+   621→   621→      </div>
+   622→   622→    )
+   623→   623→  }
+   624→   624→
+   625→   625→  if (tab === 'procurement') {
+   626→   626→    return (
+   627→   627→      <div className="space-y-6">
+   628→   628→        <div className="flex items-center justify-between">
+   629→   629→          <h3 className="text-xl font-semibold text-foreground">Sourcing & Requirements</h3>
+   630→   630→          <Dialog open={reqOpen} onOpenChange={setReqOpen}>
+   631→   631→            <DialogTrigger asChild>
+   632→   632→              <Button className="bg-amber-600 hover:bg-amber-500 gap-2">
+   633→   633→                <Plus className="h-4 w-4" /> New Requirement
+   634→   634→              </Button>
+   635→   635→            </DialogTrigger>
+   636→   636→            <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+   637→   637→              <DialogHeader>
+   638→   638→                <DialogTitle className="text-foreground">Create Requirement</DialogTitle>
+   639→   639→                <DialogDescription className="text-muted-foreground">Post your procurement requirement</DialogDescription>
+   640→   640→              </DialogHeader>
+   641→   641→              <div className="grid gap-4 py-4">
+   642→   642→                <div className="grid gap-2">
+   643→   643→                  <Label className="text-foreground">Product Type</Label>
+   644→   644→                  <Input className="glass-input text-foreground" placeholder="e.g. Organic Basmati Rice" value={reqForm.productType} onChange={e => setReqForm(p => ({ ...p, productType: e.target.value }))} />
+   645→   645→                </div>
+   646→   646→                <div className="grid grid-cols-2 gap-4">
+   647→   647→                  <div className="grid gap-2">
+   648→   648→                    <Label className="text-foreground">Category</Label>
+   649→   649→                    <Select value={reqForm.category} onValueChange={v => setReqForm(p => ({ ...p, category: v }))}>
+   650→   650→                      <SelectTrigger className="glass-input text-foreground"><SelectValue placeholder="Select" /></SelectTrigger>
+   651→   651→                      <SelectContent>
+   652→   652→                        {categories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
+   653→   653→                      </SelectContent>
+   654→   654→                    </Select>
+   655→   655→                  </div>
+   656→   656→                  <div className="grid gap-2">
+   657→   657→                    <Label className="text-foreground">Quantity</Label>
+   658→   658→                    <Input type="number" className="glass-input text-foreground" placeholder="100" value={reqForm.quantityNeeded} onChange={e => setReqForm(p => ({ ...p, quantityNeeded: e.target.value }))} />
+   659→   659→                  </div>
+   660→   660→                </div>
+   661→   661→                <div className="grid grid-cols-2 gap-4">
+   662→   662→                  <div className="grid gap-2">
+   663→   663→                    <Label className="text-foreground">Delivery Location</Label>
+   664→   664→                    <Input className="glass-input text-foreground" placeholder="e.g. Mumbai" value={reqForm.deliveryLocation} onChange={e => setReqForm(p => ({ ...p, deliveryLocation: e.target.value }))} />
+   665→   665→                  </div>
+   666→   666→                  <div className="grid gap-2">
+   667→   667→                    <Label className="text-foreground">Max Budget (₹)</Label>
+   668→   668→                    <Input type="number" className="glass-input text-foreground" placeholder="50000" value={reqForm.maxBudget} onChange={e => setReqForm(p => ({ ...p, maxBudget: e.target.value }))} />
+   669→   669→                  </div>
+   670→   670→                </div>
+   671→   671→                <div className="grid gap-2">
+   672→   672→                  <Label className="text-foreground">Description</Label>
+   673→   673→                  <Textarea className="glass-input text-foreground min-h-[80px]" placeholder="Describe your requirement..." value={reqForm.description} onChange={e => setReqForm(p => ({ ...p, description: e.target.value }))} />
+   674→   674→                </div>
+   675→   675→              </div>
+   676→   676→              <DialogFooter>
+   677→   677→                <Button variant="outline" className="border-glass-border" onClick={() => setReqOpen(false)}>Cancel</Button>
+   678→   678→                <Button className="bg-amber-600 hover:bg-amber-500" onClick={handleCreateRequirement}>Create Requirement</Button>
+   679→   679→              </DialogFooter>
+   680→   680→            </DialogContent>
+   681→   681→          </Dialog>
+   682→   682→        </div>
+   683→   683→
+   684→   684→        {requirements.length === 0 ? (
+   685→   685→          <div className="glass-card p-12 text-center">
+   686→   686→            <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+   687→   687→            <p className="text-muted-foreground">No procurement requirements yet. Create one to get started!</p>
+   688→   688→          </div>
+   689→   689→        ) : (
+   690→   690→          <div className="space-y-3">
+   691→   691→            {requirements.map((req, i) => (
+   692→   692→              <motion.div
+   693→   693→                key={req.id}
+   694→   694→                initial={{ opacity: 0, y: 15 }}
+   695→   695→                animate={{ opacity: 1, y: 0 }}
+   696→   696→                transition={{ delay: i * 0.05 }}
+   697→   697→                className="glass-card p-5 space-y-2"
+   698→   698→              >
+   699→   699→                <div className="flex items-start justify-between">
+   700→   700→                  <div>
+   701→   701→                    <h4 className="font-semibold text-foreground">{req.productType || 'Unnamed Requirement'}</h4>
+   702→   702→                    <p className="text-xs text-muted-foreground capitalize">{req.category}</p>
+   703→   703→                  </div>
+   704→   704→                  <Badge className={`${req.status === 'open' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'} border text-xs`}>
+   705→   705→                    {req.status}
+   706→   706→                  </Badge>
+   707→   707→                </div>
+   708→   708→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+   709→   709→                  <div>
+   710→   710→                    <p className="text-muted-foreground text-xs">Quantity</p>
+   711→   711→                    <p className="text-foreground">{req.quantityNeeded} {req.unit}</p>
+   712→   712→                  </div>
+   713→   713→                  <div>
+   714→   714→                    <p className="text-muted-foreground text-xs">Location</p>
+   715→   715→                    <p className="text-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{req.deliveryLocation || 'N/A'}</p>
+   716→   716→                  </div>
+   717→   717→                  <div>
+   718→   718→                    <p className="text-muted-foreground text-xs">Budget</p>
+   719→   719→                    <p className="text-amber-400 font-medium">₹{parseInt(req.maxBudget || '0').toLocaleString()}</p>
+   720→   720→                  </div>
+   721→   721→                  <div>
+   722→   722→                    <p className="text-muted-foreground text-xs">Created</p>
+   723→   723→                    <p className="text-foreground text-xs">{new Date(req.createdAt).toLocaleDateString()}</p>
+   724→   724→                  </div>
+   725→   725→                </div>
+   726→   726→              </motion.div>
+   727→   727→            ))}
+   728→   728→          </div>
+   729→   729→        )}
+   730→   730→      </div>
+   731→   731→    )
+   732→   732→  }
+   733→   733→
+   734→   734→  if (tab === 'orders') {
+   735→   735→    return (
+   736→   736→      <div className="space-y-6">
+   737→   737→        <h3 className="text-xl font-semibold text-foreground">Orders</h3>
+   738→   738→        {loading ? (
+   739→   739→          <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}</div>
+   740→   740→        ) : orders.length === 0 ? (
+   741→   741→          <div className="glass-card p-12 text-center">
+   742→   742→            <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+   743→   743→            <p className="text-muted-foreground">No orders yet</p>
+   744→   744→          </div>
+   745→   745→        ) : (
+   746→   746→          <div className="space-y-4">
+   747→   747→            {orders.map((order) => {
+   748→   748→              const shipment = getShipmentForOrder(order.id)
+   749→   749→              const hasShipment = !!shipment
+   750→   750→              const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
+   751→   751→              const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
+   752→   752→              const isExternalTransport = shipment?.isExternal || shipment?.isExternalTransporter
+   753→   753→              const canPayRemaining = order.paymentStatus === 'advance_paid' && order.status === 'delivered'
+   754→   754→              const remainingAmount = order.remainingAmount || Math.round((order.totalPayable || order.totalPrice || 0) * 0.5 * 100) / 100
+   755→   755→              const isExpanded = expandedOrders.has(order.id)
+   756→   756→
+   757→   757→              return (
+   758→   758→                <motion.div
+   759→   759→                  key={order.id}
+   760→   760→                  initial={{ opacity: 0, y: 15 }}
+   761→   761→                  animate={{ opacity: 1, y: 0 }}
+   762→   762→                  className="glass-card p-5 space-y-4"
+   763→   763→                >
+   764→   764→                  {/* Header with product image + basic info */}
+   765→   765→                  <div className="flex gap-4">
+   766→   766→                    {/* Product Image */}
+   767→   767→                    <div className="w-24 h-24 rounded-xl overflow-hidden border border-glass-border shrink-0">
+   768→   768→                      {order.product?.imageUrl ? (
+   769→   769→                        <img src={order.product.imageUrl} alt={order.product?.name} className="w-full h-full object-cover" />
+   770→   770→                      ) : (
+   771→   771→                        <div className="w-full h-full bg-emerald-500/10 flex items-center justify-center">
+   772→   772→                          <ShoppingBag className="h-8 w-8 text-emerald-400/50" />
+   773→   773→                        </div>
+   774→   774→                      )}
+   775→   775→                    </div>
+   776→   776→
+   777→   777→                    <div className="flex-1 min-w-0">
+   778→   778→                      <div className="flex items-start justify-between gap-2">
+   779→   779→                        <div>
+   780→   780→                          <h4 className="font-semibold text-foreground">{order.product?.name || 'N/A'}</h4>
+   781→   781→                          <div className="flex items-center gap-2 mt-0.5">
+   782→   782→                            <span className="text-xs text-muted-foreground capitalize">{order.product?.category}</span>
+   783→   783→                            {order.product?.qualityGrade && (
+   784→   784→                              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/25 border text-[9px] px-1.5">
+   785→   785→                                Grade {order.product.qualityGrade}
+   786→   786→                              </Badge>
+   787→   787→                            )}
+   788→   788→                            {order.product?.isOrganic && (
+   789→   789→                              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 border text-[9px] px-1.5">
+   790→   790→                                Organic
+   791→   791→                              </Badge>
+   792→   792→                            )}
+   793→   793→                          </div>
+   794→   794→                        </div>
+   795→   795→                        <div className="flex items-center gap-1.5 shrink-0">
+   796→   796→                          <Badge className={`${statusColors[order.status] || ''} border text-xs`}>
+   797→   797→                            {order.status}
+   798→   798→                          </Badge>
+   799→   799→                          {order.paymentStatus && (
+   800→   800→                            <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px]`}>
+   801→   801→                              {order.paymentStatus === 'advance_paid' ? '50% Paid' : order.paymentStatus === 'full_paid' ? 'Paid' : order.paymentStatus}
+   802→   802→                            </Badge>
+   803→   803→                          )}
+   804→   804→                        </div>
+   805→   805→                      </div>
+   806→   806→
+   807→   807→                      {/* Price details */}
+   808→   808→                      <div className="flex items-center gap-4 mt-2 text-sm">
+   809→   809→                        <div>
+   810→   810→                          <p className="text-muted-foreground text-[10px]">Qty</p>
+   811→   811→                          <p className="text-foreground font-medium">{order.quantity} {order.product?.unit || ''}</p>
+   812→   812→                        </div>
+   813→   813→                        <div>
+   814→   814→                          <p className="text-muted-foreground text-[10px]">Unit Price</p>
+   815→   815→                          <p className="text-foreground font-medium">₹{order.product?.pricePerUnit?.toLocaleString() || order.unitPrice?.toLocaleString()}/{order.product?.unit || ''}</p>
+   816→   816→                        </div>
+   817→   817→                        <div>
+   818→   818→                          <p className="text-muted-foreground text-[10px]">Total</p>
+   819→   819→                          <p className="text-amber-400 font-bold">₹{order.totalPrice?.toLocaleString()}</p>
+   820→   820→                        </div>
+   821→   821→                      </div>
+   822→   822→                    </div>
+   823→   823→                  </div>
+   824→   824→
+   825→   825→                  {/* Product Location & Variety */}
+   826→   826→                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+   827→   827→                    {order.product?.location && (
+   828→   828→                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-emerald-400" />{order.product.location}{order.product.state ? `, ${order.product.state}` : ''}</span>
+   829→   829→                    )}
+   830→   830→                    {order.product?.cropVariety && (
+   831→   831→                      <span className="flex items-center gap-1"><Sprout className="w-3 h-3 text-emerald-400" />{order.product.cropVariety}</span>
+   832→   832→                    )}
+   833→   833→                  </div>
+   834→   834→
+   835→   835→                  {/* Delivery Address */}
+   836→   836→                  {order.deliveryAddress && (
+   837→   837→                    <div className="glass-card p-3 border border-emerald-500/10">
+   838→   838→                      <p className="text-[10px] text-muted-foreground mb-1">Delivery Address</p>
+   839→   839→                      <p className="text-xs text-foreground">{order.deliveryAddress}{order.deliveryCity ? `, ${order.deliveryCity}` : ''}{order.deliveryState ? `, ${order.deliveryState}` : ''} {order.deliveryPincode || ''}</p>
+   840→   840→                    </div>
+   841→   841→                  )}
+   842→   842→
+   843→   843→                  {/* Seller info with Chat button */}
+   844→   844→                  <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-glass-border">
+   845→   845→                    <Avatar className="h-8 w-8 border border-glass-border shrink-0">
+   846→   846→                      {order.seller?.avatarUrl ? (
+   847→   847→                        <AvatarImage src={order.seller.avatarUrl} alt={order.seller?.name || ''} />
+   848→   848→                      ) : null}
+   849→   849→                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xs font-semibold">
+   850→   850→                        {(order.seller?.name || 'S').slice(0, 2).toUpperCase()}
+   851→   851→                      </AvatarFallback>
+   852→   852→                    </Avatar>
+   853→   853→                    <div className="flex-1 min-w-0">
+   854→   854→                      <p className="text-sm font-medium text-foreground">{order.seller?.name || order.seller?.companyName || 'Unknown Seller'}</p>
+   855→   855→                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   856→   856→                        {order.seller?.companyName && <span>{order.seller.companyName}</span>}
+   857→   857→                        {(order.seller?.city || order.seller?.state) && (
+   858→   858→                          <span className="flex items-center gap-1">
+   859→   859→                            <MapPin className="h-3 w-3" />
+   860→   860→                            {[order.seller?.city, order.seller?.state].filter(Boolean).join(', ')}
+   861→   861→                          </span>
+   862→   862→                        )}
+   863→   863→                      </div>
+   864→   864→                    </div>
+   865→   865→                    <div className="flex items-center gap-2">
+   866→   866→                      <Button
+   867→   867→                        size="sm"
+   868→   868→                        variant="ghost"
+   869→   869→                        className="h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1 text-xs"
+   870→   870→                        onClick={() => {
+   871→   871→                          if (order.seller?.id) {
+   872→   872→                            setActiveChatUser(order.seller.id)
+   873→   873→                            setChatOpen(true)
+   874→   874→                          }
+   875→   875→                        }}
+   876→   876→                      >
+   877→   877→                        <MessageSquare className="h-3 w-3" /> Chat
+   878→   878→                      </Button>
+   879→   879→                      <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+   880→   880→                    </div>
+   881→   881→                  </div>
+   882→   882→
+   883→   883→                  {/* Expected Pickup Date - prominent display */}
+   884→   884→                  {hasTransport && shipment.expectedPickupDate && (
+   885→   885→                    <div className="glass-card p-3 border border-amber-500/20 bg-amber-500/5">
+   886→   886→                      <div className="flex items-center gap-2">
+   887→   887→                        <CalendarDays className="h-5 w-5 text-amber-400" />
+   888→   888→                        <div>
+   889→   889→                          <p className="text-xs text-muted-foreground">Expected Pickup Date</p>
+   890→   890→                          <p className="text-sm font-bold text-amber-400">
+   891→   891→                            {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', {
+   892→   892→                              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+   893→   893→                            })}
+   894→   894→                          </p>
+   895→   895→                        </div>
+   896→   896→                      </div>
+   897→   897→                    </div>
+   898→   898→                  )}
+   899→   899→
+   900→   900→                  {/* Shipment Transport Details - Enhanced with transporter info */}
+   901→   901→                  {hasTransport && (
+   902→   902→                    <div className="glass-card p-4 border border-teal-500/20">
+   903→   903→                      <div className="flex items-center gap-2 mb-3">
+   904→   904→                        <Truck className="h-4 w-4 text-teal-400" />
+   905→   905→                        <h5 className="text-sm font-semibold text-foreground">Transport Details</h5>
+   906→   906→                        <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px]`}>
+   907→   907→                          {shipment.status.replace('_', ' ')}
+   908→   908→                        </Badge>
+   909→   909→                        {isExternalTransport && (
+   910→   910→                          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px] gap-1">
+   911→   911→                            <ExternalLink className="h-2.5 w-2.5" /> External
+   912→   912→                          </Badge>
+   913→   913→                        )}
+   914→   914→                      </div>
+   915→   915→
+   916→   916→                      {isExternalTransport ? (
+   917→   917→                        /* External Transporter Info */
+   918→   918→                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+   919→   919→                          {(shipment.externalTransporterName || shipment.externalCompanyName) && (
+   920→   920→                            <div>
+   921→   921→                              <p className="text-muted-foreground text-[10px]">Transporter</p>
+   922→   922→                              <p className="text-foreground font-medium text-xs">
+   923→   923→                                {shipment.externalTransporterName || shipment.externalCompanyName || 'N/A'}
+   924→   924→                              </p>
+   925→   925→                            </div>
+   926→   926→                          )}
+   927→   927→                          {shipment.driverName && (
+   928→   928→                            <div>
+   929→   929→                              <p className="text-muted-foreground text-[10px]">Driver</p>
+   930→   930→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   931→   931→                                <User className="h-3 w-3 text-teal-400" />
+   932→   932→                                {shipment.driverName}
+   933→   933→                              </p>
+   934→   934→                            </div>
+   935→   935→                          )}
+   936→   936→                          {(shipment.driverPhone || shipment.externalMobileNumber) && (
+   937→   937→                            <div>
+   938→   938→                              <p className="text-muted-foreground text-[10px]">Driver Phone</p>
+   939→   939→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   940→   940→                                <Phone className="h-2.5 w-2.5 text-teal-400" />
+   941→   941→                                {shipment.driverPhone || shipment.externalMobileNumber}
+   942→   942→                              </p>
+   943→   943→                            </div>
+   944→   944→                          )}
+   945→   945→                          {shipment.vehicleNumber && (
+   946→   946→                            <div>
+   947→   947→                              <p className="text-muted-foreground text-[10px]">Vehicle Number</p>
+   948→   948→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   949→   949→                                <Truck className="h-3 w-3 text-teal-400" />
+   950→   950→                                {shipment.vehicleNumber}
+   951→   951→                              </p>
+   952→   952→                            </div>
+   953→   953→                          )}
+   954→   954→                          <div>
+   955→   955→                            <p className="text-muted-foreground text-[10px]">Pickup</p>
+   956→   956→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   957→   957→                              <MapPin className="h-3 w-3 text-emerald-400" />
+   958→   958→                              {shipment.exactPickupAddress || shipment.origin}
+   959→   959→                            </p>
+   960→   960→                          </div>
+   961→   961→                          <div>
+   962→   962→                            <p className="text-muted-foreground text-[10px]">Drop-off</p>
+   963→   963→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   964→   964→                              <MapPin className="h-3 w-3 text-red-400" />
+   965→   965→                              {shipment.exactDropAddress || shipment.destination}
+   966→   966→                            </p>
+   967→   967→                          </div>
+   968→   968→                        </div>
+   969→   969→                      ) : (
+   970→   970→                        /* Internal (AgroBridge) Transporter Info */
+   971→   971→                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+   972→   972→                          <div>
+   973→   973→                            <p className="text-muted-foreground text-[10px]">Transporter Company</p>
+   974→   974→                            <p className="text-foreground font-medium text-xs">
+   975→   975→                              {shipment.transporter?.companyName || shipment.transporter?.name || 'N/A'}
+   976→   976→                            </p>
+   977→   977→                          </div>
+   978→   978→                          <div>
+   979→   979→                            <p className="text-muted-foreground text-[10px]">Transporter Contact</p>
+   980→   980→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   981→   981→                              <Phone className="h-2.5 w-2.5 text-teal-400" />
+   982→   982→                              {shipment.transporter?.phone || 'N/A'}
+   983→   983→                            </p>
+   984→   984→                          </div>
+   985→   985→                          {shipment.driverName && (
+   986→   986→                            <div>
+   987→   987→                              <p className="text-muted-foreground text-[10px]">Driver Name</p>
+   988→   988→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   989→   989→                                <User className="h-3 w-3 text-teal-400" />
+   990→   990→                                {shipment.driverName}
+   991→   991→                              </p>
+   992→   992→                            </div>
+   993→   993→                          )}
+   994→   994→                          {shipment.driverPhone && (
+   995→   995→                            <div>
+   996→   996→                              <p className="text-muted-foreground text-[10px]">Driver Phone</p>
+   997→   997→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   998→   998→                                <Phone className="h-2.5 w-2.5 text-teal-400" />
+   999→   999→                                {shipment.driverPhone}
+  1000→  1000→                              </p>
+  1001→  1001→                            </div>
+  1002→  1002→                          )}
+  1003→  1003→                          {shipment.vehicleNumber && (
+  1004→  1004→                            <div>
+  1005→  1005→                              <p className="text-muted-foreground text-[10px]">Vehicle Number</p>
+  1006→  1006→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1007→  1007→                                <Truck className="h-3 w-3 text-teal-400" />
+  1008→  1008→                                {shipment.vehicleNumber}
+  1009→  1009→                              </p>
+  1010→  1010→                            </div>
+  1011→  1011→                          )}
+  1012→  1012→                          {(shipment.vehicleType && !shipment.vehicleNumber) && (
+  1013→  1013→                            <div>
+  1014→  1014→                              <p className="text-muted-foreground text-[10px]">Vehicle Type</p>
+  1015→  1015→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1016→  1016→                                <Truck className="h-3 w-3 text-teal-400" />
+  1017→  1017→                                {shipment.vehicleType}
+  1018→  1018→                              </p>
+  1019→  1019→                            </div>
+  1020→  1020→                          )}
+  1021→  1021→                          <div>
+  1022→  1022→                            <p className="text-muted-foreground text-[10px]">Pickup</p>
+  1023→  1023→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1024→  1024→                              <MapPin className="h-3 w-3 text-emerald-400" />
+  1025→  1025→                              {shipment.exactPickupAddress || shipment.origin}
+  1026→  1026→                            </p>
+  1027→  1027→                          </div>
+  1028→  1028→                          <div>
+  1029→  1029→                            <p className="text-muted-foreground text-[10px]">Drop-off</p>
+  1030→  1030→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1031→  1031→                              <MapPin className="h-3 w-3 text-red-400" />
+  1032→  1032→                              {shipment.exactDropAddress || shipment.destination}
+  1033→  1033→                            </p>
+  1034→  1034→                          </div>
+  1035→  1035→                        </div>
+  1036→  1036→                      )}
+  1037→  1037→
+  1038→  1038→                      {/* Transporter Action Buttons */}
+  1039→  1039→                      <div className="mt-3 pt-3 border-t border-glass-border flex items-center gap-2 flex-wrap">
+  1040→  1040→                        {/* Track Shipment Button */}
+  1041→  1041→                        {isShippedOrInTransit && (
+  1042→  1042→                          <Button
+  1043→  1043→                            size="sm"
+  1044→  1044→                            variant="outline"
+  1045→  1045→                            className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1.5 text-xs"
+  1046→  1046→                            onClick={() => handleTrackShipment(shipment)}
+  1047→  1047→                          >
+  1048→  1048→                            <Crosshair className="h-3.5 w-3.5" /> Track Shipment
+  1049→  1049→                          </Button>
+  1050→  1050→                        )}
+  1051→  1051→
+  1052→  1052→                        {/* Chat with Transporter - only for internal transporters */}
+  1053→  1053→                        {!isExternalTransport && shipment.transporterId && (
+  1054→  1054→                          <Button
+  1055→  1055→                            size="sm"
+  1056→  1056→                            variant="outline"
+  1057→  1057→                            className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1.5 text-xs"
+  1058→  1058→                            onClick={() => {
+  1059→  1059→                              setActiveChatUser(shipment.transporterId)
+  1060→  1060→                              setChatOpen(true)
+  1061→  1061→                            }}
+  1062→  1062→                          >
+  1063→  1063→                            <MessageSquare className="h-3.5 w-3.5" /> Chat with Transporter
+  1064→  1064→                          </Button>
+  1065→  1065→                        )}
+  1066→  1066→                      </div>
+  1067→  1067→                    </div>
+  1068→  1068→                  )}
+  1069→  1069→
+  1070→  1070→                  {/* Pay Remaining Banner */}
+  1071→  1071→                  {canPayRemaining && (
+  1072→  1072→                    <motion.div
+  1073→  1073→                      initial={{ opacity: 0, scale: 0.98 }}
+  1074→  1074→                      animate={{ opacity: 1, scale: 1 }}
+  1075→  1075→                      className="glass-card p-4 border border-orange-500/30 bg-orange-500/[0.05]"
+  1076→  1076→                    >
+  1077→  1077→                      <div className="flex items-center justify-between gap-3">
+  1078→  1078→                        <div className="flex items-center gap-3">
+  1079→  1079→                          <div className="h-10 w-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
+  1080→  1080→                            <Wallet className="h-5 w-5 text-orange-400" />
+  1081→  1081→                          </div>
+  1082→  1082→                          <div>
+  1083→  1083→                            <p className="text-sm font-semibold text-foreground">Payment Due</p>
+  1084→  1084→                            <p className="text-xs text-muted-foreground">Remaining 50% payment pending for this delivered order</p>
+  1085→  1085→                          </div>
+  1086→  1086→                        </div>
+  1087→  1087→                        <Button
+  1088→  1088→                          className="bg-orange-600 hover:bg-orange-500 gap-2 text-sm shadow-lg shadow-orange-600/20"
+  1089→  1089→                          disabled={payingRemaining === order.id}
+  1090→  1090→                          onClick={() => handlePayRemaining(order.id, remainingAmount)}
+  1091→  1091→                        >
+  1092→  1092→                          {payingRemaining === order.id ? (
+  1093→  1093→                            <>
+  1094→  1094→                              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1095→  1095→                              Processing...
+  1096→  1096→                            </>
+  1097→  1097→                          ) : (
+  1098→  1098→                            <>
+  1099→  1099→                              <IndianRupee className="h-4 w-4" /> Pay Remaining ₹{remainingAmount.toLocaleString()}
+  1100→  1100→                            </>
+  1101→  1101→                          )}
+  1102→  1102→                        </Button>
+  1103→  1103→                      </div>
+  1104→  1104→                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+  1105→  1105→                        <ShieldCheck className="h-3 w-3 text-emerald-400" />
+  1106→  1106→                        <span>Secured by Razorpay</span>
+  1107→  1107→                      </div>
+  1108→  1108→                    </motion.div>
+  1109→  1109→                  )}
+  1110→  1110→
+  1111→  1111→                  {/* Payment Breakdown Toggle */}
+  1112→  1112→                  <div className="flex items-center gap-2">
+  1113→  1113→                    <Button
+  1114→  1114→                      size="sm"
+  1115→  1115→                      variant="ghost"
+  1116→  1116→                      className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1.5 text-xs h-7 px-2"
+  1117→  1117→                      onClick={() => togglePaymentBreakdown(order.id)}
+  1118→  1118→                    >
+  1119→  1119→                      <CreditCard className="h-3.5 w-3.5" />
+  1120→  1120→                      {isExpanded ? 'Hide' : 'Show'} Payment Breakdown
+  1121→  1121→                    </Button>
+  1122→  1122→                  </div>
+  1123→  1123→
+  1124→  1124→                  {/* Payment Breakdown */}
+  1125→  1125→                  {isExpanded && (
+  1126→  1126→                    <PaymentBreakdown order={order} />
+  1127→  1127→                  )}
+  1128→  1128→
+  1129→  1129→                  {/* Producer-handled delivery info banner (replaces Create Shipment) */}
+  1130→  1130→                  {order.status === 'confirmed' && !hasShipment && (order.product?.deliveryHandledByProducer || order.deliveryType === 'producer' || order.deliveryType === 'local') && (
+  1131→  1131→                    <div className="glass-card p-4 border border-emerald-500/25 bg-emerald-500/[0.05]">
+  1132→  1132→                      <div className="flex items-start gap-3">
+  1133→  1133→                        <div className="h-9 w-9 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+  1134→  1134→                          <Truck className="h-4 w-4 text-emerald-400" />
+  1135→  1135→                        </div>
+  1136→  1136→                        <div className="flex-1 min-w-0">
+  1137→  1137→                          <p className="text-sm font-semibold text-foreground">
+  1138→  1138→                            {order.deliveryType === 'local' ? "🚚 Producer's Local Transporter is handling delivery" : '🚚 This order is being delivered by the producer'}
+  1139→  1139→                          </p>
+  1140→  1140→                          <p className="text-xs text-muted-foreground mt-0.5">Shipment creation is not required.</p>
+  1141→  1141→                        </div>
+  1142→  1142→                      </div>
+  1143→  1143→                    </div>
+  1144→  1144→                  )}
+  1145→  1145→
+  1146→  1146→                  {/* Local Transporter details (when deliveryType is 'local') */}
+  1147→  1147→                  {order.deliveryType === 'local' && (order.localTransporterName || order.localTransporterPhone || order.localTransporterVehicle) && (
+  1148→  1148→                    <div className="glass-card p-4 border border-teal-500/20">
+  1149→  1149→                      <div className="flex items-center gap-2 mb-3">
+  1150→  1150→                        <Truck className="h-4 w-4 text-teal-400" />
+  1151→  1151→                        <h5 className="text-sm font-semibold text-foreground">Local Transporter Details</h5>
+  1152→  1152→                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px] gap-1">
+  1153→  1153→                          <ExternalLink className="h-2.5 w-2.5" /> Producer-managed
+  1154→  1154→                        </Badge>
+  1155→  1155→                      </div>
+  1156→  1156→                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+  1157→  1157→                        {order.localTransporterName && (
+  1158→  1158→                          <div>
+  1159→  1159→                            <p className="text-muted-foreground text-[10px]">Transporter Name</p>
+  1160→  1160→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1161→  1161→                              <User className="h-3 w-3 text-teal-400" />
+  1162→  1162→                              {order.localTransporterName}
+  1163→  1163→                            </p>
+  1164→  1164→                          </div>
+  1165→  1165→                        )}
+  1166→  1166→                        {order.localTransporterPhone && (
+  1167→  1167→                          <div>
+  1168→  1168→                            <p className="text-muted-foreground text-[10px]">Phone</p>
+  1169→  1169→                            <a
+  1170→  1170→                              href={`tel:${order.localTransporterPhone}`}
+  1171→  1171→                              className="text-foreground font-medium text-xs flex items-center gap-1 hover:text-teal-400 transition-colors"
+  1172→  1172→                            >
+  1173→  1173→                              <Phone className="h-2.5 w-2.5 text-teal-400" />
+  1174→  1174→                              {order.localTransporterPhone}
+  1175→  1175→                            </a>
+  1176→  1176→                          </div>
+  1177→  1177→                        )}
+  1178→  1178→                        {order.localTransporterVehicle && (
+  1179→  1179→                          <div>
+  1180→  1180→                            <p className="text-muted-foreground text-[10px]">Vehicle</p>
+  1181→  1181→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1182→  1182→                              <Truck className="h-3 w-3 text-teal-400" />
+  1183→  1183→                              {order.localTransporterVehicle}
+  1184→  1184→                            </p>
+  1185→  1185→                          </div>
+  1186→  1186→                        )}
+  1187→  1187→                      </div>
+  1188→  1188→                    </div>
+  1189→  1189→                  )}
+  1190→  1190→
+  1191→  1191→                  {/* Actions */}
+  1192→  1192→                  <div className="flex items-center gap-2 flex-wrap">
+  1193→  1193→                    {order.status === 'confirmed' && !hasShipment && !order.product?.deliveryHandledByProducer && (!order.deliveryType || order.deliveryType === 'platform') && (
+  1194→  1194→                      <Button
+  1195→  1195→                        size="sm"
+  1196→  1196→                        variant="outline"
+  1197→  1197→                        className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1 text-xs"
+  1198→  1198→                        onClick={() => {
+  1199→  1199→                          // Auto-fill origin from seller's address
+  1200→  1200→                          const sellerAddress = order.seller?.address
+  1201→  1201→                            ? order.seller.address
+  1202→  1202→                            : [order.seller?.city, order.seller?.state].filter(Boolean).join(', ')
+  1203→  1203→
+  1204→  1204→                          // Auto-fill destination from order delivery address or buyer profile
+  1205→  1205→                          const buyerAddress = order.deliveryAddress
+  1206→  1206→                            ? [order.deliveryAddress, order.deliveryCity, order.deliveryState, order.deliveryPincode].filter(Boolean).join(', ')
+  1207→  1207→                            : [user?.city, user?.state].filter(Boolean).join(', ')
+  1208→  1208→
+  1209→  1209→                          setShipmentForm({
+  1210→  1210→                            open: true,
+  1211→  1211→                            orderId: order.id,
+  1212→  1212→                            origin: sellerAddress,
+  1213→  1213→                            destination: buyerAddress,
+  1214→  1214→                            budgetMin: '',
+  1215→  1215→                            budgetMax: ''
+  1216→  1216→                          })
+  1217→  1217→                        }}
+  1218→  1218→                      >
+  1219→  1219→                        <Truck className="h-3 w-3" /> Create Shipment
+  1220→  1220→                      </Button>
+  1221→  1221→                    )}
+  1222→  1222→
+  1223→  1223→                    {hasShipment && ['pending', 'bidding'].includes(shipment.status) && (
+  1224→  1224→                      <Button
+  1225→  1225→                        size="sm"
+  1226→  1226→                        variant="outline"
+  1227→  1227→                        className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 text-xs"
+  1228→  1228→                        onClick={() => handleViewBids(shipment.id)}
+  1229→  1229→                      >
+  1230→  1230→                        <Gavel className="h-3 w-3" /> View Bids
+  1231→  1231→                        {shipment.transportBids?.length > 0 && (
+  1232→  1232→                          <span className="ml-0.5 px-1 py-0 rounded-full bg-amber-500/20 text-[9px]">
+  1233→  1233→                            {shipment.transportBids.length}
+  1234→  1234→                          </span>
+  1235→  1235→                        )}
+  1236→  1236→                      </Button>
+  1237→  1237→                    )}
+  1238→  1238→
+  1239→  1239→                    {hasShipment && shipment.status === 'assigned' && (
+  1240→  1240→                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
+  1241→  1241→                        <Truck className="h-3 w-3 mr-1" /> Transporter Assigned
+  1242→  1242→                      </Badge>
+  1243→  1243→                    )}
+  1244→  1244→
+  1245→  1245→                    {hasShipment && shipment.status === 'delivered' && (
+  1246→  1246→                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
+  1247→  1247→                        <CheckCircle className="h-3 w-3 mr-1" /> Delivered
+  1248→  1248→                      </Badge>
+  1249→  1249→                    )}
+  1250→  1250→
+  1251→  1251→                    {/* Chat with Producer - always available for orders with a seller */}
+  1252→  1252→                    {order.seller?.id && (
+  1253→  1253→                      <Button
+  1254→  1254→                        size="sm"
+  1255→  1255→                        variant="outline"
+  1256→  1256→                        className="border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1 text-xs ml-auto"
+  1257→  1257→                        onClick={() => {
+  1258→  1258→                          setActiveChatUser(order.seller.id)
+  1259→  1259→                          setChatOpen(true)
+  1260→  1260→                        }}
+  1261→  1261→                      >
+  1262→  1262→                        <MessageSquare className="h-3 w-3" /> Chat with Producer
+  1263→  1263→                      </Button>
+  1264→  1264→                    )}
+  1265→  1265→                  </div>
+  1266→  1266→                </motion.div>
+  1267→  1267→              )
+  1268→  1268→            })}
+  1269→  1269→          </div>
+  1270→  1270→        )}
+  1271→  1271→
+  1272→  1272→        {/* Create Shipment Dialog */}
+  1273→  1273→        <Dialog open={shipmentForm.open} onOpenChange={(open) => setShipmentForm(prev => ({ ...prev, open }))}>
+  1274→  1274→          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl sm:max-w-md">
+  1275→  1275→            <DialogHeader>
+  1276→  1276→              <DialogTitle className="text-foreground flex items-center gap-2">
+  1277→  1277→                <Truck className="h-5 w-5 text-teal-400" />
+  1278→  1278→                Create Shipment
+  1279→  1279→              </DialogTitle>
+  1280→  1280→              <DialogDescription className="text-muted-foreground">Set up transport for this order</DialogDescription>
+  1281→  1281→            </DialogHeader>
+  1282→  1282→            <div className="grid gap-3 py-3">
+  1283→  1283→              {/* Pickup - read-only display */}
+  1284→  1284→              <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+  1285→  1285→                <MapPin className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+  1286→  1286→                <div className="min-w-0">
+  1287→  1287→                  <p className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">Pickup from Producer</p>
+  1288→  1288→                  <p className="text-sm text-foreground mt-0.5">{shipmentForm.origin || 'Address not available'}</p>
+  1289→  1289→                </div>
+  1290→  1290→              </div>
+  1291→  1291→
+  1292→  1292→              {/* Destination - read-only display */}
+  1293→  1293→              <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+  1294→  1294→                <MapPin className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+  1295→  1295→                <div className="min-w-0">
+  1296→  1296→                  <p className="text-[10px] text-amber-400 font-medium uppercase tracking-wider">Deliver to Your Address</p>
+  1297→  1297→                  <p className="text-sm text-foreground mt-0.5">{shipmentForm.destination || 'Address not available'}</p>
+  1298→  1298→                </div>
+  1299→  1299→              </div>
+  1300→  1300→
+  1301→  1301→              {/* Budget Range - only editable fields */}
+  1302→  1302→              <div className="p-3 rounded-lg bg-teal-500/10 border border-teal-500/20">
+  1303→  1303→                <div className="flex items-center gap-2 mb-2">
+  1304→  1304→                  <IndianRupee className="h-4 w-4 text-teal-400" />
+  1305→  1305→                  <span className="text-sm font-medium text-foreground">Transport Budget Range</span>
+  1306→  1306→                </div>
+  1307→  1307→                <div className="grid grid-cols-2 gap-3">
+  1308→  1308→                  <div className="grid gap-1">
+  1309→  1309→                    <Label className="text-foreground text-xs">Min (₹)</Label>
+  1310→  1310→                    <Input type="number" className="glass-input text-foreground text-sm h-9" placeholder="e.g. 5000" value={shipmentForm.budgetMin} onChange={e => setShipmentForm(p => ({ ...p, budgetMin: e.target.value }))} />
+  1311→  1311→                  </div>
+  1312→  1312→                  <div className="grid gap-1">
+  1313→  1313→                    <Label className="text-foreground text-xs">Max (₹)</Label>
+  1314→  1314→                    <Input type="number" className="glass-input text-foreground text-sm h-9" placeholder="e.g. 15000" value={shipmentForm.budgetMax} onChange={e => setShipmentForm(p => ({ ...p, budgetMax: e.target.value }))} />
+  1315→  1315→                  </div>
+  1316→  1316→                </div>
+  1317→  1317→              </div>
+  1318→  1318→            </div>
+  1319→  1319→            <DialogFooter>
+  1320→  1320→              <Button variant="outline" className="border-glass-border" onClick={() => setShipmentForm(prev => ({ ...prev, open: false }))}>Cancel</Button>
+  1321→  1321→              <Button className="bg-teal-600 hover:bg-teal-500" onClick={handleCreateShipment}>Create Shipment</Button>
+  1322→  1322→            </DialogFooter>
+  1323→  1323→          </DialogContent>
+  1324→  1324→        </Dialog>
+  1325→  1325→
+  1326→  1326→        {/* View Bids Dialog */}
+  1327→  1327→        <Dialog open={bidsDialogOpen} onOpenChange={setBidsDialogOpen}>
+  1328→  1328→          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-w-lg max-h-[85vh] overflow-y-auto">
+  1329→  1329→            <DialogHeader>
+  1330→  1330→              <DialogTitle className="text-foreground flex items-center gap-2">
+  1331→  1331→                <Gavel className="h-5 w-5 text-amber-400" />
+  1332→  1332→                Transport Bids
+  1333→  1333→              </DialogTitle>
+  1334→  1334→              <DialogDescription className="text-muted-foreground">
+  1335→  1335→                Review and accept bids from transporters
+  1336→  1336→              </DialogDescription>
+  1337→  1337→            </DialogHeader>
+  1338→  1338→            <div className="py-4">
+  1339→  1339→              {bidsLoading ? (
+  1340→  1340→                <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+  1341→  1341→              ) : bidsForShipment.length === 0 ? (
+  1342→  1342→                <div className="glass-card p-8 text-center">
+  1343→  1343→                  <Gavel className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+  1344→  1344→                  <p className="text-muted-foreground text-sm">No bids yet. Transporters will bid on your shipment soon.</p>
+  1345→  1345→                </div>
+  1346→  1346→              ) : (
+  1347→  1347→                <div className="space-y-3">
+  1348→  1348→                  {bidsForShipment.map((bid: any) => (
+  1349→  1349→                    <motion.div
+  1350→  1350→                      key={bid.id}
+  1351→  1351→                      initial={{ opacity: 0, y: 10 }}
+  1352→  1352→                      animate={{ opacity: 1, y: 0 }}
+  1353→  1353→                      className="glass-card p-4 space-y-3"
+  1354→  1354→                    >
+  1355→  1355→                      <div className="flex items-start justify-between">
+  1356→  1356→                        <div>
+  1357→  1357→                          <p className="text-sm font-semibold text-foreground">
+  1358→  1358→                            {bid.transporter?.companyName || bid.transporter?.name || 'Unknown Transporter'}
+  1359→  1359→                          </p>
+  1360→  1360→                          {bid.transporter?.verificationStatus === 'verified' && (
+  1361→  1361→                            <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 border text-[9px] mt-1">
+  1362→  1362→                              <BadgeCheck className="h-2.5 w-2.5 mr-0.5" /> Verified
+  1363→  1363→                            </Badge>
+  1364→  1364→                          )}
+  1365→  1365→                        </div>
+  1366→  1366→                        <Badge className={`${bidStatusColors[bid.status] || ''} border text-xs`}>
+  1367→  1367→                          {bid.status}
+  1368→  1368→                        </Badge>
+  1369→  1369→                      </div>
+  1370→  1370→                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+  1371→  1371→                        <div>
+  1372→  1372→                          <p className="text-muted-foreground text-[10px]">Bid Amount</p>
+  1373→  1373→                          <p className="text-amber-400 font-bold">₹{bid.bidAmount?.toLocaleString()}</p>
+  1374→  1374→                        </div>
+  1375→  1375→                        <div>
+  1376→  1376→                          <p className="text-muted-foreground text-[10px]">Est. Days</p>
+  1377→  1377→                          <p className="text-foreground">{bid.estimatedDays || '—'} days</p>
+  1378→  1378→                        </div>
+  1379→  1379→                        <div>
+  1380→  1380→                          <p className="text-muted-foreground text-[10px]">Vehicle</p>
+  1381→  1381→                          <p className="text-foreground capitalize">{bid.vehicleType || '—'}</p>
+  1382→  1382→                        </div>
+  1383→  1383→                        <div>
+  1384→  1384→                          <p className="text-muted-foreground text-[10px]">Bid Date</p>
+  1385→  1385→                          <p className="text-foreground text-xs">{new Date(bid.createdAt).toLocaleDateString()}</p>
+  1386→  1386→                        </div>
+  1387→  1387→                      </div>
+  1388→  1388→                      {bid.comments && (
+  1389→  1389→                        <p className="text-xs text-muted-foreground italic bg-white/[0.02] p-2 rounded-lg">
+  1390→  1390→                          &ldquo;{bid.comments}&rdquo;
+  1391→  1391→                        </p>
+  1392→  1392→                      )}
+  1393→  1393→                      {bid.status === 'pending' && (
+  1394→  1394→                        <Button
+  1395→  1395→                          size="sm"
+  1396→  1396→                          className="bg-emerald-600 hover:bg-emerald-500 gap-1.5 text-xs w-full"
+  1397→  1397→                          disabled={acceptingBidId !== null}
+  1398→  1398→                          onClick={() => handleAcceptBid(bid.id)}
+  1399→  1399→                        >
+  1400→  1400→                          {acceptingBidId === bid.id ? (
+  1401→  1401→                            <>
+  1402→  1402→                              <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1403→  1403→                              Accepting...
+  1404→  1404→                            </>
+  1405→  1405→                          ) : (
+  1406→  1406→                            <>
+  1407→  1407→                              <CheckCircle className="h-3.5 w-3.5" /> Accept Bid
+  1408→  1408→                            </>
+  1409→  1409→                          )}
+  1410→  1410→                        </Button>
+  1411→  1411→                      )}
+  1412→  1412→                    </motion.div>
+  1413→  1413→                  ))}
+  1414→  1414→                </div>
+  1415→  1415→              )}
+  1416→  1416→            </div>
+  1417→  1417→          </DialogContent>
+  1418→  1418→        </Dialog>
+  1419→  1419→
+  1420→  1420→        {/* Shipment Tracker Dialog */}
+  1421→  1421→        <ShipmentTracker
+  1422→  1422→          shipment={trackingShipment}
+  1423→  1423→          open={trackerOpen}
+  1424→  1424→          onClose={() => setTrackerOpen(false)}
+  1425→  1425→        />
+  1426→  1426→      </div>
+  1427→  1427→    )
+  1428→  1428→  }
+  1429→  1429→
+  1430→  1430→  if (tab === 'producers') {
+  1431→  1431→    // Filter producers
+  1432→  1432→    const filteredProducers = producers.filter((p: any) => {
+  1433→  1433→      const matchesSearch = !producerSearch ||
+  1434→  1434→        (p.name && p.name.toLowerCase().includes(producerSearch.toLowerCase())) ||
+  1435→  1435→        (p.companyName && p.companyName.toLowerCase().includes(producerSearch.toLowerCase())) ||
+  1436→  1436→        (p.farmName && p.farmName.toLowerCase().includes(producerSearch.toLowerCase()))
+  1437→  1437→      const matchesState = !producerStateFilter || producerStateFilter === 'all' || p.state === producerStateFilter
+  1438→  1438→      const matchesCert = !producerCertFilter || producerCertFilter === 'all' ||
+  1439→  1439→        (p.certifications && p.certifications.toLowerCase().includes(producerCertFilter.toLowerCase()))
+  1440→  1440→      const matchesOrganic = !organicOnly ||
+  1441→  1441→        (p.certifications && p.certifications.toLowerCase().includes('organic'))
+  1442→  1442→      return matchesSearch && matchesState && matchesCert && matchesOrganic
+  1443→  1443→    })
+  1444→  1444→
+  1445→  1445→    // Sort producers
+  1446→  1446→    const sortedProducers = [...filteredProducers].sort((a: any, b: any) => {
+  1447→  1447→      if (producerSort === 'rating') return (b.avgRating || 0) - (a.avgRating || 0)
+  1448→  1448→      if (producerSort === 'experience') return (b.yearsExperience || 0) - (a.yearsExperience || 0)
+  1449→  1449→      if (producerSort === 'transactions') return (b.totalTransactions || 0) - (a.totalTransactions || 0)
+  1450→  1450→      if (producerSort === 'name') return (a.name || '').localeCompare(b.name || '')
+  1451→  1451→      return 0
+  1452→  1452→    })
+  1453→  1453→
+  1454→  1454→    const producerStates = [...new Set(producers.map((p: any) => p.state).filter(Boolean))].sort()
+  1455→  1455→    const allCerts = [...new Set(producers.flatMap((p: any) => p.certifications ? p.certifications.split(',').map((c: string) => c.trim()) : []))].sort()
+  1456→  1456→
+  1457→  1457→    // Star rating component
+  1458→  1458→    const StarRating = ({ rating, count }: { rating: number; count?: number }) => (
+  1459→  1459→      <div className="flex items-center gap-1.5">
+  1460→  1460→        <div className="flex items-center gap-0.5">
+  1461→  1461→          {[1, 2, 3, 4, 5].map((star) => (
+  1462→  1462→            <Star
+  1463→  1463→              key={star}
+  1464→  1464→              className={`h-3.5 w-3.5 transition-colors ${
+  1465→  1465→                star <= Math.round(rating)
+  1466→  1466→                  ? 'text-amber-400 fill-amber-400'
+  1467→  1467→                  : star - 0.5 <= rating
+  1468→  1468→                  ? 'text-amber-400/50 fill-amber-400/50'
+  1469→  1469→                  : 'text-white/10'
+  1470→  1470→              }`}
+  1471→  1471→            />
+  1472→  1472→          ))}
+  1473→  1473→        </div>
+  1474→  1474→        <span className="text-xs font-semibold text-amber-400">{rating.toFixed(1)}</span>
+  1475→  1475→        {count !== undefined && count > 0 && (
+  1476→  1476→          <span className="text-[10px] text-muted-foreground">({count})</span>
+  1477→  1477→        )}
+  1478→  1478→      </div>
+  1479→  1479→    )
+  1480→  1480→
+  1481→  1481→    return (
+  1482→  1482→      <div className="space-y-6">
+  1483→  1483→        {/* Header */}
+  1484→  1484→        <div className="flex items-center justify-between">
+  1485→  1485→          <div>
+  1486→  1486→            <h3 className="text-xl font-semibold text-foreground">Producers Directory</h3>
+  1487→  1487→            <p className="text-sm text-muted-foreground mt-0.5">
+  1488→  1488→              Discover and connect with verified agricultural producers across India
+  1489→  1489→            </p>
+  1490→  1490→          </div>
+  1491→  1491→          <motion.div
+  1492→  1492→            initial={{ scale: 0.9 }}
+  1493→  1493→            animate={{ scale: 1 }}
+  1494→  1494→            className="hidden sm:flex items-center gap-2 glass-card px-3 py-1.5"
+  1495→  1495→          >
+  1496→  1496→            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+  1497→  1497→            <span className="text-sm font-medium text-emerald-400">{filteredProducers.length}</span>
+  1498→  1498→            <span className="text-xs text-muted-foreground">producers</span>
+  1499→  1499→          </motion.div>
+  1500→  1500→        </div>
+  1501→  1501→
+  1502→  1502→        {/* Search & Filters Bar */}
+  1503→  1503→        <div className="glass-card p-4 space-y-4">
+  1504→  1504→          {/* Search Row */}
+  1505→  1505→          <div className="flex flex-col sm:flex-row gap-3">
+  1506→  1506→            <div className="relative flex-1">
+  1507→  1507→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  1508→  1508→              <Input
+  1509→  1509→                className="glass-input text-foreground pl-9 h-10"
+  1510→  1510→                placeholder="Search by name, company, or farm..."
+  1511→  1511→                value={producerSearch}
+  1512→  1512→                onChange={(e) => setProducerSearch(e.target.value)}
+  1513→  1513→              />
+  1514→  1514→            </div>
+  1515→  1515→            <Select value={producerSort} onValueChange={setProducerSort}>
+  1516→  1516→              <SelectTrigger className="glass-input text-foreground w-full sm:w-44 h-10">
+  1517→  1517→                <SelectValue placeholder="Sort by" />
+  1518→  1518→              </SelectTrigger>
+  1519→  1519→              <SelectContent>
+  1520→  1520→                <SelectItem value="rating">⭐ Top Rated</SelectItem>
+  1521→  1521→                <SelectItem value="experience">🌾 Most Experienced</SelectItem>
+  1522→  1522→                <SelectItem value="transactions">📊 Most Transactions</SelectItem>
+  1523→  1523→                <SelectItem value="name">🔤 By Name</SelectItem>
+  1524→  1524→              </SelectContent>
+  1525→  1525→            </Select>
+  1526→  1526→          </div>
+  1527→  1527→
+  1528→  1528→          {/* Filter Row */}
+  1529→  1529→          <div className="flex flex-wrap items-center gap-2">
+  1530→  1530→            <Select value={producerStateFilter || 'all'} onValueChange={setProducerStateFilter}>
+  1531→  1531→              <SelectTrigger className="glass-input text-foreground w-36 h-9 text-xs">
+  1532→  1532→                <MapPin className="h-3.5 w-3.5 mr-1 text-emerald-400 shrink-0" />
+  1533→  1533→                <SelectValue placeholder="State" />
+  1534→  1534→              </SelectTrigger>
+  1535→  1535→              <SelectContent>
+  1536→  1536→                <SelectItem value="all">All States</SelectItem>
+  1537→  1537→                {producerStates.map((s: string) => (
+  1538→  1538→                  <SelectItem key={s} value={s}>{s}</SelectItem>
+  1539→  1539→                ))}
+  1540→  1540→              </SelectContent>
+  1541→  1541→            </Select>
+  1542→  1542→            <Select value={producerCertFilter || 'all'} onValueChange={setProducerCertFilter}>
+  1543→  1543→              <SelectTrigger className="glass-input text-foreground w-36 h-9 text-xs">
+  1544→  1544→                <Shield className="h-3.5 w-3.5 mr-1 text-amber-400 shrink-0" />
+  1545→  1545→                <SelectValue placeholder="Certification" />
+  1546→  1546→              </SelectTrigger>
+  1547→  1547→              <SelectContent>
+  1548→  1548→                <SelectItem value="all">All Certs</SelectItem>
+  1549→  1549→                {allCerts.map((c: string) => (
+  1550→  1550→                  <SelectItem key={c} value={c}>{c}</SelectItem>
+  1551→  1551→                ))}
+  1552→  1552→              </SelectContent>
+  1553→  1553→            </Select>
+  1554→  1554→            <Button
+  1555→  1555→              size="sm"
+  1556→  1556→              variant={organicOnly ? 'default' : 'outline'}
+  1557→  1557→              className={`h-9 gap-1.5 text-xs transition-all ${
+  1558→  1558→                organicOnly
+  1559→  1559→                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+  1560→  1560→                  : 'border-glass-border text-muted-foreground hover:text-emerald-400 hover:border-emerald-500/30'
+  1561→  1561→              }`}
+  1562→  1562→              onClick={() => setOrganicOnly(!organicOnly)}
+  1563→  1563→            >
+  1564→  1564→              <Leaf className="h-3.5 w-3.5" /> Organic Only
+  1565→  1565→            </Button>
+  1566→  1566→            {(producerSearch || (producerStateFilter && producerStateFilter !== 'all') || (producerCertFilter && producerCertFilter !== 'all') || organicOnly) && (
+  1567→  1567→              <Button
+  1568→  1568→                size="sm"
+  1569→  1569→                variant="ghost"
+  1570→  1570→                className="h-9 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+  1571→  1571→                onClick={() => { setProducerSearch(''); setProducerStateFilter(''); setProducerCertFilter(''); setOrganicOnly(false); setProducerSort('rating') }}
+  1572→  1572→              >
+  1573→  1573→                ✕ Clear All
+  1574→  1574→              </Button>
+  1575→  1575→            )}
+  1576→  1576→            <div className="ml-auto hidden md:flex items-center gap-1.5 text-xs text-muted-foreground">
+  1577→  1577→              <Users className="h-3.5 w-3.5" />
+  1578→  1578→              Showing {filteredProducers.length} of {producers.length}
+  1579→  1579→            </div>
+  1580→  1580→          </div>
+  1581→  1581→        </div>
+  1582→  1582→
+  1583→  1583→        {/* Producers Card Grid */}
+  1584→  1584→        {producersLoading ? (
+  1585→  1585→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  1586→  1586→            {[1, 2, 3, 4, 5, 6].map(i => (
+  1587→  1587→              <div key={i} className="glass-card overflow-hidden">
+  1588→  1588→                <Skeleton className="h-20 w-full rounded-none" />
+  1589→  1589→                <div className="p-5 pt-0 -mt-6">
+  1590→  1590→                  <div className="flex items-end gap-3 mb-4">
+  1591→  1591→                    <Skeleton className="h-14 w-14 rounded-full shrink-0" />
+  1592→  1592→                    <div className="flex-1 space-y-2 pb-1">
+  1593→  1593→                      <Skeleton className="h-4 w-3/4" />
+  1594→  1594→                      <Skeleton className="h-3 w-1/2" />
+  1595→  1595→                    </div>
+  1596→  1596→                  </div>
+  1597→  1597→                  <div className="space-y-3">
+  1598→  1598→                    <Skeleton className="h-3 w-2/3" />
+  1599→  1599→                    <Skeleton className="h-8 w-full" />
+  1600→  1600→                    <div className="flex gap-2">
+  1601→  1601→                      <Skeleton className="h-6 w-16" />
+  1602→  1602→                      <Skeleton className="h-6 w-16" />
+  1603→  1603→                    </div>
+  1604→  1604→                    <div className="flex gap-2">
+  1605→  1605→                      <Skeleton className="h-8 flex-1" />
+  1606→  1606→                      <Skeleton className="h-8 flex-1" />
+  1607→  1607→                    </div>
+  1608→  1608→                  </div>
+  1609→  1609→                </div>
+  1610→  1610→              </div>
+  1611→  1611→            ))}
+  1612→  1612→          </div>
+  1613→  1613→        ) : sortedProducers.length === 0 ? (
+  1614→  1614→          <motion.div
+  1615→  1615→            initial={{ opacity: 0, y: 20 }}
+  1616→  1616→            animate={{ opacity: 1, y: 0 }}
+  1617→  1617→            className="glass-card p-16 text-center"
+  1618→  1618→          >
+  1619→  1619→            <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+  1620→  1620→              <Sprout className="h-8 w-8 text-emerald-400/60" />
+  1621→  1621→            </div>
+  1622→  1622→            <h4 className="text-lg font-semibold text-foreground mb-1">No Producers Found</h4>
+  1623→  1623→            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+  1624→  1624→              Try adjusting your search or filter criteria to discover more producers
+  1625→  1625→            </p>
+  1626→  1626→            <Button
+  1627→  1627→              variant="outline"
+  1628→  1628→              size="sm"
+  1629→  1629→              className="mt-4 border-glass-border gap-1.5"
+  1630→  1630→              onClick={() => { setProducerSearch(''); setProducerStateFilter(''); setProducerCertFilter(''); setOrganicOnly(false) }}
+  1631→  1631→            >
+  1632→  1632→              Clear Filters
+  1633→  1633→            </Button>
+  1634→  1634→          </motion.div>
+  1635→  1635→        ) : (
+  1636→  1636→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  1637→  1637→            {sortedProducers.map((producer: any, i: number) => {
+  1638→  1638→              const isVerified = producer.verificationStatus === 'verified'
+  1639→  1639→              const isPending = producer.verificationStatus === 'pending'
+  1640→  1640→              const pCerts = producer.certifications
+  1641→  1641→                ? producer.certifications.split(',').map((c: string) => c.trim()).filter(Boolean)
+  1642→  1642→                : []
+  1643→  1643→              const productCount = producer._count?.products || 0
+  1644→  1644→              const displayName = producer.companyName || producer.farmName || producer.name || 'Unknown'
+  1645→  1645→              const displayInitial = (producer.name || 'P').charAt(0).toUpperCase()
+  1646→  1646→              const locationText = [producer.city, producer.state].filter(Boolean).join(', ') || 'India'
+  1647→  1647→
+  1648→  1648→              return (
+  1649→  1649→                <motion.div
+  1650→  1650→                  key={producer.id}
+  1651→  1651→                  initial={{ opacity: 0, y: 20, scale: 0.97 }}
+  1652→  1652→                  animate={{ opacity: 1, y: 0, scale: 1 }}
+  1653→  1653→                  transition={{ delay: i * 0.05, duration: 0.3 }}
+  1654→  1654→                  whileHover={{ y: -6, transition: { duration: 0.2 } }}
+  1655→  1655→                  className="glass-card overflow-hidden hover:border-emerald-500/30 transition-all duration-300 cursor-pointer group"
+  1656→  1656→                  onClick={() => { setSelectedProducerId(producer.id); setView('producer-profile') }}
+  1657→  1657→                >
+  1658→  1658→                  {/* Banner with gradient */}
+  1659→  1659→                  <div className="h-20 relative overflow-hidden">
+  1660→  1660→                    {producer.bannerUrl ? (
+  1661→  1661→                      <img src={producer.bannerUrl} alt="" className="w-full h-full object-cover" />
+  1662→  1662→                    ) : (
+  1663→  1663→                      <div className="w-full h-full bg-gradient-to-br from-emerald-900/60 via-emerald-800/30 to-amber-900/20" />
+  1664→  1664→                    )}
+  1665→  1665→                    {/* Overlay gradient */}
+  1666→  1666→                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+  1667→  1667→                    {/* Verification badge on banner */}
+  1668→  1668→                    <div className="absolute top-3 right-3">
+  1669→  1669→                      {isVerified ? (
+  1670→  1670→                        <motion.div
+  1671→  1671→                          initial={{ scale: 0 }}
+  1672→  1672→                          animate={{ scale: 1 }}
+  1673→  1673→                          className="flex items-center gap-1 bg-emerald-500/20 backdrop-blur-sm border border-emerald-500/30 rounded-full px-2 py-0.5"
+  1674→  1674→                        >
+  1675→  1675→                          <BadgeCheck className="w-3.5 h-3.5 text-emerald-400" />
+  1676→  1676→                          <span className="text-[10px] font-medium text-emerald-400">Verified</span>
+  1677→  1677→                        </motion.div>
+  1678→  1678→                      ) : isPending ? (
+  1679→  1679→                        <div className="flex items-center gap-1 bg-yellow-500/20 backdrop-blur-sm border border-yellow-500/30 rounded-full px-2 py-0.5">
+  1680→  1680→                          <Clock className="w-3 h-3 text-yellow-400" />
+  1681→  1681→                          <span className="text-[10px] font-medium text-yellow-400">Pending</span>
+  1682→  1682→                        </div>
+  1683→  1683→                      ) : null}
+  1684→  1684→                    </div>
+  1685→  1685→                  </div>
+  1686→  1686→
+  1687→  1687→                  {/* Content area */}
+  1688→  1688→                  <div className="p-5 pt-0 -mt-6 relative">
+  1689→  1689→                    {/* Avatar */}
+  1690→  1690→                    <div className="flex items-end gap-3 mb-4">
+  1691→  1691→                      <Avatar className="h-14 w-14 border-[3px] border-background shadow-xl ring-2 ring-emerald-500/20 shrink-0">
+  1692→  1692→                        {producer.avatarUrl ? (
+  1693→  1693→                          <AvatarImage src={producer.avatarUrl} alt={producer.name || ''} />
+  1694→  1694→                        ) : null}
+  1695→  1695→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500/25 to-emerald-600/15 text-emerald-400 font-bold text-lg">
+  1696→  1696→                          {displayInitial}
+  1697→  1697→                        </AvatarFallback>
+  1698→  1698→                      </Avatar>
+  1699→  1699→                      <div className="flex-1 min-w-0 pb-1">
+  1700→  1700→                        <h4 className="font-semibold text-foreground text-sm truncate leading-tight">
+  1701→  1701→                          {producer.name}
+  1702→  1702→                        </h4>
+  1703→  1703→                        <p className="text-xs text-emerald-400/80 truncate font-medium mt-0.5">
+  1704→  1704→                          {displayName !== producer.name ? displayName : ''}
+  1705→  1705→                        </p>
+  1706→  1706→                      </div>
+  1707→  1707→                    </div>
+  1708→  1708→
+  1709→  1709→                    {/* Location */}
+  1710→  1710→                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+  1711→  1711→                      <MapPin className="w-3.5 h-3.5 text-emerald-400/70 shrink-0" />
+  1712→  1712→                      <span>{locationText}</span>
+  1713→  1713→                    </div>
+  1714→  1714→
+  1715→  1715→                    {/* Star Rating */}
+  1716→  1716→                    {(producer.avgRating > 0 || producer.totalReviews > 0) ? (
+  1717→  1717→                      <div className="mb-3">
+  1718→  1718→                        <StarRating rating={producer.avgRating || 0} count={producer.totalReviews} />
+  1719→  1719→                      </div>
+  1720→  1720→                    ) : (
+  1721→  1721→                      <div className="mb-3">
+  1722→  1722→                        <span className="text-[10px] text-muted-foreground/60 italic">No reviews yet</span>
+  1723→  1723→                      </div>
+  1724→  1724→                    )}
+  1725→  1725→
+  1726→  1726→                    {/* Key Stats */}
+  1727→  1727→                    <div className="grid grid-cols-3 gap-2 mb-3">
+  1728→  1728→                      <div className="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+  1729→  1729→                        <p className="text-sm font-bold text-foreground">{producer.yearsExperience || 0}</p>
+  1730→  1730→                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Yrs Exp</p>
+  1731→  1731→                      </div>
+  1732→  1732→                      <div className="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+  1733→  1733→                        <p className="text-sm font-bold text-foreground">{producer.totalTransactions || 0}</p>
+  1734→  1734→                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Deals</p>
+  1735→  1735→                      </div>
+  1736→  1736→                      <div className="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+  1737→  1737→                        <p className="text-sm font-bold text-foreground">{productCount}</p>
+  1738→  1738→                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Products</p>
+  1739→  1739→                      </div>
+  1740→  1740→                    </div>
+  1741→  1741→
+  1742→  1742→                    {/* Certifications */}
+  1743→  1743→                    {pCerts.length > 0 && (
+  1744→  1744→                      <div className="flex flex-wrap gap-1 mb-4">
+  1745→  1745→                        {pCerts.slice(0, 3).map((cert: string, ci: number) => (
+  1746→  1746→                          <Badge
+  1747→  1747→                            key={ci}
+  1748→  1748→                            className={`border text-[9px] px-2 py-0 font-medium ${
+  1749→  1749→                              cert.toLowerCase().includes('organic')
+  1750→  1750→                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+  1751→  1751→                                : 'bg-amber-500/10 text-amber-400/80 border-amber-500/20'
+  1752→  1752→                            }`}
+  1753→  1753→                          >
+  1754→  1754→                            {cert.toLowerCase().includes('organic') && <Leaf className="w-2.5 h-2.5 mr-0.5" />}
+  1755→  1755→                            {cert}
+  1756→  1756→                          </Badge>
+  1757→  1757→                        ))}
+  1758→  1758→                        {pCerts.length > 3 && (
+  1759→  1759→                          <Badge className="bg-white/5 text-muted-foreground border-white/10 border text-[9px] px-2 py-0">
+  1760→  1760→                            +{pCerts.length - 3}
+  1761→  1761→                          </Badge>
+  1762→  1762→                        )}
+  1763→  1763→                      </div>
+  1764→  1764→                    )}
+  1765→  1765→
+  1766→  1766→                    {/* Action Buttons */}
+  1767→  1767→                    <div className="flex gap-2 pt-2 border-t border-white/[0.06]">
+  1768→  1768→                      <Button
+  1769→  1769→                        size="sm"
+  1770→  1770→                        variant="outline"
+  1771→  1771→                        className="flex-1 h-9 text-xs border-white/10 hover:bg-white/[0.04] hover:border-emerald-500/20 hover:text-emerald-400 transition-colors gap-1.5"
+  1772→  1772→                        onClick={(e) => {
+  1773→  1773→                          e.stopPropagation()
+  1774→  1774→                          setActiveChatUser(producer.id)
+  1775→  1775→                          setChatOpen(true)
+  1776→  1776→                        }}
+  1777→  1777→                      >
+  1778→  1778→                        <MessageSquare className="w-3.5 h-3.5" /> Message
+  1779→  1779→                      </Button>
+  1780→  1780→                      <Button
+  1781→  1781→                        size="sm"
+  1782→  1782→                        className="flex-1 h-9 text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all gap-1.5"
+  1783→  1783→                        onClick={(e) => {
+  1784→  1784→                          e.stopPropagation()
+  1785→  1785→                          setSelectedProducerId(producer.id)
+  1786→  1786→                          setView('producer-profile')
+  1787→  1787→                        }}
+  1788→  1788→                      >
+  1789→  1789→                        <Eye className="w-3.5 h-3.5" /> View Profile
+  1790→  1790→                      </Button>
+  1791→  1791→                    </div>
+  1792→  1792→                  </div>
+  1793→  1793→                </motion.div>
+  1794→  1794→              )
+  1795→  1795→            })}
+  1796→  1796→          </div>
+  1797→  1797→        )}
+  1798→  1798→      </div>
+  1799→  1799→    )
+  1800→  1800→  }
+  1801→  1801→
+  1802→  1802→  if (tab === 'messages') {
+  1803→  1803→    const conversations = orders.reduce((acc: any[], order) => {
+  1804→  1804→      const sellerId = order.seller?.id
+  1805→  1805→      if (sellerId && !acc.find(c => c.id === sellerId)) {
+  1806→  1806→        acc.push({ id: sellerId, name: order.seller?.name || order.seller?.companyName || 'Unknown', lastOrder: order.product?.name })
+  1807→  1807→      }
+  1808→  1808→      return acc
+  1809→  1809→    }, [])
+  1810→  1810→
+  1811→  1811→    return (
+  1812→  1812→      <div className="space-y-6">
+  1813→  1813→        <h3 className="text-xl font-semibold text-foreground">Messages</h3>
+  1814→  1814→        {conversations.length === 0 ? (
+  1815→  1815→          <div className="glass-card p-12 text-center">
+  1816→  1816→            <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1817→  1817→            <p className="text-muted-foreground">No conversations yet. Start trading to connect with suppliers!</p>
+  1818→  1818→          </div>
+  1819→  1819→        ) : (
+  1820→  1820→          <div className="space-y-2">
+  1821→  1821→            {conversations.map((conv: any, i: number) => (
+  1822→  1822→              <motion.button
+  1823→  1823→                key={conv.id}
+  1824→  1824→                initial={{ opacity: 0, x: -20 }}
+  1825→  1825→                animate={{ opacity: 1, x: 0 }}
+  1826→  1826→                transition={{ delay: i * 0.05 }}
+  1827→  1827→                className="w-full glass-card p-4 flex items-center gap-4 hover:border-amber-500/30 transition-colors text-left"
+  1828→  1828→                onClick={() => { setActiveChatUser(conv.id); setChatOpen(true) }}
+  1829→  1829→              >
+  1830→  1830→                <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-semibold text-sm">
+  1831→  1831→                  {conv.name.slice(0, 2).toUpperCase()}
+  1832→  1832→                </div>
+  1833→  1833→                <div className="flex-1 min-w-0">
+  1834→  1834→                  <p className="font-medium text-foreground truncate">{conv.name}</p>
+  1835→  1835→                  <p className="text-xs text-muted-foreground">Last order: {conv.lastOrder}</p>
+  1836→  1836→                </div>
+  1837→  1837→                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+  1838→  1838→              </motion.button>
+  1839→  1839→            ))}
+  1840→  1840→          </div>
+  1841→  1841→        )}
+  1842→  1842→      </div>
+  1843→  1843→    )
+  1844→  1844→  }
+  1845→  1845→
+  1846→  1846→  // Default: profile tab
+  1847→  1847→  return (
+  1848→  1848→    <div className="glass-card p-6 text-center">
+  1849→  1849→      <User className="h-12 w-12 text-amber-400 mx-auto mb-4" />
+  1850→  1850→      <h3 className="text-xl font-semibold text-foreground mb-2">Profile Settings</h3>
+  1851→  1851→      <p className="text-muted-foreground mb-4">Manage your account details and verification status</p>
+  1852→  1852→      <Button className="bg-amber-600 hover:bg-amber-500 gap-2" onClick={() => useAppStore.getState().setView('profile')}>
+  1853→  1853→        <User className="h-4 w-4" /> Go to Profile
+  1854→  1854→      </Button>
+  1855→  1855→    </div>
+  1856→  1856→  )
+  1857→  1857→}
+  1858→  1858→

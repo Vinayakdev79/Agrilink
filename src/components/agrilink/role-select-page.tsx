@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   Loader2,
   CheckCircle2,
+  ShieldAlert,
+  Lock,
 } from 'lucide-react'
 import type { AppUser, UserRole } from '@/lib/store'
 
@@ -60,11 +62,21 @@ const roles = [
     selectedBorder: 'border-teal-500/50',
     glowClass: 'group-hover:shadow-[0_0_30px_rgba(20,184,166,0.15)]',
   },
-  // Note: Admin role is intentionally NOT shown here. Only one admin account
-  // is allowed on the platform and it must be provisioned separately (e.g.
-  // via direct database seeding or by signing in with the admin email that
-  // already exists). The single-admin rule is enforced server-side in
-  // /api/auth POST handler.
+  {
+    id: 'admin' as UserRole,
+    title: 'Admin',
+    description: 'Manage the platform, users, revenue, and subscriptions',
+    icon: ShieldAlert,
+    accentColor: 'rose',
+    bgClass: 'bg-rose-500/15',
+    borderClass: 'border-rose-500/20',
+    iconColor: 'text-rose-400',
+    hoverGlow: 'hover:shadow-rose-500/20',
+    selectedBg: 'bg-rose-500/20',
+    selectedBorder: 'border-rose-500/50',
+    glowClass: 'group-hover:shadow-[0_0_30px_rgba(244,63,94,0.15)]',
+    disabledDescription: 'Admin account already exists. Only one admin is allowed.',
+  },
 ]
 
 // ─── Animation Variants ──────────────────────────────────────────────────────
@@ -112,8 +124,35 @@ export function RoleSelectPage() {
   const { setView, setUser, user } = useAppStore()
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [adminExists, setAdminExists] = useState(false)
+  const [adminCheckDone, setAdminCheckDone] = useState(false)
+
+  // Check if an admin account already exists on mount
+  useEffect(() => {
+    const checkAdmin = async () => {
+      try {
+        const res = await fetch('/api/admin/exists')
+        if (res.ok) {
+          const data = await res.json()
+          setAdminExists(data.adminExists === true)
+        }
+      } catch {
+        // If the check fails, assume admin doesn't exist (allow attempt)
+        setAdminExists(false)
+      } finally {
+        setAdminCheckDone(true)
+      }
+    }
+    checkAdmin()
+  }, [])
 
   const handleRoleSelect = async (role: UserRole) => {
+    // Block admin selection if an admin already exists
+    if (role === 'admin' && adminExists) {
+      toast.error('Admin account already exists. Only one admin is allowed.')
+      return
+    }
+
     setSelectedRole(role)
     setIsLoading(true)
 
@@ -191,11 +230,17 @@ export function RoleSelectPage() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        onClick={() => setView('landing')}
+        onClick={() => {
+          if (user) {
+            setView('dashboard')
+          } else {
+            setView('landing')
+          }
+        }}
         className="absolute top-6 left-6 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group z-10"
       >
         <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-        <span>Back to Home</span>
+        <span>{user ? 'Back to Dashboard' : 'Back to Home'}</span>
       </motion.button>
 
       <motion.div
@@ -233,26 +278,36 @@ export function RoleSelectPage() {
             const Icon = role.icon
             const isSelected = selectedRole === role.id
             const isLoadingThis = isLoading && isSelected
+            const isDisabled = role.id === 'admin' && adminExists
 
             return (
               <motion.div
                 key={role.id}
                 variants={cardVariants}
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => !isLoading && handleRoleSelect(role.id)}
+                whileHover={isDisabled ? {} : { scale: 1.02, y: -2 }}
+                whileTap={isDisabled ? {} : { scale: 0.98 }}
+                onClick={() => !isLoading && !isDisabled && handleRoleSelect(role.id)}
                 className={`
-                  group relative cursor-pointer rounded-2xl p-6 transition-all duration-300
+                  group relative rounded-2xl p-6 transition-all duration-300
                   border
-                  ${isSelected
-                    ? `${role.selectedBg} ${role.selectedBorder} shadow-lg ${role.hoverGlow}`
-                    : `glass-card hover:bg-white/[0.07] ${role.glowClass}`
+                  ${isDisabled
+                    ? 'opacity-50 cursor-not-allowed border-white/5 bg-white/[0.02]'
+                    : isSelected
+                      ? `${role.selectedBg} ${role.selectedBorder} shadow-lg ${role.hoverGlow} cursor-pointer`
+                      : `glass-card hover:bg-white/[0.07] ${role.glowClass} cursor-pointer`
                   }
                   ${isLoadingThis ? 'opacity-80' : ''}
                 `}
               >
+                {/* Disabled Lock Badge */}
+                {isDisabled && (
+                  <div className="absolute top-4 right-4">
+                    <Lock className="w-5 h-5 text-muted-foreground/50" />
+                  </div>
+                )}
+
                 {/* Selected Check */}
-                {isSelected && !isLoadingThis && (
+                {isSelected && !isLoadingThis && !isDisabled && (
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
@@ -275,7 +330,7 @@ export function RoleSelectPage() {
 
                 {/* Icon */}
                 <div
-                  className={`w-14 h-14 rounded-2xl ${role.bgClass} border ${role.borderClass} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}
+                  className={`w-14 h-14 rounded-2xl ${role.bgClass} border ${role.borderClass} flex items-center justify-center mb-4 ${isDisabled ? '' : 'group-hover:scale-110'} transition-transform duration-300`}
                 >
                   <Icon className={`w-7 h-7 ${role.iconColor}`} />
                 </div>
@@ -286,8 +341,10 @@ export function RoleSelectPage() {
                 </h3>
 
                 {/* Description */}
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {role.description}
+                <p className={`text-sm leading-relaxed ${isDisabled ? 'text-muted-foreground/60' : 'text-muted-foreground'}`}>
+                  {isDisabled && (role as any).disabledDescription
+                    ? (role as any).disabledDescription
+                    : role.description}
                 </p>
               </motion.div>
             )
@@ -297,15 +354,17 @@ export function RoleSelectPage() {
         {/* Footer Note */}
         <motion.div variants={buttonVariants} className="text-center mt-8">
           <p className="text-xs text-muted-foreground">
-            You can change your role later from your profile settings
+            {user ? 'Switching roles will update your account permissions' : 'You can change your role later from your profile settings'}
           </p>
-          <Button
-            onClick={() => setView('auth')}
-            variant="ghost"
-            className="mt-3 text-muted-foreground hover:text-foreground text-sm"
-          >
-            Already have an account? Sign In
-          </Button>
+          {!user && (
+            <Button
+              onClick={() => setView('auth')}
+              variant="ghost"
+              className="mt-3 text-muted-foreground hover:text-foreground text-sm"
+            >
+              Already have an account? Sign In
+            </Button>
+          )}
         </motion.div>
       </motion.div>
     </div>

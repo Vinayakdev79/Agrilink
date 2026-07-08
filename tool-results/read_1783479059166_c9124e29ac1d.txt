@@ -1,0 +1,810 @@
+     1→'use client'
+     2→
+     3→import { useState, useCallback, useEffect } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { useAppStore, CartItem } from '@/lib/store'
+     6→import { computePlatformFee } from '@/lib/razorpay'
+     7→import { toast } from 'sonner'
+     8→import {
+     9→  X,
+    10→  Minus,
+    11→  Plus,
+    12→  Trash2,
+    13→  ShoppingCart,
+    14→  IndianRupee,
+    15→  Truck,
+    16→  MapPin,
+    17→  CreditCard,
+    18→  ChevronRight,
+    19→  Package,
+    20→  AlertTriangle,
+    21→  Info,
+    22→  ShieldCheck,
+    23→  Clock,
+    24→  Wallet,
+    25→} from 'lucide-react'
+    26→import { Button } from '@/components/ui/button'
+    27→import { Input } from '@/components/ui/input'
+    28→import { Label } from '@/components/ui/label'
+    29→import { Separator } from '@/components/ui/separator'
+    30→import { MapPicker } from '@/components/agrilink/map-picker'
+    31→import {
+    32→  Dialog,
+    33→  DialogContent,
+    34→  DialogHeader,
+    35→  DialogTitle,
+    36→  DialogDescription,
+    37→  DialogFooter,
+    38→} from '@/components/ui/dialog'
+    39→
+    40→// ─── Constants ────────────────────────────────────────────────────────────────
+    41→// Platform fee is now computed via computePlatformFee() from @/lib/razorpay
+    42→//   (₹1000 flat if subtotal > ₹10,000 else ₹0)
+    43→const TRANSPORT_BOOKING_FEE = 30 // ₹30 flat — only when platform arranges transport
+    44→const TRANSPORT_ESTIMATE_RATE = 0.035 // 3.5% for estimate display
+    45→
+    46→// ─── Checkout Dialog ──────────────────────────────────────────────────────────
+    47→function CheckoutDialog({
+    48→  open,
+    49→  onClose,
+    50→  cart,
+    51→  subtotal,
+    52→  platformFee,
+    53→  transportBookingFee,
+    54→  deliveryFeeTotal,
+    55→  allFreeDelivery,
+    56→  estimatedTransportCost,
+    57→  totalPayable,
+    58→  advancePayment,
+    59→  remainingPayment,
+    60→}: {
+    61→  open: boolean
+    62→  onClose: () => void
+    63→  cart: CartItem[]
+    64→  subtotal: number
+    65→  platformFee: number
+    66→  transportBookingFee: number
+    67→  deliveryFeeTotal: number
+    68→  allFreeDelivery: boolean
+    69→  estimatedTransportCost: number
+    70→  totalPayable: number
+    71→  advancePayment: number
+    72→  remainingPayment: number
+    73→}) {
+    74→  const { user, clearCart, setCartOpen } = useAppStore()
+    75→  const [placing, setPlacing] = useState(false)
+    76→  const [address, setAddress] = useState({
+    77→    fullName: user?.name || '',
+    78→    phone: user?.phone || '',
+    79→    addressLine1: '',
+    80→    addressLine2: '',
+    81→    city: '',
+    82→    state: '',
+    83→    pincode: '',
+    84→  })
+    85→  const [deliveryLat, setDeliveryLat] = useState('')
+    86→  const [deliveryLng, setDeliveryLng] = useState('')
+    87→  const [mapAddress, setMapAddress] = useState('')
+    88→
+    89→  // Pre-fill user address if available
+    90→  useEffect(() => {
+    91→    if (user) {
+    92→      setAddress((a) => ({
+    93→        ...a,
+    94→        fullName: user.name || a.fullName,
+    95→        phone: user.phone || a.phone,
+    96→      }))
+    97→    }
+    98→  }, [user])
+    99→
+   100→  // Validate stock at checkout
+   101→  const validateStock = (): boolean => {
+   102→    for (const item of cart) {
+   103→      if (item.quantity > item.maxQuantity) {
+   104→        toast.error(`${item.productName}: Only ${item.maxQuantity} ${item.unit} available`)
+   105→        return false
+   106→      }
+   107→      if (item.quantity < (item.minOrderQty || 1)) {
+   108→        toast.error(`${item.productName}: Minimum order is ${item.minOrderQty || 1} ${item.unit}`)
+   109→        return false
+   110→      }
+   111→    }
+   112→    return true
+   113→  }
+   114→
+   115→  const handlePlaceOrder = async () => {
+   116→    if (!user) {
+   117→      toast.error('Please sign in to place an order')
+   118→      return
+   119→    }
+   120→    if (!address.fullName || !address.phone || !address.addressLine1 || !address.city || !address.state || !address.pincode) {
+   121→      toast.error('Please fill all required address fields')
+   122→      return
+   123→    }
+   124→    if (!validateStock()) return
+   125→
+   126→    setPlacing(true)
+   127→    try {
+   128→      // Create an order for each cart item with payment breakdown
+   129→      const results = await Promise.allSettled(
+   130→        cart.map((item) => {
+   131→          const itemSubtotal = item.quantity * item.pricePerUnit
+   132→          const itemPlatformFee = computePlatformFee(itemSubtotal)
+   133→          // Transport booking fee only applies when the platform arranges transport
+   134→          const itemTransportBookingFee = item.deliveryHandledByProducer ? 0 : TRANSPORT_BOOKING_FEE
+   135→          // Producer-handled delivery may charge a delivery fee (waived if free)
+   136→          const itemDeliveryFee = item.deliveryHandledByProducer && !item.freeDelivery ? (item.deliveryFee || 0) : 0
+   137→          const itemTotal = itemSubtotal + itemPlatformFee + itemTransportBookingFee + itemDeliveryFee
+   138→          const itemAdvance = Math.round(itemTotal * 0.5)
+   139→          const itemRemaining = itemTotal - itemAdvance
+   140→
+   141→          return fetch('/api/orders', {
+   142→            method: 'POST',
+   143→            headers: { 'Content-Type': 'application/json' },
+   144→            body: JSON.stringify({
+   145→              buyerId: user.id,
+   146→              sellerId: item.sellerId,
+   147→              productId: item.productId,
+   148→              quantity: item.quantity,
+   149→              unitPrice: item.pricePerUnit,
+   150→              deliveryAddress: `${address.addressLine1}${address.addressLine2 ? ', ' + address.addressLine2 : ''}`,
+   151→              deliveryCity: address.city,
+   152→              deliveryState: address.state,
+   153→              deliveryPincode: address.pincode,
+   154→              deliveryLat: deliveryLat || undefined,
+   155→              deliveryLng: deliveryLng || undefined,
+   156→              deliveryFullAddress: mapAddress || undefined,
+   157→              // Payment breakdown
+   158→              platformFee: itemPlatformFee,
+   159→              transportBookingFee: itemTransportBookingFee,
+   160→              totalPayable: itemTotal,
+   161→              advancePayment: itemAdvance,
+   162→              remainingPayment: itemRemaining,
+   163→              estimatedTransportCost: Math.round(itemSubtotal * TRANSPORT_ESTIMATE_RATE),
+   164→              paymentStatus: 'advance_paid',
+   165→              status: 'confirmed',
+   166→              // V4 delivery handling
+   167→              deliveryType: item.deliveryHandledByProducer ? 'producer' : 'platform',
+   168→              deliveryFee: itemDeliveryFee,
+   169→            }),
+   170→          })
+   171→        })
+   172→      )
+   173→
+   174→      const succeeded = results.filter((r) => r.status === 'fulfilled').length
+   175→      const failed = results.filter((r) => r.status === 'rejected').length
+   176→
+   177→      if (succeeded > 0) {
+   178→        toast.success(`Order${succeeded > 1 ? 's' : ''} placed for ${succeeded} item${succeeded > 1 ? 's' : ''}! Advance payment of ₹${advancePayment.toLocaleString('en-IN')} confirmed.${failed > 0 ? ` (${failed} failed)` : ''}`)
+   179→        clearCart()
+   180→        setCartOpen(false)
+   181→        onClose()
+   182→      } else {
+   183→        toast.error('Failed to place orders. Please try again.')
+   184→      }
+   185→    } catch {
+   186→      toast.error('Failed to place orders')
+   187→    } finally {
+   188→      setPlacing(false)
+   189→    }
+   190→  }
+   191→
+   192→  return (
+   193→    <Dialog open={open} onOpenChange={onClose}>
+   194→      <DialogContent className="bg-[oklch(0.15_0.012_260/0.97)] border-white/20 backdrop-blur-xl max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+   195→        <DialogHeader className="p-6 pb-0">
+   196→          <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+   197→            <CreditCard className="w-5 h-5 text-emerald-400" />
+   198→            Checkout
+   199→          </DialogTitle>
+   200→          <DialogDescription className="text-sm text-muted-foreground">
+   201→            Complete your order by providing delivery details
+   202→          </DialogDescription>
+   203→        </DialogHeader>
+   204→
+   205→        <div className="p-6 space-y-6">
+   206→          {/* Delivery Address */}
+   207→          <div className="space-y-4">
+   208→            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+   209→              <MapPin className="w-4 h-4 text-emerald-400" />
+   210→              Delivery Address
+   211→            </h3>
+   212→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   213→              <div className="space-y-1.5">
+   214→                <Label className="text-xs text-muted-foreground">Full Name *</Label>
+   215→                <Input
+   216→                  value={address.fullName}
+   217→                  onChange={(e) => setAddress((a) => ({ ...a, fullName: e.target.value }))}
+   218→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   219→                  placeholder="Your full name"
+   220→                />
+   221→              </div>
+   222→              <div className="space-y-1.5">
+   223→                <Label className="text-xs text-muted-foreground">Phone *</Label>
+   224→                <Input
+   225→                  value={address.phone}
+   226→                  onChange={(e) => setAddress((a) => ({ ...a, phone: e.target.value }))}
+   227→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   228→                  placeholder="+91 XXXXX XXXXX"
+   229→                />
+   230→              </div>
+   231→              <div className="sm:col-span-2 space-y-1.5">
+   232→                <Label className="text-xs text-muted-foreground">Address Line 1 *</Label>
+   233→                <Input
+   234→                  value={address.addressLine1}
+   235→                  onChange={(e) => setAddress((a) => ({ ...a, addressLine1: e.target.value }))}
+   236→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   237→                  placeholder="House/Flat No., Street Name"
+   238→                />
+   239→              </div>
+   240→              <div className="sm:col-span-2 space-y-1.5">
+   241→                <Label className="text-xs text-muted-foreground">Address Line 2</Label>
+   242→                <Input
+   243→                  value={address.addressLine2}
+   244→                  onChange={(e) => setAddress((a) => ({ ...a, addressLine2: e.target.value }))}
+   245→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   246→                  placeholder="Landmark, Area (optional)"
+   247→                />
+   248→              </div>
+   249→              <div className="space-y-1.5">
+   250→                <Label className="text-xs text-muted-foreground">City *</Label>
+   251→                <Input
+   252→                  value={address.city}
+   253→                  onChange={(e) => setAddress((a) => ({ ...a, city: e.target.value }))}
+   254→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   255→                  placeholder="City"
+   256→                />
+   257→              </div>
+   258→              <div className="space-y-1.5">
+   259→                <Label className="text-xs text-muted-foreground">State *</Label>
+   260→                <Input
+   261→                  value={address.state}
+   262→                  onChange={(e) => setAddress((a) => ({ ...a, state: e.target.value }))}
+   263→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   264→                  placeholder="State"
+   265→                />
+   266→              </div>
+   267→              <div className="space-y-1.5">
+   268→                <Label className="text-xs text-muted-foreground">Pincode *</Label>
+   269→                <Input
+   270→                  value={address.pincode}
+   271→                  onChange={(e) => setAddress((a) => ({ ...a, pincode: e.target.value }))}
+   272→                  className="h-9 bg-white/5 border-white/10 text-sm"
+   273→                  placeholder="6-digit pincode"
+   274→                />
+   275→              </div>
+   276→            </div>
+   277→
+   278→            {/* Map Picker */}
+   279→            <MapPicker
+   280→              latitude={deliveryLat}
+   281→              longitude={deliveryLng}
+   282→              address={mapAddress}
+   283→              onLocationSelect={(data) => {
+   284→                setDeliveryLat(data.latitude)
+   285→                setDeliveryLng(data.longitude)
+   286→                setMapAddress(data.address)
+   287→                setAddress((a) => ({
+   288→                  ...a,
+   289→                  addressLine1: data.address.split(',').slice(0, 2).join(', ') || a.addressLine1,
+   290→                  city: data.address.split(',').find((_, i, arr) => i === arr.length - 3)?.trim() || a.city,
+   291→                  state: data.address.split(',').find((_, i, arr) => i === arr.length - 2)?.trim() || a.state,
+   292→                }))
+   293→              }}
+   294→              label="Delivery Location"
+   295→              markerColor="#ef4444"
+   296→              height="220px"
+   297→            />
+   298→          </div>
+   299→
+   300→          <Separator className="bg-white/5" />
+   301→
+   302→          {/* Order Summary */}
+   303→          <div className="space-y-3">
+   304→            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+   305→              <Package className="w-4 h-4 text-emerald-400" />
+   306→              Order Summary
+   307→            </h3>
+   308→            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+   309→              {cart.map((item) => (
+   310→                <div key={item.productId} className="flex items-center gap-3 glass-card p-3">
+   311→                  {/* Thumbnail */}
+   312→                  <div className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 overflow-hidden shrink-0">
+   313→                    {item.productImage ? (
+   314→                      <img src={item.productImage} alt={item.productName} className="w-full h-full object-cover" />
+   315→                    ) : (
+   316→                      <div className="w-full h-full flex items-center justify-center text-lg">📦</div>
+   317→                    )}
+   318→                  </div>
+   319→                  <div className="flex-1 min-w-0">
+   320→                    <p className="text-sm font-medium text-foreground truncate">{item.productName}</p>
+   321→                    <p className="text-xs text-muted-foreground">
+   322→                      {item.quantity} {item.unit} × ₹{item.pricePerUnit.toLocaleString('en-IN')}
+   323→                    </p>
+   324→                  </div>
+   325→                  <p className="text-sm font-semibold text-foreground shrink-0">
+   326→                    ₹{(item.quantity * item.pricePerUnit).toLocaleString('en-IN')}
+   327→                  </p>
+   328→                </div>
+   329→              ))}
+   330→            </div>
+   331→          </div>
+   332→
+   333→          <Separator className="bg-white/5" />
+   334→
+   335→          {/* Bill Breakdown - Corrected Pricing */}
+   336→          <div className="space-y-3">
+   337→            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+   338→              <CreditCard className="w-4 h-4 text-emerald-400" />
+   339→              Bill Breakdown
+   340→            </h3>
+   341→            <div className="space-y-2">
+   342→              {/* Product Cost (subtotal) */}
+   343→              <div className="flex justify-between text-sm">
+   344→                <span className="text-muted-foreground">Product Cost</span>
+   345→                <span className="text-foreground font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
+   346→              </div>
+   347→
+   348→              {/* Platform Fee */}
+   349→              <div className="flex justify-between text-sm">
+   350→                <span className="text-muted-foreground flex items-center gap-1">
+   351→                  Platform Fee {platformFee === 0 ? '(FREE)' : ''}
+   352→                </span>
+   353→                <span className={`font-medium ${platformFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+   354→                  {platformFee === 0 ? 'FREE' : `₹${platformFee.toLocaleString('en-IN')}`}
+   355→                </span>
+   356→              </div>
+   357→
+   358→              {/* Transport Booking Fee — only when platform arranges transport */}
+   359→              <div className="flex justify-between text-sm">
+   360→                <span className="text-muted-foreground flex items-center gap-1">
+   361→                  <Truck className="w-3 h-3" />
+   362→                  Transport Booking Fee
+   363→                  {transportBookingFee === 0 && <span className="text-[10px] text-emerald-400/70">(producer handles)</span>}
+   364→                </span>
+   365→                <span className={`font-medium ${transportBookingFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+   366→                  {transportBookingFee === 0 ? 'FREE' : `₹${transportBookingFee.toLocaleString('en-IN')}`}
+   367→                </span>
+   368→              </div>
+   369→
+   370→              {/* Delivery Fee — producer-handled deliveries */}
+   371→              <div className="flex justify-between text-sm">
+   372→                <span className="text-muted-foreground flex items-center gap-1">
+   373→                  <Truck className="w-3 h-3" />
+   374→                  Delivery Fee
+   375→                </span>
+   376→                <span className={`font-medium ${deliveryFeeTotal === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+   377→                  {deliveryFeeTotal === 0 ? 'FREE' : `₹${deliveryFeeTotal.toLocaleString('en-IN')}`}
+   378→                </span>
+   379→              </div>
+   380→
+   381→              <Separator className="bg-white/5" />
+   382→
+   383→              {/* Total Payable */}
+   384→              <div className="flex justify-between items-center">
+   385→                <span className="text-base font-bold text-foreground">Total Payable</span>
+   386→                <span className="text-xl font-bold text-emerald-400">₹{totalPayable.toLocaleString('en-IN')}</span>
+   387→              </div>
+   388→
+   389→              <Separator className="bg-white/5" />
+   390→
+   391→              {/* Estimated Transport Cost - NOT added to total */}
+   392→              <div className="flex justify-between text-sm">
+   393→                <span className="text-muted-foreground flex items-center gap-1">
+   394→                  <Info className="w-3 h-3 text-amber-400" />
+   395→                  Est. Transport Cost
+   396→                </span>
+   397→                <div className="text-right">
+   398→                  <span className="text-amber-400 font-medium">₹{estimatedTransportCost.toLocaleString('en-IN')}</span>
+   399→                  <p className="text-[10px] text-muted-foreground/60">Estimate only, not in total</p>
+   400→                </div>
+   401→              </div>
+   402→            </div>
+   403→          </div>
+   404→
+   405→          <Separator className="bg-white/5" />
+   406→
+   407→          {/* Split Payment Section */}
+   408→          <div className="space-y-3">
+   409→            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+   410→              <Wallet className="w-4 h-4 text-emerald-400" />
+   411→              Split Payment
+   412→            </h3>
+   413→
+   414→            {/* Advance Payment */}
+   415→            <div className="glass-card p-4 border border-emerald-500/20">
+   416→              <div className="flex items-center justify-between mb-2">
+   417→                <div className="flex items-center gap-2">
+   418→                  <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+   419→                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+   420→                  </div>
+   421→                  <div>
+   422→                    <p className="text-sm font-semibold text-foreground">Advance Payment (50%)</p>
+   423→                    <p className="text-[10px] text-muted-foreground">Paid now to confirm order</p>
+   424→                  </div>
+   425→                </div>
+   426→                <span className="text-lg font-bold text-emerald-400">₹{advancePayment.toLocaleString('en-IN')}</span>
+   427→              </div>
+   428→            </div>
+   429→
+   430→            {/* Remaining Payment */}
+   431→            <div className="glass-card p-4 border border-white/10">
+   432→              <div className="flex items-center justify-between mb-2">
+   433→                <div className="flex items-center gap-2">
+   434→                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+   435→                    <Clock className="w-4 h-4 text-amber-400" />
+   436→                  </div>
+   437→                  <div>
+   438→                    <p className="text-sm font-semibold text-foreground">Remaining Payment (50%)</p>
+   439→                    <p className="text-[10px] text-muted-foreground">Due upon delivery confirmation</p>
+   440→                  </div>
+   441→                </div>
+   442→                <span className="text-lg font-bold text-amber-400">₹{remainingPayment.toLocaleString('en-IN')}</span>
+   443→              </div>
+   444→            </div>
+   445→
+   446→            {/* Note */}
+   447→            <div className="flex items-start gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+   448→              <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+   449→              <p className="text-xs text-muted-foreground">
+   450→                You pay 50% advance now to confirm your order. The remaining 50% is due after you confirm delivery of the products. Transport cost is an estimate and will be arranged separately.
+   451→              </p>
+   452→            </div>
+   453→          </div>
+   454→        </div>
+   455→
+   456→        <DialogFooter className="p-6 pt-0">
+   457→          <Button
+   458→            className="w-full h-12 text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+   459→            onClick={handlePlaceOrder}
+   460→            disabled={placing}
+   461→          >
+   462→            {placing ? (
+   463→              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+   464→            ) : (
+   465→              <>
+   466→                Pay ₹{advancePayment.toLocaleString('en-IN')} Now
+   467→              </>
+   468→            )}
+   469→          </Button>
+   470→        </DialogFooter>
+   471→      </DialogContent>
+   472→    </Dialog>
+   473→  )
+   474→}
+   475→
+   476→// ─── Main Cart Panel ──────────────────────────────────────────────────────────
+   477→export function CartPanel() {
+   478→  const { cart, cartOpen, setCartOpen, removeFromCart, updateCartQty, clearCart, user } = useAppStore()
+   479→  const [checkoutOpen, setCheckoutOpen] = useState(false)
+   480→
+   481→  // Calculate totals with the V4 revenue model:
+   482→  //  - Platform fee: ₹1000 flat if subtotal > ₹10,000 else ₹0
+   483→  //  - Transport booking fee: ₹30 flat, but only when at least one item is platform-delivered
+   484→  //  - Delivery fee: sum of producer-set delivery fees (waived when freeDelivery), only for producer-handled items
+   485→  const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.pricePerUnit, 0)
+   486→  const platformFee = computePlatformFee(subtotal)
+   487→  const deliveryFeeTotal = cart.reduce((sum, item) => {
+   488→    if (!item.deliveryHandledByProducer) return sum
+   489→    if (item.freeDelivery) return sum
+   490→    return sum + (item.deliveryFee || 0)
+   491→  }, 0)
+   492→  const transportBookingFee = cart.some((item) => !item.deliveryHandledByProducer) ? TRANSPORT_BOOKING_FEE : 0
+   493→  const estimatedTransportCost = Math.round(subtotal * TRANSPORT_ESTIMATE_RATE)
+   494→  const totalPayable = subtotal + platformFee + transportBookingFee + deliveryFeeTotal
+   495→  const advancePayment = Math.round(totalPayable * 0.5)
+   496→  const remainingPayment = totalPayable - advancePayment
+   497→  const allFreeDelivery = cart.length > 0 && cart.every((item) => !item.deliveryHandledByProducer || item.freeDelivery)
+   498→
+   499→  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+   500→
+   501→  const handleClose = useCallback(() => {
+   502→    setCartOpen(false)
+   503→  }, [setCartOpen])
+   504→
+   505→  return (
+   506→    <>
+   507→      <AnimatePresence>
+   508→        {cartOpen && (
+   509→          <>
+   510→            {/* Backdrop */}
+   511→            <motion.div
+   512→              initial={{ opacity: 0 }}
+   513→              animate={{ opacity: 1 }}
+   514→              exit={{ opacity: 0 }}
+   515→              transition={{ duration: 0.2 }}
+   516→              className="fixed inset-0 bg-black/50 z-40"
+   517→              onClick={handleClose}
+   518→            />
+   519→
+   520→            {/* Cart Panel */}
+   521→            <motion.div
+   522→              initial={{ x: '100%', opacity: 0 }}
+   523→              animate={{ x: 0, opacity: 1 }}
+   524→              exit={{ x: '100%', opacity: 0 }}
+   525→              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+   526→              className="fixed top-0 right-0 z-50 h-full w-full sm:w-[420px] bg-background/95 backdrop-blur-xl border-l border-white/10 flex flex-col overflow-hidden"
+   527→              style={{
+   528→                boxShadow: '-10px 0 40px rgba(0, 0, 0, 0.3), 0 0 80px rgba(0, 0, 0, 0.1)',
+   529→              }}
+   530→            >
+   531→              {/* Panel Header */}
+   532→              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+   533→                <div className="flex items-center gap-2.5">
+   534→                  <ShoppingCart className="w-5 h-5 text-emerald-400" />
+   535→                  <h3 className="text-base font-semibold text-foreground">Your Cart</h3>
+   536→                  {cartItemCount > 0 && (
+   537→                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+   538→                      {cartItemCount}
+   539→                    </span>
+   540→                  )}
+   541→                </div>
+   542→                <div className="flex items-center gap-1">
+   543→                  {cart.length > 0 && (
+   544→                    <Button
+   545→                      variant="ghost"
+   546→                      size="sm"
+   547→                      className="h-8 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+   548→                      onClick={clearCart}
+   549→                    >
+   550→                      Clear All
+   551→                    </Button>
+   552→                  )}
+   553→                  <Button
+   554→                    variant="ghost"
+   555→                    size="icon"
+   556→                    onClick={handleClose}
+   557→                    className="size-8 text-muted-foreground hover:text-foreground hover:bg-white/5"
+   558→                  >
+   559→                    <X className="size-4" />
+   560→                  </Button>
+   561→                </div>
+   562→              </div>
+   563→
+   564→              {/* Cart Items */}
+   565→              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+   566→                {cart.length === 0 ? (
+   567→                  <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+   568→                    <div className="w-20 h-20 rounded-2xl bg-white/5 flex items-center justify-center">
+   569→                      <ShoppingCart className="w-10 h-10 text-muted-foreground/30" />
+   570→                    </div>
+   571→                    <div>
+   572→                      <p className="text-base font-semibold text-foreground mb-1">Cart is empty</p>
+   573→                      <p className="text-sm text-muted-foreground">Add products from the marketplace to get started</p>
+   574→                    </div>
+   575→                    <Button
+   576→                      variant="outline"
+   577→                      className="mt-2 border-white/10 hover:bg-white/5 hover:border-white/20"
+   578→                      onClick={handleClose}
+   579→                    >
+   580→                      Browse Marketplace
+   581→                    </Button>
+   582→                  </div>
+   583→                ) : (
+   584→                  cart.map((item) => (
+   585→                    <motion.div
+   586→                      key={item.productId}
+   587→                      layout
+   588→                      initial={{ opacity: 0, y: 10 }}
+   589→                      animate={{ opacity: 1, y: 0 }}
+   590→                      exit={{ opacity: 0, x: 50 }}
+   591→                      className="glass-card p-3 space-y-2"
+   592→                    >
+   593→                      <div className="flex gap-3">
+   594→                        {/* Thumbnail */}
+   595→                        <div className="w-16 h-16 rounded-lg bg-white/5 border border-white/10 overflow-hidden shrink-0">
+   596→                          {item.productImage ? (
+   597→                            <img src={item.productImage} alt={item.productName} className="w-full h-full object-cover" />
+   598→                          ) : (
+   599→                            <div className="w-full h-full flex items-center justify-center text-2xl">📦</div>
+   600→                          )}
+   601→                        </div>
+   602→
+   603→                        {/* Info */}
+   604→                        <div className="flex-1 min-w-0">
+   605→                          <div className="flex items-start justify-between gap-2">
+   606→                            <h4 className="text-sm font-semibold text-foreground truncate">{item.productName}</h4>
+   607→                            <Button
+   608→                              variant="ghost"
+   609→                              size="icon"
+   610→                              className="size-6 shrink-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+   611→                              onClick={() => removeFromCart(item.productId)}
+   612→                            >
+   613→                              <Trash2 className="w-3.5 h-3.5" />
+   614→                            </Button>
+   615→                          </div>
+   616→                          <p className="text-xs text-muted-foreground truncate">{item.sellerName}</p>
+   617→                          <div className="flex items-center gap-1 mt-0.5">
+   618→                            <IndianRupee className="w-3 h-3 text-emerald-400" />
+   619→                            <span className="text-sm font-bold text-foreground">{item.pricePerUnit.toLocaleString('en-IN')}</span>
+   620→                            <span className="text-[10px] text-muted-foreground">/ {item.unit}</span>
+   621→                          </div>
+   622→                          {/* Available Quantity Display */}
+   623→                          <div className="flex items-center gap-1.5 mt-1">
+   624→                            <Package className="w-3 h-3 text-muted-foreground" />
+   625→                            <span className={`text-[10px] font-medium ${item.maxQuantity < 10 ? 'text-red-400' : 'text-muted-foreground'}`}>
+   626→                              {item.maxQuantity} {item.unit} available
+   627→                            </span>
+   628→                            {item.maxQuantity < 10 && (
+   629→                              <span className="text-[10px] text-red-400 font-semibold flex items-center gap-0.5">
+   630→                                <AlertTriangle className="w-2.5 h-2.5" />
+   631→                                Low stock
+   632→                              </span>
+   633→                            )}
+   634→                          </div>
+   635→                          {/* Delivery badge */}
+   636→                          {item.deliveryHandledByProducer ? (
+   637→                            item.freeDelivery ? (
+   638→                              <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-amber-500/15 text-amber-400 border-amber-500/25">
+   639→                                <Truck className="w-2.5 h-2.5" />
+   640→                                FREE DELIVERY
+   641→                              </span>
+   642→                            ) : (item.deliveryFee || 0) > 0 ? (
+   643→                              <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/15 text-emerald-400 border-emerald-500/25">
+   644→                                <Truck className="w-2.5 h-2.5" />
+   645→                                Delivery: ₹{(item.deliveryFee || 0).toLocaleString('en-IN')}
+   646→                              </span>
+   647→                            ) : (
+   648→                              <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border bg-emerald-500/15 text-emerald-400 border-emerald-500/25">
+   649→                                <Truck className="w-2.5 h-2.5" />
+   650→                                Producer Delivery
+   651→                              </span>
+   652→                            )
+   653→                          ) : (
+   654→                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md border bg-sky-500/10 text-sky-400/80 border-sky-500/20">
+   655→                              <Truck className="w-2.5 h-2.5" />
+   656→                              Platform Transport
+   657→                            </span>
+   658→                          )}
+   659→                        </div>
+   660→                      </div>
+   661→
+   662→                      {/* Quantity Controls & Line Total */}
+   663→                      <div className="flex items-center justify-between">
+   664→                        <div className="flex items-center gap-0">
+   665→                          <Button
+   666→                            variant="outline"
+   667→                            size="sm"
+   668→                            className="h-8 w-8 rounded-l-lg rounded-r-none border-white/10 hover:bg-white/10 p-0"
+   669→                            onClick={() => updateCartQty(item.productId, Math.max(item.minOrderQty || 1, item.quantity - 1))}
+   670→                            disabled={item.quantity <= (item.minOrderQty || 1)}
+   671→                          >
+   672→                            <Minus className="w-3 h-3" />
+   673→                          </Button>
+   674→                          <div className="h-8 w-12 flex items-center justify-center border-y border-white/10 bg-white/5 text-sm font-semibold text-foreground">
+   675→                            {item.quantity}
+   676→                          </div>
+   677→                          <Button
+   678→                            variant="outline"
+   679→                            size="sm"
+   680→                            className="h-8 w-8 rounded-r-lg rounded-l-none border-white/10 hover:bg-white/10 p-0"
+   681→                            onClick={() => updateCartQty(item.productId, Math.min(item.maxQuantity, item.quantity + 1))}
+   682→                            disabled={item.quantity >= item.maxQuantity}
+   683→                          >
+   684→                            <Plus className="w-3 h-3" />
+   685→                          </Button>
+   686→                          <span className="text-xs text-muted-foreground ml-2">{item.unit}</span>
+   687→                        </div>
+   688→                        <div className="text-right">
+   689→                          <p className="text-xs text-muted-foreground">Line Total</p>
+   690→                          <p className="text-sm font-bold text-emerald-400">
+   691→                            ₹{(item.quantity * item.pricePerUnit).toLocaleString('en-IN')}
+   692→                          </p>
+   693→                        </div>
+   694→                      </div>
+   695→
+   696→                      {/* Stock Validation Warning */}
+   697→                      {item.quantity > item.maxQuantity && (
+   698→                        <div className="flex items-center gap-1.5 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+   699→                          <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+   700→                          <span className="text-[10px] text-red-400 font-medium">
+   701→                            Quantity exceeds available stock ({item.maxQuantity} {item.unit})
+   702→                          </span>
+   703→                        </div>
+   704→                      )}
+   705→                    </motion.div>
+   706→                  ))
+   707→                )}
+   708→              </div>
+   709→
+   710→              {/* Cart Footer / Bill */}
+   711→              {cart.length > 0 && (
+   712→                <div className="border-t border-white/10 p-4 space-y-3 bg-background/50 backdrop-blur-sm">
+   713→                  {/* Bill Breakdown */}
+   714→                  <div className="space-y-1.5">
+   715→                    <div className="flex justify-between text-sm">
+   716→                      <span className="text-muted-foreground">Subtotal</span>
+   717→                      <span className="text-foreground font-medium">₹{subtotal.toLocaleString('en-IN')}</span>
+   718→                    </div>
+   719→                    <div className="flex justify-between text-sm">
+   720→                      <span className="text-muted-foreground">Platform Fee {platformFee === 0 ? '(FREE)' : ''}</span>
+   721→                      <span className={`font-medium ${platformFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+   722→                        {platformFee === 0 ? 'FREE' : `₹${platformFee.toLocaleString('en-IN')}`}
+   723→                      </span>
+   724→                    </div>
+   725→                    <div className="flex justify-between text-sm">
+   726→                      <span className="text-muted-foreground flex items-center gap-1">
+   727→                        <Truck className="w-3 h-3" />
+   728→                        Transport Booking Fee
+   729→                        {transportBookingFee === 0 && <span className="text-[10px] text-emerald-400/70">(producer handles)</span>}
+   730→                      </span>
+   731→                      <span className={`font-medium ${transportBookingFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+   732→                        {transportBookingFee === 0 ? 'FREE' : `₹${transportBookingFee.toLocaleString('en-IN')}`}
+   733→                      </span>
+   734→                    </div>
+   735→                    <div className="flex justify-between text-sm">
+   736→                      <span className="text-muted-foreground flex items-center gap-1">
+   737→                        <Truck className="w-3 h-3" />
+   738→                        Delivery Fee
+   739→                      </span>
+   740→                      <span className={`font-medium ${deliveryFeeTotal === 0 ? 'text-emerald-400' : 'text-foreground'}`}>
+   741→                        {deliveryFeeTotal === 0 ? (allFreeDelivery ? 'FREE' : '—') : `₹${deliveryFeeTotal.toLocaleString('en-IN')}`}
+   742→                      </span>
+   743→                    </div>
+   744→                    <Separator className="bg-white/5" />
+   745→                    <div className="flex justify-between items-center pt-1">
+   746→                      <span className="text-base font-bold text-foreground">Total Payable</span>
+   747→                      <span className="text-xl font-bold text-emerald-400">₹{totalPayable.toLocaleString('en-IN')}</span>
+   748→                    </div>
+   749→                    {/* Estimated transport - not in total */}
+   750→                    <div className="flex justify-between text-xs">
+   751→                      <span className="text-muted-foreground/60 flex items-center gap-1">
+   752→                        <Info className="w-3 h-3" />
+   753→                        Est. Transport (not in total)
+   754→                      </span>
+   755→                      <span className="text-amber-400/70">₹{estimatedTransportCost.toLocaleString('en-IN')}</span>
+   756→                    </div>
+   757→                  </div>
+   758→
+   759→                  {/* Split Payment Preview */}
+   760→                  <div className="flex gap-2">
+   761→                    <div className="flex-1 glass-card p-2 text-center border border-emerald-500/15">
+   762→                      <p className="text-[10px] text-muted-foreground mb-0.5">Pay Now (50%)</p>
+   763→                      <p className="text-sm font-bold text-emerald-400">₹{advancePayment.toLocaleString('en-IN')}</p>
+   764→                    </div>
+   765→                    <div className="flex-1 glass-card p-2 text-center border border-white/5">
+   766→                      <p className="text-[10px] text-muted-foreground mb-0.5">On Delivery (50%)</p>
+   767→                      <p className="text-sm font-bold text-amber-400">₹{remainingPayment.toLocaleString('en-IN')}</p>
+   768→                    </div>
+   769→                  </div>
+   770→
+   771→                  {/* Checkout Button */}
+   772→                  <Button
+   773→                    className="w-full h-12 text-base font-semibold bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+   774→                    onClick={() => {
+   775→                      if (!user) {
+   776→                        toast.error('Please sign in to checkout')
+   777→                        return
+   778→                      }
+   779→                      setCheckoutOpen(true)
+   780→                    }}
+   781→                  >
+   782→                    Proceed to Checkout
+   783→                    <ChevronRight className="w-5 h-5 ml-1" />
+   784→                  </Button>
+   785→                </div>
+   786→              )}
+   787→            </motion.div>
+   788→          </>
+   789→        )}
+   790→      </AnimatePresence>
+   791→
+   792→      {/* Checkout Dialog */}
+   793→      <CheckoutDialog
+   794→        open={checkoutOpen}
+   795→        onClose={() => setCheckoutOpen(false)}
+   796→        cart={cart}
+   797→        subtotal={subtotal}
+   798→        platformFee={platformFee}
+   799→        transportBookingFee={transportBookingFee}
+   800→        deliveryFeeTotal={deliveryFeeTotal}
+   801→        allFreeDelivery={allFreeDelivery}
+   802→        estimatedTransportCost={estimatedTransportCost}
+   803→        totalPayable={totalPayable}
+   804→        advancePayment={advancePayment}
+   805→        remainingPayment={remainingPayment}
+   806→      />
+   807→    </>
+   808→  )
+   809→}
+   810→

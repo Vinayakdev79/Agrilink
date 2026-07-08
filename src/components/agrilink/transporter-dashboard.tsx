@@ -31,6 +31,7 @@ import {
 } from 'recharts'
 import { toast } from 'sonner'
 import { ShipmentTracker, MiniMapPreview } from '@/components/agrilink/shipment-tracker'
+import { SubscriptionCard } from '@/components/agrilink/subscription-card'
 
 interface TransporterDashboardProps {
   tab: string
@@ -430,6 +431,20 @@ export function TransporterDashboard({ tab }: TransporterDashboardProps) {
           <StatCard icon={<IndianRupee className="h-5 w-5" />} value={`₹${(totalEarnings / 1000).toFixed(0)}K`} label="Revenue" trend="+18%" trendUp />
           <StatCard icon={<Star className="h-5 w-5" />} value={avgRating.toFixed(1)} label="Rating" trend="+0.2" trendUp />
         </div>
+
+        {/* Subscription card */}
+        <SubscriptionCard
+          userId={user?.id || ''}
+          userName={user?.name}
+          userEmail={user?.email}
+          rolePlanId="transporter_pro"
+          accentColor="teal"
+          onSubscriptionChanged={() => {
+            if (user?.id) {
+              fetch(`/api/users?id=${user.id}`).then(r => r.json()).then(() => {}).catch(() => {})
+            }
+          }}
+        />
 
         {/* ─── Performance Stats Section ────────────────────────────────────── */}
         <motion.div
