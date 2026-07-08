@@ -1,0 +1,1697 @@
+     1→'use client'
+     2→
+     3→import { useAppStore } from '@/lib/store'
+     4→import { useEffect, useState, useCallback } from 'react'
+     5→import { motion } from 'framer-motion'
+     6→import {
+     7→  ShoppingCart, IndianRupee, Users, Store,
+     8→  MessageSquare, TrendingUp, TrendingDown, Search, Truck, MapPin,
+     9→  ShoppingBag, Sprout, BadgeCheck, Star, CheckCircle, Clock, Shield,
+    10→  Eye, Gavel, Phone, Crosshair, CalendarDays, User, Leaf,
+    11→  Wallet, CreditCard, ExternalLink, ShieldCheck
+    12→} from 'lucide-react'
+    13→import { openRazorpayCheckout } from '@/lib/razorpay-client'
+    14→import { Button } from '@/components/ui/button'
+    15→import { Badge } from '@/components/ui/badge'
+    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→import { Input } from '@/components/ui/input'
+    18→import { Label } from '@/components/ui/label'
+    19→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    20→import {
+    21→  Dialog, DialogContent, DialogDescription, DialogFooter,
+    22→  DialogHeader, DialogTitle, DialogTrigger
+    23→} from '@/components/ui/dialog'
+    24→import {
+    25→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    26→} from '@/components/ui/table'
+    27→import {
+    28→  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid
+    29→} from 'recharts'
+    30→import { toast } from 'sonner'
+    31→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    32→import { ShipmentTracker } from '@/components/agrilink/shipment-tracker'
+    33→import { SubscriptionCard } from '@/components/agrilink/subscription-card'
+    34→
+    35→interface BuyerDashboardProps {
+    36→  tab: string
+    37→}
+    38→
+    39→const categorySpendData = [
+    40→  { name: 'Grains', value: 450000, color: '#10b981' },
+    41→  { name: 'Spices', value: 280000, color: '#f59e0b' },
+    42→  { name: 'Vegetables', value: 190000, color: '#14b8a6' },
+    43→  { name: 'Fruits', value: 150000, color: '#8b5cf6' },
+    44→  { name: 'Dairy', value: 120000, color: '#ef4444' },
+    45→  { name: 'Pulses', value: 95000, color: '#06b6d4' },
+    46→]
+    47→
+    48→const statusColors: Record<string, string> = {
+    49→  negotiating: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    50→  confirmed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    51→  shipped: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    52→  delivered: 'bg-green-500/20 text-green-400 border-green-500/30',
+    53→  cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+    54→  disputed: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    55→}
+    56→
+    57→const paymentStatusColors: Record<string, string> = {
+    58→  pending: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+    59→  advance_paid: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    60→  full_paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    61→  unpaid: 'bg-red-500/20 text-red-400 border-red-500/30',
+    62→}
+    63→
+    64→const bidStatusColors: Record<string, string> = {
+    65→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    66→  accepted: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    67→  rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
+    68→}
+    69→
+    70→const shipmentStatusColors: Record<string, string> = {
+    71→  pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    72→  bidding: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    73→  assigned: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    74→  picked_up: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    75→  in_transit: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    76→  delivered: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    77→}
+    78→
+    79→function StatCard({ icon, value, label, trend, trendUp }: {
+    80→  icon: React.ReactNode; value: string; label: string; trend?: string; trendUp?: boolean
+    81→}) {
+    82→  return (
+    83→    <motion.div
+    84→      initial={{ opacity: 0, y: 20 }}
+    85→      animate={{ opacity: 1, y: 0 }}
+    86→      className="glass-card p-5 flex flex-col gap-3"
+    87→    >
+    88→      <div className="flex items-center justify-between">
+    89→        <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400">
+    90→          {icon}
+    91→        </div>
+    92→        {trend && (
+    93→          <div className={`flex items-center gap-1 text-xs font-medium ${trendUp ? 'text-emerald-400' : 'text-red-400'}`}>
+    94→            {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+    95→            {trend}
+    96→          </div>
+    97→        )}
+    98→      </div>
+    99→      <div>
+   100→        <p className="text-2xl font-bold text-foreground">{value}</p>
+   101→        <p className="text-sm text-muted-foreground">{label}</p>
+   102→      </div>
+   103→    </motion.div>
+   104→  )
+   105→}
+   106→
+   107→// Payment Breakdown Component
+   108→function PaymentBreakdown({ order }: { order: any }) {
+   109→  const quantity = order.quantity || 0
+   110→  const unitPrice = order.unitPrice || order.product?.pricePerUnit || 0
+   111→  const productCost = quantity * unitPrice
+   112→  // Platform fee: ₹1000 if subtotal > ₹10,000, else ₹0 (use order value if available)
+   113→  const platformFee = order.platformFee !== undefined && order.platformFee !== null
+   114→    ? Number(order.platformFee)
+   115→    : (productCost > 10000 ? 1000 : 0)
+   116→  // Transport booking fee: only when platform arranges transport (not producer/local)
+   117→  const isProducerDelivery = order.deliveryType === 'producer' || order.deliveryType === 'local' || order.product?.deliveryHandledByProducer
+   118→  const transportBookingFee = order.transportBookingFee !== undefined && order.transportBookingFee !== null
+   119→    ? Number(order.transportBookingFee)
+   120→    : (isProducerDelivery ? 0 : 30)
+   121→  const isFreeDelivery = order.freeDelivery || order.product?.freeDelivery
+   122→  const deliveryFee = (order.deliveryFee !== undefined && order.deliveryFee !== null) ? Number(order.deliveryFee) : 0
+   123→  const total = order.totalPayable || order.totalPrice || (productCost + platformFee + transportBookingFee + (isFreeDelivery ? 0 : deliveryFee))
+   124→  const advancePaid = order.advanceAmount || Math.round(total * 0.5 * 100) / 100
+   125→  const remaining = order.remainingAmount || Math.round((total - advancePaid) * 100) / 100
+   126→
+   127→  return (
+   128→    <motion.div
+   129→      initial={{ opacity: 0, height: 0 }}
+   130→      animate={{ opacity: 1, height: 'auto' }}
+   131→      exit={{ opacity: 0, height: 0 }}
+   132→      className="glass-card p-4 border border-amber-500/15 bg-amber-500/[0.03]"
+   133→    >
+   134→      <div className="flex items-center gap-2 mb-3">
+   135→        <CreditCard className="h-4 w-4 text-amber-400" />
+   136→        <h5 className="text-sm font-semibold text-foreground">Payment Breakdown</h5>
+   137→        {order.paymentStatus && (
+   138→          <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px] ml-auto`}>
+   139→            {order.paymentStatus === 'advance_paid' ? 'Advance Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus === 'pending' ? 'Pending' : order.paymentStatus.replace('_', ' ')}
+   140→          </Badge>
+   141→        )}
+   142→      </div>
+   143→      <div className="space-y-1.5 text-xs">
+   144→        <div className="flex justify-between">
+   145→          <span className="text-muted-foreground">Product Cost ({quantity} × ₹{unitPrice.toLocaleString()})</span>
+   146→          <span className="text-foreground font-medium">₹{productCost.toLocaleString()}</span>
+   147→        </div>
+   148→        <div className="flex justify-between">
+   149→          <span className="text-muted-foreground">Platform Fee {platformFee === 0 ? '(FREE)' : ''}</span>
+   150→          <span className={`font-medium ${platformFee === 0 ? 'text-emerald-400' : 'text-foreground'}`}>{platformFee === 0 ? 'FREE' : `₹${platformFee.toLocaleString()}`}</span>
+   151→        </div>
+   152→        <div className="flex justify-between">
+   153→          <span className="text-muted-foreground">Transport Booking Fee</span>
+   154→          <span className="text-foreground font-medium">₹{transportBookingFee.toLocaleString()}</span>
+   155→        </div>
+   156→        {/* Delivery Fee row — FREE badge or charged amount */}
+   157→        {isFreeDelivery ? (
+   158→          <div className="flex justify-between items-center">
+   159→            <span className="text-muted-foreground">Delivery Fee</span>
+   160→            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-[10px]">FREE</Badge>
+   161→          </div>
+   162→        ) : deliveryFee > 0 ? (
+   163→          <div className="flex justify-between">
+   164→            <span className="text-muted-foreground">Delivery Fee</span>
+   165→            <span className="text-foreground font-medium">₹{deliveryFee.toLocaleString()}</span>
+   166→          </div>
+   167→        ) : null}
+   168→        <div className="flex justify-between pt-1.5 border-t border-glass-border">
+   169→          <span className="text-foreground font-semibold">Total</span>
+   170→          <span className="text-amber-400 font-bold">₹{total.toLocaleString()}</span>
+   171→        </div>
+   172→        <div className="flex justify-between pt-1 border-t border-dashed border-glass-border">
+   173→          <span className="text-emerald-400">Advance Paid (50%)</span>
+   174→          <span className="text-emerald-400 font-medium">₹{advancePaid.toLocaleString()}</span>
+   175→        </div>
+   176→        <div className="flex justify-between">
+   177→          <span className={order.paymentStatus === 'full_paid' ? 'text-emerald-400' : 'text-orange-400'}>
+   178→            {order.paymentStatus === 'full_paid' ? 'Remaining (Paid)' : 'Remaining (50%)'}
+   179→          </span>
+   180→          <span className={order.paymentStatus === 'full_paid' ? 'text-emerald-400 font-medium' : 'text-orange-400 font-bold'}>
+   181→            ₹{remaining.toLocaleString()}
+   182→          </span>
+   183→        </div>
+   184→      </div>
+   185→    </motion.div>
+   186→  )
+   187→}
+   188→
+   189→export function BuyerDashboard({ tab }: BuyerDashboardProps) {
+   190→  const { user, setChatOpen, setActiveChatUser, setView, setMarketplaceCategory, setSelectedProducerId } = useAppStore()
+   191→  const [orders, setOrders] = useState<any[]>([])
+   192→  const [loading, setLoading] = useState(true)
+   193→
+   194→  const [shipmentForm, setShipmentForm] = useState<{
+   195→    open: boolean; orderId: string; origin: string; destination: string; budgetMin: string; budgetMax: string
+   196→  }>({
+   197→    open: false, orderId: '', origin: '', destination: '', budgetMin: '', budgetMax: ''
+   198→  })
+   199→  // Producers tab state
+   200→  const [producers, setProducers] = useState<any[]>([])
+   201→  const [producersLoading, setProducersLoading] = useState(false)
+   202→  const [producerSearch, setProducerSearch] = useState('')
+   203→  const [producerStateFilter, setProducerStateFilter] = useState('')
+   204→  const [producerCertFilter, setProducerCertFilter] = useState('')
+   205→  const [organicOnly, setOrganicOnly] = useState(false)
+   206→  const [producerSort, setProducerSort] = useState('rating')
+   207→
+   208→  // Bid visibility state
+   209→  const [bidsDialogOpen, setBidsDialogOpen] = useState(false)
+   210→  const [bidsForShipment, setBidsForShipment] = useState<any[]>([])
+   211→  const [bidsLoading, setBidsLoading] = useState(false)
+   212→  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null)
+   213→
+   214→  // Shipment tracking state
+   215→  const [trackingShipment, setTrackingShipment] = useState<any>(null)
+   216→  const [trackerOpen, setTrackerOpen] = useState(false)
+   217→
+   218→  // Shipments for this buyer
+   219→  const [myShipments, setMyShipments] = useState<any[]>([])
+   220→
+   221→  // Pay remaining state
+   222→  const [payingRemaining, setPayingRemaining] = useState<string | null>(null)
+   223→
+   224→  // Expanded orders for payment breakdown
+   225→  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+   226→
+   227→  const fetchData = useCallback(async () => {
+   228→    if (!user) return
+   229→    setLoading(true)
+   230→    try {
+   231→      const ordersRes = await fetch(`/api/orders?userId=${user.id}&role=buyer`)
+   232→      const ordersData = await ordersRes.json()
+   233→      if (ordersData.orders) setOrders(ordersData.orders)
+   234→
+   235→      // Fetch shipments for this buyer
+   236→      const shipRes = await fetch('/api/shipments')
+   237→      const shipData = await shipRes.json()
+   238→      const allShipments = shipData.shipments || []
+   239→      // Filter shipments that belong to this buyer's orders
+   240→      const buyerOrderIds = new Set((ordersData.orders || []).map((o: any) => o.id))
+   241→      const buyerShips = allShipments.filter((s: any) => buyerOrderIds.has(s.orderId))
+   242→      setMyShipments(buyerShips)
+   243→    } catch {
+   244→      toast.error('Failed to load data')
+   245→    } finally {
+   246→      setLoading(false)
+   247→    }
+   248→  }, [user])
+   249→
+   250→  useEffect(() => {
+   251→    fetchData()
+   252→  }, [fetchData])
+   253→
+   254→  const fetchProducers = useCallback(async () => {
+   255→    setProducersLoading(true)
+   256→    try {
+   257→      const res = await fetch('/api/users?role=producer')
+   258→      const data = await res.json()
+   259→      if (data.users) setProducers(data.users)
+   260→    } catch {
+   261→      toast.error('Failed to load producers')
+   262→    } finally {
+   263→      setProducersLoading(false)
+   264→    }
+   265→  }, [])
+   266→
+   267→  useEffect(() => {
+   268→    if (tab === 'producers') fetchProducers()
+   269→  }, [tab, fetchProducers])
+   270→
+   271→  const handleCreateShipment = async () => {
+   272→    try {
+   273→      const body: Record<string, unknown> = {
+   274→        orderId: shipmentForm.orderId,
+   275→        origin: shipmentForm.origin,
+   276→        destination: shipmentForm.destination,
+   277→      }
+   278→      if (shipmentForm.budgetMin) body.budgetMin = shipmentForm.budgetMin
+   279→      if (shipmentForm.budgetMax) body.budgetMax = shipmentForm.budgetMax
+   280→
+   281→      const res = await fetch('/api/shipments', {
+   282→        method: 'POST',
+   283→        headers: { 'Content-Type': 'application/json' },
+   284→        body: JSON.stringify(body)
+   285→      })
+   286→      if (res.ok) {
+   287→        toast.success('Shipment created! Transporters will be notified.')
+   288→        setShipmentForm({ open: false, orderId: '', origin: '', destination: '', budgetMin: '', budgetMax: '' })
+   289→        fetchData()
+   290→      } else {
+   291→        toast.error('Failed to create shipment')
+   292→      }
+   293→    } catch {
+   294→      toast.error('Failed to create shipment')
+   295→    }
+   296→  }
+   297→
+   298→  // View bids for a shipment
+   299→  const handleViewBids = async (shipmentId: string) => {
+   300→    setBidsLoading(true)
+   301→    setBidsDialogOpen(true)
+   302→    try {
+   303→      const res = await fetch(`/api/transport-bids?shipmentId=${shipmentId}`)
+   304→      const data = await res.json()
+   305→      if (data.bids) {
+   306→        setBidsForShipment(data.bids)
+   307→      }
+   308→    } catch {
+   309→      toast.error('Failed to load bids')
+   310→    } finally {
+   311→      setBidsLoading(false)
+   312→    }
+   313→  }
+   314→
+   315→  // Accept a bid
+   316→  const handleAcceptBid = async (bidId: string) => {
+   317→    setAcceptingBidId(bidId)
+   318→    try {
+   319→      const res = await fetch('/api/transport-bids', {
+   320→        method: 'PATCH',
+   321→        headers: { 'Content-Type': 'application/json' },
+   322→        body: JSON.stringify({ bidId, status: 'accepted' })
+   323→      })
+   324→      if (res.ok) {
+   325→        toast.success('Bid accepted! Transporter has been assigned.')
+   326→        setBidsDialogOpen(false)
+   327→        fetchData()
+   328→      } else {
+   329→        const data = await res.json()
+   330→        toast.error(data.error || 'Failed to accept bid')
+   331→      }
+   332→    } catch {
+   333→      toast.error('Failed to accept bid')
+   334→    } finally {
+   335→      setAcceptingBidId(null)
+   336→    }
+   337→  }
+   338→
+   339→  // Track shipment
+   340→  const handleTrackShipment = (shipment: any) => {
+   341→    setTrackingShipment(shipment)
+   342→    setTrackerOpen(true)
+   343→  }
+   344→
+   345→  // Find shipment for a given order
+   346→  const getShipmentForOrder = (orderId: string) => {
+   347→    return myShipments.find((s: any) => s.orderId === orderId)
+   348→  }
+   349→
+   350→  // Pay remaining amount — 3-step Razorpay flow (create-order → checkout → verify)
+   351→  const handlePayRemaining = async (orderId: string, amount: number) => {
+   352→    setPayingRemaining(orderId)
+   353→    try {
+   354→      // 1. Create Razorpay order (server returns demoMode if keys are absent)
+   355→      const createRes = await fetch('/api/payments/razorpay/create-order', {
+   356→        method: 'POST',
+   357→        headers: { 'Content-Type': 'application/json' },
+   358→        body: JSON.stringify({
+   359→          type: 'remaining',
+   360→          orderId,
+   361→          amount,
+   362→          userId: user?.id,
+   363→          description: 'Remaining payment for order',
+   364→        }),
+   365→      })
+   366→      if (!createRes.ok) {
+   367→        const e = await createRes.json().catch(() => ({}))
+   368→        toast.error(e.error || 'Failed to initiate payment')
+   369→        return
+   370→      }
+   371→      const {
+   372→        orderId: razorpayOrderId,
+   373→        amount: amountPaise,
+   374→        demoMode,
+   375→        keyId,
+   376→      } = await createRes.json()
+   377→
+   378→      // 2. Open Razorpay checkout (auto-succeeds in demo mode)
+   379→      await new Promise<void>((resolve, reject) => {
+   380→        openRazorpayCheckout({
+   381→          orderId: razorpayOrderId,
+   382→          amount: amountPaise,
+   383→          keyId,
+   384→          demoMode,
+   385→          name: 'AgriLink',
+   386→          description: 'Remaining payment',
+   387→          prefill: { name: user?.name, email: user?.email, contact: user?.phone },
+   388→          onSuccess: async (paymentId, signature, rzpOrderId) => {
+   389→            try {
+   390→              // 3. Verify signature & persist payment status
+   391→              const verifyRes = await fetch('/api/payments/razorpay/verify', {
+   392→                method: 'POST',
+   393→                headers: { 'Content-Type': 'application/json' },
+   394→                body: JSON.stringify({
+   395→                  type: 'remaining',
+   396→                  razorpayOrderId: rzpOrderId,
+   397→                  razorpayPaymentId: paymentId,
+   398→                  razorpaySignature: signature,
+   399→                  orderId,
+   400→                  userId: user?.id,
+   401→                  amount,
+   402→                }),
+   403→              })
+   404→              if (!verifyRes.ok) {
+   405→                const e = await verifyRes.json().catch(() => ({}))
+   406→                toast.error(e.error || 'Payment verification failed')
+   407→                reject(new Error('verify failed'))
+   408→                return
+   409→              }
+   410→              toast.success('Remaining payment completed successfully!')
+   411→              fetchData()
+   412→              resolve()
+   413→            } catch (err) {
+   414→              toast.error('Payment verification failed')
+   415→              reject(err)
+   416→            }
+   417→          },
+   418→          onDismiss: () => {
+   419→            toast.info('Payment cancelled')
+   420→            resolve()
+   421→          },
+   422→        })
+   423→      })
+   424→    } catch {
+   425→      toast.error('Failed to process payment')
+   426→    } finally {
+   427→      setPayingRemaining(null)
+   428→    }
+   429→  }
+   430→
+   431→  // Toggle payment breakdown
+   432→  const togglePaymentBreakdown = (orderId: string) => {
+   433→    setExpandedOrders(prev => {
+   434→      const next = new Set(prev)
+   435→      if (next.has(orderId)) {
+   436→        next.delete(orderId)
+   437→      } else {
+   438→        next.add(orderId)
+   439→      }
+   440→      return next
+   441→    })
+   442→  }
+   443→
+   444→  const totalOrders = orders.length
+   445→  const savings = Math.round(orders.filter(o => o.status === 'delivered').reduce((s, o) => s + (o.totalPrice || 0), 0) * 0.12)
+   446→  const suppliers = [...new Set(orders.map(o => o.seller?.id).filter(Boolean))].length
+   447→
+   448→  if (tab === 'overview') {
+   449→    return (
+   450→      <div className="space-y-6">
+   451→        {/* Stat cards */}
+   452→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   453→          <StatCard icon={<ShoppingCart className="h-5 w-5" />} value={String(totalOrders)} label="Orders Placed" trend="+15%" trendUp />
+   454→          <StatCard icon={<IndianRupee className="h-5 w-5" />} value={`₹${(savings / 1000).toFixed(0)}K`} label="Savings" trend="+18%" trendUp />
+   455→          <StatCard icon={<Users className="h-5 w-5" />} value={String(suppliers)} label="Suppliers" trend="+2" trendUp />
+   456→          <StatCard icon={<CheckCircle className="h-5 w-5" />} value={String(orders.filter(o => o.status === 'delivered').length)} label="Delivered" trend="+8%" trendUp />
+   457→        </div>
+   458→
+   459→        {/* Subscription card */}
+   460→        <SubscriptionCard
+   461→          userId={user?.id || ''}
+   462→          userName={user?.name}
+   463→          userEmail={user?.email}
+   464→          rolePlanId="buyer_pro"
+   465→          accentColor="amber"
+   466→          onSubscriptionChanged={() => {
+   467→            if (user?.id) {
+   468→              fetch(`/api/users?id=${user.id}`).then(r => r.json()).then(() => {}).catch(() => {})
+   469→            }
+   470→          }}
+   471→        />
+   472→
+   473→        {/* Charts row */}
+   474→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   475→          {/* Category spend pie chart */}
+   476→          <div className="glass-card p-6">
+   477→            <h3 className="text-lg font-semibold text-foreground mb-4">Category Spend</h3>
+   478→            <div className="h-64">
+   479→              <ResponsiveContainer width="100%" height="100%">
+   480→                <PieChart>
+   481→                  <Pie
+   482→                    data={categorySpendData}
+   483→                    cx="50%"
+   484→                    cy="50%"
+   485→                    innerRadius={60}
+   486→                    outerRadius={90}
+   487→                    paddingAngle={4}
+   488→                    dataKey="value"
+   489→                  >
+   490→                    {categorySpendData.map((entry, index) => (
+   491→                      <Cell key={index} fill={entry.color} />
+   492→                    ))}
+   493→                  </Pie>
+   494→                  <Tooltip
+   495→                    contentStyle={{ backgroundColor: 'rgba(15,15,30,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+   496→                    formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Spend']}
+   497→                  />
+   498→                </PieChart>
+   499→              </ResponsiveContainer>
+   500→            </div>
+   501→            <div className="flex flex-wrap gap-3 mt-2 justify-center">
+   502→              {categorySpendData.map((item) => (
+   503→                <div key={item.name} className="flex items-center gap-2 text-xs">
+   504→                  <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+   505→                  <span className="text-muted-foreground">{item.name}</span>
+   506→                </div>
+   507→              ))}
+   508→            </div>
+   509→          </div>
+   510→
+   511→          {/* Recent orders */}
+   512→          <div className="glass-card p-6">
+   513→            <div className="flex items-center justify-between mb-4">
+   514→              <h3 className="text-lg font-semibold text-foreground">Recent Orders</h3>
+   515→              <Button variant="ghost" size="sm" className="text-amber-400 hover:text-amber-300" onClick={() => useAppStore.getState().setDashboardTab('orders')}>
+   516→                View All
+   517→              </Button>
+   518→            </div>
+   519→            {loading ? (
+   520→              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 rounded-lg" />)}</div>
+   521→            ) : orders.length === 0 ? (
+   522→              <p className="text-muted-foreground text-sm py-8 text-center">No orders yet</p>
+   523→            ) : (
+   524→              <div className="space-y-2 max-h-56 overflow-y-auto">
+   525→                {orders.slice(0, 5).map((order) => {
+   526→                  const shipment = getShipmentForOrder(order.id)
+   527→                  return (
+   528→                    <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-glass-border">
+   529→                      <div>
+   530→                        <p className="text-sm font-medium text-foreground">{order.product?.name || 'N/A'}</p>
+   531→                        <p className="text-xs text-muted-foreground">{order.seller?.name || order.seller?.companyName || 'Unknown'}</p>
+   532→                      </div>
+   533→                      <div className="text-right">
+   534→                        <p className="text-sm text-amber-400 font-medium">₹{order.totalPrice?.toLocaleString()}</p>
+   535→                        <div className="flex items-center gap-1.5 justify-end">
+   536→                          <Badge className={`${statusColors[order.status] || ''} border text-[10px]`}>{order.status}</Badge>
+   537→                          {shipment && ['picked_up', 'in_transit'].includes(shipment.status) && (
+   538→                            <Button
+   539→                              size="sm"
+   540→                              variant="ghost"
+   541→                              className="h-5 w-5 p-0 text-cyan-400 hover:text-cyan-300"
+   542→                              onClick={() => handleTrackShipment(shipment)}
+   543→                            >
+   544→                              <Crosshair className="h-3 w-3" />
+   545→                            </Button>
+   546→                          )}
+   547→                        </div>
+   548→                      </div>
+   549→                    </div>
+   550→                  )
+   551→                })}
+   552→              </div>
+   553→            )}
+   554→          </div>
+   555→        </div>
+   556→
+   557→        {/* Quick actions */}
+   558→        <div className="flex flex-wrap gap-3">
+   559→          <Button className="bg-amber-600 hover:bg-amber-500 gap-2" onClick={() => { setMarketplaceCategory('all'); setView('marketplace') }}>
+   560→            <Search className="h-4 w-4" /> Search Products
+   561→          </Button>
+   562→          <Button variant="outline" className="border-glass-border gap-2" onClick={() => { setMarketplaceCategory('all'); setView('marketplace') }}>
+   563→            <Store className="h-4 w-4" /> View Marketplace
+   564→          </Button>
+   565→        </div>
+   566→      </div>
+   567→    )
+   568→  }
+   569→
+   570→  if (tab === 'orders') {
+   571→    return (
+   572→      <div className="space-y-6">
+   573→        <h3 className="text-xl font-semibold text-foreground">Orders</h3>
+   574→        {loading ? (
+   575→          <div className="space-y-3">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}</div>
+   576→        ) : orders.length === 0 ? (
+   577→          <div className="glass-card p-12 text-center">
+   578→            <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+   579→            <p className="text-muted-foreground">No orders yet</p>
+   580→          </div>
+   581→        ) : (
+   582→          <div className="space-y-4">
+   583→            {orders.map((order) => {
+   584→              const shipment = getShipmentForOrder(order.id)
+   585→              const hasShipment = !!shipment
+   586→              const isShippedOrInTransit = shipment && ['picked_up', 'in_transit'].includes(shipment.status)
+   587→              const hasTransport = shipment && shipment.transporterId && ['assigned', 'picked_up', 'in_transit', 'delivered'].includes(shipment.status)
+   588→              const isExternalTransport = shipment?.isExternal || shipment?.isExternalTransporter
+   589→              // Calculate remaining amount properly - use order values if available, else compute
+   590→              const orderTotalForRemaining = order.totalPayable || order.totalPrice || 0
+   591→              const orderAdvance = order.advanceAmount || Math.round(orderTotalForRemaining * 0.5 * 100) / 100
+   592→              const remainingAmount = order.remainingAmount || Math.round((orderTotalForRemaining - orderAdvance) * 100) / 100
+   593→              const canPayRemaining = order.paymentStatus === 'advance_paid' && remainingAmount > 0 && order.status !== 'cancelled'
+   594→              const isExpanded = expandedOrders.has(order.id)
+   595→
+   596→              return (
+   597→                <motion.div
+   598→                  key={order.id}
+   599→                  initial={{ opacity: 0, y: 15 }}
+   600→                  animate={{ opacity: 1, y: 0 }}
+   601→                  className="glass-card p-5 space-y-4"
+   602→                >
+   603→                  {/* Header with product image + basic info */}
+   604→                  <div className="flex gap-4">
+   605→                    {/* Product Image */}
+   606→                    <div className="w-24 h-24 rounded-xl overflow-hidden border border-glass-border shrink-0">
+   607→                      {order.product?.imageUrl ? (
+   608→                        <img src={order.product.imageUrl} alt={order.product?.name} className="w-full h-full object-cover" />
+   609→                      ) : (
+   610→                        <div className="w-full h-full bg-emerald-500/10 flex items-center justify-center">
+   611→                          <ShoppingBag className="h-8 w-8 text-emerald-400/50" />
+   612→                        </div>
+   613→                      )}
+   614→                    </div>
+   615→
+   616→                    <div className="flex-1 min-w-0">
+   617→                      <div className="flex items-start justify-between gap-2">
+   618→                        <div>
+   619→                          <h4 className="font-semibold text-foreground">{order.product?.name || 'N/A'}</h4>
+   620→                          <div className="flex items-center gap-2 mt-0.5">
+   621→                            <span className="text-xs text-muted-foreground capitalize">{order.product?.category}</span>
+   622→                            {order.product?.qualityGrade && (
+   623→                              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/25 border text-[9px] px-1.5">
+   624→                                Grade {order.product.qualityGrade}
+   625→                              </Badge>
+   626→                            )}
+   627→                            {order.product?.isOrganic && (
+   628→                              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 border text-[9px] px-1.5">
+   629→                                Organic
+   630→                              </Badge>
+   631→                            )}
+   632→                          </div>
+   633→                        </div>
+   634→                        <div className="flex items-center gap-1.5 shrink-0">
+   635→                          <Badge className={`${statusColors[order.status] || ''} border text-xs`}>
+   636→                            {order.status}
+   637→                          </Badge>
+   638→                          {order.paymentStatus && (
+   639→                            <Badge className={`${paymentStatusColors[order.paymentStatus] || ''} border text-[10px]`}>
+   640→                              {order.paymentStatus === 'advance_paid' ? 'Advance Paid' : order.paymentStatus === 'full_paid' ? 'Fully Paid' : order.paymentStatus === 'pending' ? 'Pending' : order.paymentStatus.replace('_', ' ')}
+   641→                            </Badge>
+   642→                          )}
+   643→                        </div>
+   644→                      </div>
+   645→
+   646→                      {/* Price details */}
+   647→                      <div className="flex items-center gap-4 mt-2 text-sm">
+   648→                        <div>
+   649→                          <p className="text-muted-foreground text-[10px]">Qty</p>
+   650→                          <p className="text-foreground font-medium">{order.quantity} {order.product?.unit || ''}</p>
+   651→                        </div>
+   652→                        <div>
+   653→                          <p className="text-muted-foreground text-[10px]">Unit Price</p>
+   654→                          <p className="text-foreground font-medium">₹{order.product?.pricePerUnit?.toLocaleString() || order.unitPrice?.toLocaleString()}/{order.product?.unit || ''}</p>
+   655→                        </div>
+   656→                        <div>
+   657→                          <p className="text-muted-foreground text-[10px]">Total</p>
+   658→                          <p className="text-amber-400 font-bold">₹{order.totalPrice?.toLocaleString()}</p>
+   659→                        </div>
+   660→                      </div>
+   661→                    </div>
+   662→                  </div>
+   663→
+   664→                  {/* Product Location & Variety */}
+   665→                  <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+   666→                    {order.product?.location && (
+   667→                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-emerald-400" />{order.product.location}{order.product.state ? `, ${order.product.state}` : ''}</span>
+   668→                    )}
+   669→                    {order.product?.cropVariety && (
+   670→                      <span className="flex items-center gap-1"><Sprout className="w-3 h-3 text-emerald-400" />{order.product.cropVariety}</span>
+   671→                    )}
+   672→                  </div>
+   673→
+   674→                  {/* Delivery Address */}
+   675→                  {order.deliveryAddress && (
+   676→                    <div className="glass-card p-3 border border-emerald-500/10">
+   677→                      <p className="text-[10px] text-muted-foreground mb-1">Delivery Address</p>
+   678→                      <p className="text-xs text-foreground">{order.deliveryAddress}{order.deliveryCity ? `, ${order.deliveryCity}` : ''}{order.deliveryState ? `, ${order.deliveryState}` : ''} {order.deliveryPincode || ''}</p>
+   679→                    </div>
+   680→                  )}
+   681→
+   682→                  {/* Seller info with Chat button */}
+   683→                  <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-glass-border">
+   684→                    <Avatar className="h-8 w-8 border border-glass-border shrink-0">
+   685→                      {order.seller?.avatarUrl ? (
+   686→                        <AvatarImage src={order.seller.avatarUrl} alt={order.seller?.name || ''} />
+   687→                      ) : null}
+   688→                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xs font-semibold">
+   689→                        {(order.seller?.name || 'S').slice(0, 2).toUpperCase()}
+   690→                      </AvatarFallback>
+   691→                    </Avatar>
+   692→                    <div className="flex-1 min-w-0">
+   693→                      <p className="text-sm font-medium text-foreground">{order.seller?.name || order.seller?.companyName || 'Unknown Seller'}</p>
+   694→                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   695→                        {order.seller?.companyName && <span>{order.seller.companyName}</span>}
+   696→                        {(order.seller?.city || order.seller?.state) && (
+   697→                          <span className="flex items-center gap-1">
+   698→                            <MapPin className="h-3 w-3" />
+   699→                            {[order.seller?.city, order.seller?.state].filter(Boolean).join(', ')}
+   700→                          </span>
+   701→                        )}
+   702→                      </div>
+   703→                    </div>
+   704→                    <div className="flex items-center gap-2">
+   705→                      <Button
+   706→                        size="sm"
+   707→                        variant="ghost"
+   708→                        className="h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1 text-xs"
+   709→                        onClick={() => {
+   710→                          if (order.seller?.id) {
+   711→                            setActiveChatUser(order.seller.id)
+   712→                            setChatOpen(true)
+   713→                          }
+   714→                        }}
+   715→                      >
+   716→                        <MessageSquare className="h-3 w-3" /> Chat
+   717→                      </Button>
+   718→                      <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+   719→                    </div>
+   720→                  </div>
+   721→
+   722→                  {/* Expected Pickup Date - prominent display */}
+   723→                  {hasTransport && shipment.expectedPickupDate && (
+   724→                    <div className="glass-card p-3 border border-amber-500/20 bg-amber-500/5">
+   725→                      <div className="flex items-center gap-2">
+   726→                        <CalendarDays className="h-5 w-5 text-amber-400" />
+   727→                        <div>
+   728→                          <p className="text-xs text-muted-foreground">Expected Pickup Date</p>
+   729→                          <p className="text-sm font-bold text-amber-400">
+   730→                            {new Date(shipment.expectedPickupDate).toLocaleDateString('en-IN', {
+   731→                              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+   732→                            })}
+   733→                          </p>
+   734→                        </div>
+   735→                      </div>
+   736→                    </div>
+   737→                  )}
+   738→
+   739→                  {/* Shipment Transport Details - Enhanced with transporter info */}
+   740→                  {hasTransport && (
+   741→                    <div className="glass-card p-4 border border-teal-500/20">
+   742→                      <div className="flex items-center gap-2 mb-3">
+   743→                        <Truck className="h-4 w-4 text-teal-400" />
+   744→                        <h5 className="text-sm font-semibold text-foreground">Transport Details</h5>
+   745→                        <Badge className={`${shipmentStatusColors[shipment.status] || ''} border text-[10px]`}>
+   746→                          {shipment.status.replace('_', ' ')}
+   747→                        </Badge>
+   748→                        {isExternalTransport && (
+   749→                          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px] gap-1">
+   750→                            <ExternalLink className="h-2.5 w-2.5" /> External
+   751→                          </Badge>
+   752→                        )}
+   753→                      </div>
+   754→
+   755→                      {isExternalTransport ? (
+   756→                        /* External Transporter Info */
+   757→                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+   758→                          {(shipment.externalTransporterName || shipment.externalCompanyName) && (
+   759→                            <div>
+   760→                              <p className="text-muted-foreground text-[10px]">Transporter</p>
+   761→                              <p className="text-foreground font-medium text-xs">
+   762→                                {shipment.externalTransporterName || shipment.externalCompanyName || 'N/A'}
+   763→                              </p>
+   764→                            </div>
+   765→                          )}
+   766→                          {shipment.driverName && (
+   767→                            <div>
+   768→                              <p className="text-muted-foreground text-[10px]">Driver</p>
+   769→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   770→                                <User className="h-3 w-3 text-teal-400" />
+   771→                                {shipment.driverName}
+   772→                              </p>
+   773→                            </div>
+   774→                          )}
+   775→                          {(shipment.driverPhone || shipment.externalMobileNumber) && (
+   776→                            <div>
+   777→                              <p className="text-muted-foreground text-[10px]">Driver Phone</p>
+   778→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   779→                                <Phone className="h-2.5 w-2.5 text-teal-400" />
+   780→                                {shipment.driverPhone || shipment.externalMobileNumber}
+   781→                              </p>
+   782→                            </div>
+   783→                          )}
+   784→                          {shipment.vehicleNumber && (
+   785→                            <div>
+   786→                              <p className="text-muted-foreground text-[10px]">Vehicle Number</p>
+   787→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   788→                                <Truck className="h-3 w-3 text-teal-400" />
+   789→                                {shipment.vehicleNumber}
+   790→                              </p>
+   791→                            </div>
+   792→                          )}
+   793→                          <div>
+   794→                            <p className="text-muted-foreground text-[10px]">Pickup</p>
+   795→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   796→                              <MapPin className="h-3 w-3 text-emerald-400" />
+   797→                              {shipment.exactPickupAddress || shipment.origin}
+   798→                            </p>
+   799→                          </div>
+   800→                          <div>
+   801→                            <p className="text-muted-foreground text-[10px]">Drop-off</p>
+   802→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   803→                              <MapPin className="h-3 w-3 text-red-400" />
+   804→                              {shipment.exactDropAddress || shipment.destination}
+   805→                            </p>
+   806→                          </div>
+   807→                        </div>
+   808→                      ) : (
+   809→                        /* Internal (AgroBridge) Transporter Info */
+   810→                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+   811→                          <div>
+   812→                            <p className="text-muted-foreground text-[10px]">Transporter Company</p>
+   813→                            <p className="text-foreground font-medium text-xs">
+   814→                              {shipment.transporter?.companyName || shipment.transporter?.name || 'N/A'}
+   815→                            </p>
+   816→                          </div>
+   817→                          <div>
+   818→                            <p className="text-muted-foreground text-[10px]">Transporter Contact</p>
+   819→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   820→                              <Phone className="h-2.5 w-2.5 text-teal-400" />
+   821→                              {shipment.transporter?.phone || 'N/A'}
+   822→                            </p>
+   823→                          </div>
+   824→                          {shipment.driverName && (
+   825→                            <div>
+   826→                              <p className="text-muted-foreground text-[10px]">Driver Name</p>
+   827→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   828→                                <User className="h-3 w-3 text-teal-400" />
+   829→                                {shipment.driverName}
+   830→                              </p>
+   831→                            </div>
+   832→                          )}
+   833→                          {shipment.driverPhone && (
+   834→                            <div>
+   835→                              <p className="text-muted-foreground text-[10px]">Driver Phone</p>
+   836→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   837→                                <Phone className="h-2.5 w-2.5 text-teal-400" />
+   838→                                {shipment.driverPhone}
+   839→                              </p>
+   840→                            </div>
+   841→                          )}
+   842→                          {shipment.vehicleNumber && (
+   843→                            <div>
+   844→                              <p className="text-muted-foreground text-[10px]">Vehicle Number</p>
+   845→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   846→                                <Truck className="h-3 w-3 text-teal-400" />
+   847→                                {shipment.vehicleNumber}
+   848→                              </p>
+   849→                            </div>
+   850→                          )}
+   851→                          {(shipment.vehicleType && !shipment.vehicleNumber) && (
+   852→                            <div>
+   853→                              <p className="text-muted-foreground text-[10px]">Vehicle Type</p>
+   854→                              <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   855→                                <Truck className="h-3 w-3 text-teal-400" />
+   856→                                {shipment.vehicleType}
+   857→                              </p>
+   858→                            </div>
+   859→                          )}
+   860→                          <div>
+   861→                            <p className="text-muted-foreground text-[10px]">Pickup</p>
+   862→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   863→                              <MapPin className="h-3 w-3 text-emerald-400" />
+   864→                              {shipment.exactPickupAddress || shipment.origin}
+   865→                            </p>
+   866→                          </div>
+   867→                          <div>
+   868→                            <p className="text-muted-foreground text-[10px]">Drop-off</p>
+   869→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+   870→                              <MapPin className="h-3 w-3 text-red-400" />
+   871→                              {shipment.exactDropAddress || shipment.destination}
+   872→                            </p>
+   873→                          </div>
+   874→                        </div>
+   875→                      )}
+   876→
+   877→                      {/* Transporter Action Buttons */}
+   878→                      <div className="mt-3 pt-3 border-t border-glass-border flex items-center gap-2 flex-wrap">
+   879→                        {/* Track Shipment Button */}
+   880→                        {isShippedOrInTransit && (
+   881→                          <Button
+   882→                            size="sm"
+   883→                            variant="outline"
+   884→                            className="border-cyan-500/30 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1.5 text-xs"
+   885→                            onClick={() => handleTrackShipment(shipment)}
+   886→                          >
+   887→                            <Crosshair className="h-3.5 w-3.5" /> Track Shipment
+   888→                          </Button>
+   889→                        )}
+   890→
+   891→                        {/* Chat with Transporter - only for internal transporters */}
+   892→                        {!isExternalTransport && shipment.transporterId && (
+   893→                          <Button
+   894→                            size="sm"
+   895→                            variant="outline"
+   896→                            className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1.5 text-xs"
+   897→                            onClick={() => {
+   898→                              setActiveChatUser(shipment.transporterId)
+   899→                              setChatOpen(true)
+   900→                            }}
+   901→                          >
+   902→                            <MessageSquare className="h-3.5 w-3.5" /> Chat with Transporter
+   903→                          </Button>
+   904→                        )}
+   905→                      </div>
+   906→                    </div>
+   907→                  )}
+   908→
+   909→                  {/* Pay Remaining Banner */}
+   910→                  {canPayRemaining && (
+   911→                    <motion.div
+   912→                      initial={{ opacity: 0, scale: 0.98 }}
+   913→                      animate={{ opacity: 1, scale: 1 }}
+   914→                      className="glass-card p-4 border border-orange-500/30 bg-orange-500/[0.05]"
+   915→                    >
+   916→                      <div className="flex items-center justify-between gap-3">
+   917→                        <div className="flex items-center gap-3">
+   918→                          <div className="h-10 w-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
+   919→                            <Wallet className="h-5 w-5 text-orange-400" />
+   920→                          </div>
+   921→                          <div>
+   922→                            <p className="text-sm font-semibold text-foreground">Payment Due</p>
+   923→                            <p className="text-xs text-muted-foreground">Remaining payment of ₹{remainingAmount.toLocaleString()} is pending for this order</p>
+   924→                          </div>
+   925→                        </div>
+   926→                        <Button
+   927→                          className="bg-orange-600 hover:bg-orange-500 gap-2 text-sm shadow-lg shadow-orange-600/20"
+   928→                          disabled={payingRemaining === order.id}
+   929→                          onClick={() => handlePayRemaining(order.id, remainingAmount)}
+   930→                        >
+   931→                          {payingRemaining === order.id ? (
+   932→                            <>
+   933→                              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+   934→                              Processing...
+   935→                            </>
+   936→                          ) : (
+   937→                            <>
+   938→                              <IndianRupee className="h-4 w-4" /> Pay Remaining ₹{remainingAmount.toLocaleString()}
+   939→                            </>
+   940→                          )}
+   941→                        </Button>
+   942→                      </div>
+   943→                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+   944→                        <ShieldCheck className="h-3 w-3 text-emerald-400" />
+   945→                        <span>Secured by Razorpay</span>
+   946→                      </div>
+   947→                    </motion.div>
+   948→                  )}
+   949→
+   950→                  {/* Payment Breakdown Toggle */}
+   951→                  <div className="flex items-center gap-2">
+   952→                    <Button
+   953→                      size="sm"
+   954→                      variant="ghost"
+   955→                      className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1.5 text-xs h-7 px-2"
+   956→                      onClick={() => togglePaymentBreakdown(order.id)}
+   957→                    >
+   958→                      <CreditCard className="h-3.5 w-3.5" />
+   959→                      {isExpanded ? 'Hide' : 'Show'} Payment Breakdown
+   960→                    </Button>
+   961→                  </div>
+   962→
+   963→                  {/* Payment Breakdown */}
+   964→                  {isExpanded && (
+   965→                    <PaymentBreakdown order={order} />
+   966→                  )}
+   967→
+   968→                  {/* Producer-handled delivery info banner (replaces Create Shipment) */}
+   969→                  {order.status === 'confirmed' && !hasShipment && (order.product?.deliveryHandledByProducer || order.deliveryType === 'producer' || order.deliveryType === 'local') && (
+   970→                    <div className="glass-card p-4 border border-emerald-500/25 bg-emerald-500/[0.05]">
+   971→                      <div className="flex items-start gap-3">
+   972→                        <div className="h-9 w-9 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+   973→                          <Truck className="h-4 w-4 text-emerald-400" />
+   974→                        </div>
+   975→                        <div className="flex-1 min-w-0">
+   976→                          <p className="text-sm font-semibold text-foreground">
+   977→                            {order.deliveryType === 'local' ? "🚚 Producer's Local Transporter is handling delivery" : '🚚 This order is being delivered by the producer'}
+   978→                          </p>
+   979→                          <p className="text-xs text-muted-foreground mt-0.5">Shipment creation is not required.</p>
+   980→                        </div>
+   981→                      </div>
+   982→                    </div>
+   983→                  )}
+   984→
+   985→                  {/* Local Transporter details (when deliveryType is 'local') */}
+   986→                  {order.deliveryType === 'local' && (order.localTransporterName || order.localTransporterPhone || order.localTransporterVehicle) && (
+   987→                    <div className="glass-card p-4 border border-teal-500/20">
+   988→                      <div className="flex items-center gap-2 mb-3">
+   989→                        <Truck className="h-4 w-4 text-teal-400" />
+   990→                        <h5 className="text-sm font-semibold text-foreground">Local Transporter Details</h5>
+   991→                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 border text-[10px] gap-1">
+   992→                          <ExternalLink className="h-2.5 w-2.5" /> Producer-managed
+   993→                        </Badge>
+   994→                      </div>
+   995→                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+   996→                        {order.localTransporterName && (
+   997→                          <div>
+   998→                            <p className="text-muted-foreground text-[10px]">Transporter Name</p>
+   999→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1000→                              <User className="h-3 w-3 text-teal-400" />
+  1001→                              {order.localTransporterName}
+  1002→                            </p>
+  1003→                          </div>
+  1004→                        )}
+  1005→                        {order.localTransporterPhone && (
+  1006→                          <div>
+  1007→                            <p className="text-muted-foreground text-[10px]">Phone</p>
+  1008→                            <a
+  1009→                              href={`tel:${order.localTransporterPhone}`}
+  1010→                              className="text-foreground font-medium text-xs flex items-center gap-1 hover:text-teal-400 transition-colors"
+  1011→                            >
+  1012→                              <Phone className="h-2.5 w-2.5 text-teal-400" />
+  1013→                              {order.localTransporterPhone}
+  1014→                            </a>
+  1015→                          </div>
+  1016→                        )}
+  1017→                        {order.localTransporterVehicle && (
+  1018→                          <div>
+  1019→                            <p className="text-muted-foreground text-[10px]">Vehicle</p>
+  1020→                            <p className="text-foreground font-medium text-xs flex items-center gap-1">
+  1021→                              <Truck className="h-3 w-3 text-teal-400" />
+  1022→                              {order.localTransporterVehicle}
+  1023→                            </p>
+  1024→                          </div>
+  1025→                        )}
+  1026→                      </div>
+  1027→                    </div>
+  1028→                  )}
+  1029→
+  1030→                  {/* Actions */}
+  1031→                  <div className="flex items-center gap-2 flex-wrap">
+  1032→                    {order.status === 'confirmed' && !hasShipment && !order.product?.deliveryHandledByProducer && (!order.deliveryType || order.deliveryType === 'platform') && (
+  1033→                      <Button
+  1034→                        size="sm"
+  1035→                        variant="outline"
+  1036→                        className="border-teal-500/30 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 gap-1 text-xs"
+  1037→                        onClick={() => {
+  1038→                          // Auto-fill origin from seller's address
+  1039→                          const sellerAddress = order.seller?.address
+  1040→                            ? order.seller.address
+  1041→                            : [order.seller?.city, order.seller?.state].filter(Boolean).join(', ')
+  1042→
+  1043→                          // Auto-fill destination from order delivery address or buyer profile
+  1044→                          const buyerAddress = order.deliveryAddress
+  1045→                            ? [order.deliveryAddress, order.deliveryCity, order.deliveryState, order.deliveryPincode].filter(Boolean).join(', ')
+  1046→                            : [user?.city, user?.state].filter(Boolean).join(', ')
+  1047→
+  1048→                          setShipmentForm({
+  1049→                            open: true,
+  1050→                            orderId: order.id,
+  1051→                            origin: sellerAddress,
+  1052→                            destination: buyerAddress,
+  1053→                            budgetMin: '',
+  1054→                            budgetMax: ''
+  1055→                          })
+  1056→                        }}
+  1057→                      >
+  1058→                        <Truck className="h-3 w-3" /> Create Shipment
+  1059→                      </Button>
+  1060→                    )}
+  1061→
+  1062→                    {hasShipment && ['pending', 'bidding'].includes(shipment.status) && (
+  1063→                      <Button
+  1064→                        size="sm"
+  1065→                        variant="outline"
+  1066→                        className="border-amber-500/30 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 gap-1 text-xs"
+  1067→                        onClick={() => handleViewBids(shipment.id)}
+  1068→                      >
+  1069→                        <Gavel className="h-3 w-3" /> View Bids
+  1070→                        {shipment.transportBids?.length > 0 && (
+  1071→                          <span className="ml-0.5 px-1 py-0 rounded-full bg-amber-500/20 text-[9px]">
+  1072→                            {shipment.transportBids.length}
+  1073→                          </span>
+  1074→                        )}
+  1075→                      </Button>
+  1076→                    )}
+  1077→
+  1078→                    {hasShipment && shipment.status === 'assigned' && (
+  1079→                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 border text-xs">
+  1080→                        <Truck className="h-3 w-3 mr-1" /> Transporter Assigned
+  1081→                      </Badge>
+  1082→                    )}
+  1083→
+  1084→                    {hasShipment && shipment.status === 'delivered' && (
+  1085→                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border text-xs">
+  1086→                        <CheckCircle className="h-3 w-3 mr-1" /> Delivered
+  1087→                      </Badge>
+  1088→                    )}
+  1089→
+  1090→                    {/* Chat with Producer - always available for orders with a seller */}
+  1091→                    {order.seller?.id && (
+  1092→                      <Button
+  1093→                        size="sm"
+  1094→                        variant="outline"
+  1095→                        className="border-emerald-500/30 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1 text-xs ml-auto"
+  1096→                        onClick={() => {
+  1097→                          setActiveChatUser(order.seller.id)
+  1098→                          setChatOpen(true)
+  1099→                        }}
+  1100→                      >
+  1101→                        <MessageSquare className="h-3 w-3" /> Chat with Producer
+  1102→                      </Button>
+  1103→                    )}
+  1104→                  </div>
+  1105→                </motion.div>
+  1106→              )
+  1107→            })}
+  1108→          </div>
+  1109→        )}
+  1110→
+  1111→        {/* Create Shipment Dialog */}
+  1112→        <Dialog open={shipmentForm.open} onOpenChange={(open) => setShipmentForm(prev => ({ ...prev, open }))}>
+  1113→          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl sm:max-w-md">
+  1114→            <DialogHeader>
+  1115→              <DialogTitle className="text-foreground flex items-center gap-2">
+  1116→                <Truck className="h-5 w-5 text-teal-400" />
+  1117→                Create Shipment
+  1118→              </DialogTitle>
+  1119→              <DialogDescription className="text-muted-foreground">Set up transport for this order</DialogDescription>
+  1120→            </DialogHeader>
+  1121→            <div className="grid gap-3 py-3">
+  1122→              {/* Pickup - read-only display */}
+  1123→              <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+  1124→                <MapPin className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+  1125→                <div className="min-w-0">
+  1126→                  <p className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">Pickup from Producer</p>
+  1127→                  <p className="text-sm text-foreground mt-0.5">{shipmentForm.origin || 'Address not available'}</p>
+  1128→                </div>
+  1129→              </div>
+  1130→
+  1131→              {/* Destination - read-only display */}
+  1132→              <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+  1133→                <MapPin className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+  1134→                <div className="min-w-0">
+  1135→                  <p className="text-[10px] text-amber-400 font-medium uppercase tracking-wider">Deliver to Your Address</p>
+  1136→                  <p className="text-sm text-foreground mt-0.5">{shipmentForm.destination || 'Address not available'}</p>
+  1137→                </div>
+  1138→              </div>
+  1139→
+  1140→              {/* Budget Range - only editable fields */}
+  1141→              <div className="p-3 rounded-lg bg-teal-500/10 border border-teal-500/20">
+  1142→                <div className="flex items-center gap-2 mb-2">
+  1143→                  <IndianRupee className="h-4 w-4 text-teal-400" />
+  1144→                  <span className="text-sm font-medium text-foreground">Transport Budget Range</span>
+  1145→                </div>
+  1146→                <div className="grid grid-cols-2 gap-3">
+  1147→                  <div className="grid gap-1">
+  1148→                    <Label className="text-foreground text-xs">Min (₹)</Label>
+  1149→                    <Input type="number" className="glass-input text-foreground text-sm h-9" placeholder="e.g. 5000" value={shipmentForm.budgetMin} onChange={e => setShipmentForm(p => ({ ...p, budgetMin: e.target.value }))} />
+  1150→                  </div>
+  1151→                  <div className="grid gap-1">
+  1152→                    <Label className="text-foreground text-xs">Max (₹)</Label>
+  1153→                    <Input type="number" className="glass-input text-foreground text-sm h-9" placeholder="e.g. 15000" value={shipmentForm.budgetMax} onChange={e => setShipmentForm(p => ({ ...p, budgetMax: e.target.value }))} />
+  1154→                  </div>
+  1155→                </div>
+  1156→              </div>
+  1157→            </div>
+  1158→            <DialogFooter>
+  1159→              <Button variant="outline" className="border-glass-border" onClick={() => setShipmentForm(prev => ({ ...prev, open: false }))}>Cancel</Button>
+  1160→              <Button className="bg-teal-600 hover:bg-teal-500" onClick={handleCreateShipment}>Create Shipment</Button>
+  1161→            </DialogFooter>
+  1162→          </DialogContent>
+  1163→        </Dialog>
+  1164→
+  1165→        {/* View Bids Dialog */}
+  1166→        <Dialog open={bidsDialogOpen} onOpenChange={setBidsDialogOpen}>
+  1167→          <DialogContent className="bg-[oklch(0.15_0.012_260/0.95)] border-white/20 backdrop-blur-xl max-w-lg max-h-[85vh] overflow-y-auto">
+  1168→            <DialogHeader>
+  1169→              <DialogTitle className="text-foreground flex items-center gap-2">
+  1170→                <Gavel className="h-5 w-5 text-amber-400" />
+  1171→                Transport Bids
+  1172→              </DialogTitle>
+  1173→              <DialogDescription className="text-muted-foreground">
+  1174→                Review and accept bids from transporters
+  1175→              </DialogDescription>
+  1176→            </DialogHeader>
+  1177→            <div className="py-4">
+  1178→              {bidsLoading ? (
+  1179→                <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+  1180→              ) : bidsForShipment.length === 0 ? (
+  1181→                <div className="glass-card p-8 text-center">
+  1182→                  <Gavel className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+  1183→                  <p className="text-muted-foreground text-sm">No bids yet. Transporters will bid on your shipment soon.</p>
+  1184→                </div>
+  1185→              ) : (
+  1186→                <div className="space-y-3">
+  1187→                  {bidsForShipment.map((bid: any) => (
+  1188→                    <motion.div
+  1189→                      key={bid.id}
+  1190→                      initial={{ opacity: 0, y: 10 }}
+  1191→                      animate={{ opacity: 1, y: 0 }}
+  1192→                      className="glass-card p-4 space-y-3"
+  1193→                    >
+  1194→                      <div className="flex items-start justify-between">
+  1195→                        <div>
+  1196→                          <p className="text-sm font-semibold text-foreground">
+  1197→                            {bid.transporter?.companyName || bid.transporter?.name || 'Unknown Transporter'}
+  1198→                          </p>
+  1199→                          {bid.transporter?.verificationStatus === 'verified' && (
+  1200→                            <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25 border text-[9px] mt-1">
+  1201→                              <BadgeCheck className="h-2.5 w-2.5 mr-0.5" /> Verified
+  1202→                            </Badge>
+  1203→                          )}
+  1204→                        </div>
+  1205→                        <Badge className={`${bidStatusColors[bid.status] || ''} border text-xs`}>
+  1206→                          {bid.status}
+  1207→                        </Badge>
+  1208→                      </div>
+  1209→                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+  1210→                        <div>
+  1211→                          <p className="text-muted-foreground text-[10px]">Bid Amount</p>
+  1212→                          <p className="text-amber-400 font-bold">₹{bid.bidAmount?.toLocaleString()}</p>
+  1213→                        </div>
+  1214→                        <div>
+  1215→                          <p className="text-muted-foreground text-[10px]">Est. Days</p>
+  1216→                          <p className="text-foreground">{bid.estimatedDays || '—'} days</p>
+  1217→                        </div>
+  1218→                        <div>
+  1219→                          <p className="text-muted-foreground text-[10px]">Vehicle</p>
+  1220→                          <p className="text-foreground capitalize">{bid.vehicleType || '—'}</p>
+  1221→                        </div>
+  1222→                        <div>
+  1223→                          <p className="text-muted-foreground text-[10px]">Bid Date</p>
+  1224→                          <p className="text-foreground text-xs">{new Date(bid.createdAt).toLocaleDateString()}</p>
+  1225→                        </div>
+  1226→                      </div>
+  1227→                      {bid.comments && (
+  1228→                        <p className="text-xs text-muted-foreground italic bg-white/[0.02] p-2 rounded-lg">
+  1229→                          &ldquo;{bid.comments}&rdquo;
+  1230→                        </p>
+  1231→                      )}
+  1232→                      {bid.status === 'pending' && (
+  1233→                        <Button
+  1234→                          size="sm"
+  1235→                          className="bg-emerald-600 hover:bg-emerald-500 gap-1.5 text-xs w-full"
+  1236→                          disabled={acceptingBidId !== null}
+  1237→                          onClick={() => handleAcceptBid(bid.id)}
+  1238→                        >
+  1239→                          {acceptingBidId === bid.id ? (
+  1240→                            <>
+  1241→                              <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1242→                              Accepting...
+  1243→                            </>
+  1244→                          ) : (
+  1245→                            <>
+  1246→                              <CheckCircle className="h-3.5 w-3.5" /> Accept Bid
+  1247→                            </>
+  1248→                          )}
+  1249→                        </Button>
+  1250→                      )}
+  1251→                    </motion.div>
+  1252→                  ))}
+  1253→                </div>
+  1254→              )}
+  1255→            </div>
+  1256→          </DialogContent>
+  1257→        </Dialog>
+  1258→
+  1259→        {/* Shipment Tracker Dialog */}
+  1260→        <ShipmentTracker
+  1261→          shipment={trackingShipment}
+  1262→          open={trackerOpen}
+  1263→          onClose={() => setTrackerOpen(false)}
+  1264→        />
+  1265→      </div>
+  1266→    )
+  1267→  }
+  1268→
+  1269→  if (tab === 'producers') {
+  1270→    // Filter producers
+  1271→    const filteredProducers = producers.filter((p: any) => {
+  1272→      const matchesSearch = !producerSearch ||
+  1273→        (p.name && p.name.toLowerCase().includes(producerSearch.toLowerCase())) ||
+  1274→        (p.companyName && p.companyName.toLowerCase().includes(producerSearch.toLowerCase())) ||
+  1275→        (p.farmName && p.farmName.toLowerCase().includes(producerSearch.toLowerCase()))
+  1276→      const matchesState = !producerStateFilter || producerStateFilter === 'all' || p.state === producerStateFilter
+  1277→      const matchesCert = !producerCertFilter || producerCertFilter === 'all' ||
+  1278→        (p.certifications && p.certifications.toLowerCase().includes(producerCertFilter.toLowerCase()))
+  1279→      const matchesOrganic = !organicOnly ||
+  1280→        (p.certifications && p.certifications.toLowerCase().includes('organic'))
+  1281→      return matchesSearch && matchesState && matchesCert && matchesOrganic
+  1282→    })
+  1283→
+  1284→    // Sort producers
+  1285→    const sortedProducers = [...filteredProducers].sort((a: any, b: any) => {
+  1286→      if (producerSort === 'rating') return (b.avgRating || 0) - (a.avgRating || 0)
+  1287→      if (producerSort === 'experience') return (b.yearsExperience || 0) - (a.yearsExperience || 0)
+  1288→      if (producerSort === 'transactions') return (b.totalTransactions || 0) - (a.totalTransactions || 0)
+  1289→      if (producerSort === 'name') return (a.name || '').localeCompare(b.name || '')
+  1290→      return 0
+  1291→    })
+  1292→
+  1293→    const producerStates = [...new Set(producers.map((p: any) => p.state).filter(Boolean))].sort()
+  1294→    const allCerts = [...new Set(producers.flatMap((p: any) => p.certifications ? p.certifications.split(',').map((c: string) => c.trim()) : []))].sort()
+  1295→
+  1296→    // Star rating component
+  1297→    const StarRating = ({ rating, count }: { rating: number; count?: number }) => (
+  1298→      <div className="flex items-center gap-1.5">
+  1299→        <div className="flex items-center gap-0.5">
+  1300→          {[1, 2, 3, 4, 5].map((star) => (
+  1301→            <Star
+  1302→              key={star}
+  1303→              className={`h-3.5 w-3.5 transition-colors ${
+  1304→                star <= Math.round(rating)
+  1305→                  ? 'text-amber-400 fill-amber-400'
+  1306→                  : star - 0.5 <= rating
+  1307→                  ? 'text-amber-400/50 fill-amber-400/50'
+  1308→                  : 'text-white/10'
+  1309→              }`}
+  1310→            />
+  1311→          ))}
+  1312→        </div>
+  1313→        <span className="text-xs font-semibold text-amber-400">{rating.toFixed(1)}</span>
+  1314→        {count !== undefined && count > 0 && (
+  1315→          <span className="text-[10px] text-muted-foreground">({count})</span>
+  1316→        )}
+  1317→      </div>
+  1318→    )
+  1319→
+  1320→    return (
+  1321→      <div className="space-y-6">
+  1322→        {/* Header */}
+  1323→        <div className="flex items-center justify-between">
+  1324→          <div>
+  1325→            <h3 className="text-xl font-semibold text-foreground">Producers Directory</h3>
+  1326→            <p className="text-sm text-muted-foreground mt-0.5">
+  1327→              Discover and connect with verified agricultural producers across India
+  1328→            </p>
+  1329→          </div>
+  1330→          <motion.div
+  1331→            initial={{ scale: 0.9 }}
+  1332→            animate={{ scale: 1 }}
+  1333→            className="hidden sm:flex items-center gap-2 glass-card px-3 py-1.5"
+  1334→          >
+  1335→            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+  1336→            <span className="text-sm font-medium text-emerald-400">{filteredProducers.length}</span>
+  1337→            <span className="text-xs text-muted-foreground">producers</span>
+  1338→          </motion.div>
+  1339→        </div>
+  1340→
+  1341→        {/* Search & Filters Bar */}
+  1342→        <div className="glass-card p-4 space-y-4">
+  1343→          {/* Search Row */}
+  1344→          <div className="flex flex-col sm:flex-row gap-3">
+  1345→            <div className="relative flex-1">
+  1346→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  1347→              <Input
+  1348→                className="glass-input text-foreground pl-9 h-10"
+  1349→                placeholder="Search by name, company, or farm..."
+  1350→                value={producerSearch}
+  1351→                onChange={(e) => setProducerSearch(e.target.value)}
+  1352→              />
+  1353→            </div>
+  1354→            <Select value={producerSort} onValueChange={setProducerSort}>
+  1355→              <SelectTrigger className="glass-input text-foreground w-full sm:w-44 h-10">
+  1356→                <SelectValue placeholder="Sort by" />
+  1357→              </SelectTrigger>
+  1358→              <SelectContent>
+  1359→                <SelectItem value="rating">⭐ Top Rated</SelectItem>
+  1360→                <SelectItem value="experience">🌾 Most Experienced</SelectItem>
+  1361→                <SelectItem value="transactions">📊 Most Transactions</SelectItem>
+  1362→                <SelectItem value="name">🔤 By Name</SelectItem>
+  1363→              </SelectContent>
+  1364→            </Select>
+  1365→          </div>
+  1366→
+  1367→          {/* Filter Row */}
+  1368→          <div className="flex flex-wrap items-center gap-2">
+  1369→            <Select value={producerStateFilter || 'all'} onValueChange={setProducerStateFilter}>
+  1370→              <SelectTrigger className="glass-input text-foreground w-36 h-9 text-xs">
+  1371→                <MapPin className="h-3.5 w-3.5 mr-1 text-emerald-400 shrink-0" />
+  1372→                <SelectValue placeholder="State" />
+  1373→              </SelectTrigger>
+  1374→              <SelectContent>
+  1375→                <SelectItem value="all">All States</SelectItem>
+  1376→                {producerStates.map((s: string) => (
+  1377→                  <SelectItem key={s} value={s}>{s}</SelectItem>
+  1378→                ))}
+  1379→              </SelectContent>
+  1380→            </Select>
+  1381→            <Select value={producerCertFilter || 'all'} onValueChange={setProducerCertFilter}>
+  1382→              <SelectTrigger className="glass-input text-foreground w-36 h-9 text-xs">
+  1383→                <Shield className="h-3.5 w-3.5 mr-1 text-amber-400 shrink-0" />
+  1384→                <SelectValue placeholder="Certification" />
+  1385→              </SelectTrigger>
+  1386→              <SelectContent>
+  1387→                <SelectItem value="all">All Certs</SelectItem>
+  1388→                {allCerts.map((c: string) => (
+  1389→                  <SelectItem key={c} value={c}>{c}</SelectItem>
+  1390→                ))}
+  1391→              </SelectContent>
+  1392→            </Select>
+  1393→            <Button
+  1394→              size="sm"
+  1395→              variant={organicOnly ? 'default' : 'outline'}
+  1396→              className={`h-9 gap-1.5 text-xs transition-all ${
+  1397→                organicOnly
+  1398→                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+  1399→                  : 'border-glass-border text-muted-foreground hover:text-emerald-400 hover:border-emerald-500/30'
+  1400→              }`}
+  1401→              onClick={() => setOrganicOnly(!organicOnly)}
+  1402→            >
+  1403→              <Leaf className="h-3.5 w-3.5" /> Organic Only
+  1404→            </Button>
+  1405→            {(producerSearch || (producerStateFilter && producerStateFilter !== 'all') || (producerCertFilter && producerCertFilter !== 'all') || organicOnly) && (
+  1406→              <Button
+  1407→                size="sm"
+  1408→                variant="ghost"
+  1409→                className="h-9 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+  1410→                onClick={() => { setProducerSearch(''); setProducerStateFilter(''); setProducerCertFilter(''); setOrganicOnly(false); setProducerSort('rating') }}
+  1411→              >
+  1412→                ✕ Clear All
+  1413→              </Button>
+  1414→            )}
+  1415→            <div className="ml-auto hidden md:flex items-center gap-1.5 text-xs text-muted-foreground">
+  1416→              <Users className="h-3.5 w-3.5" />
+  1417→              Showing {filteredProducers.length} of {producers.length}
+  1418→            </div>
+  1419→          </div>
+  1420→        </div>
+  1421→
+  1422→        {/* Producers Card Grid */}
+  1423→        {producersLoading ? (
+  1424→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  1425→            {[1, 2, 3, 4, 5, 6].map(i => (
+  1426→              <div key={i} className="glass-card overflow-hidden">
+  1427→                <Skeleton className="h-20 w-full rounded-none" />
+  1428→                <div className="p-5 pt-0 -mt-6">
+  1429→                  <div className="flex items-end gap-3 mb-4">
+  1430→                    <Skeleton className="h-14 w-14 rounded-full shrink-0" />
+  1431→                    <div className="flex-1 space-y-2 pb-1">
+  1432→                      <Skeleton className="h-4 w-3/4" />
+  1433→                      <Skeleton className="h-3 w-1/2" />
+  1434→                    </div>
+  1435→                  </div>
+  1436→                  <div className="space-y-3">
+  1437→                    <Skeleton className="h-3 w-2/3" />
+  1438→                    <Skeleton className="h-8 w-full" />
+  1439→                    <div className="flex gap-2">
+  1440→                      <Skeleton className="h-6 w-16" />
+  1441→                      <Skeleton className="h-6 w-16" />
+  1442→                    </div>
+  1443→                    <div className="flex gap-2">
+  1444→                      <Skeleton className="h-8 flex-1" />
+  1445→                      <Skeleton className="h-8 flex-1" />
+  1446→                    </div>
+  1447→                  </div>
+  1448→                </div>
+  1449→              </div>
+  1450→            ))}
+  1451→          </div>
+  1452→        ) : sortedProducers.length === 0 ? (
+  1453→          <motion.div
+  1454→            initial={{ opacity: 0, y: 20 }}
+  1455→            animate={{ opacity: 1, y: 0 }}
+  1456→            className="glass-card p-16 text-center"
+  1457→          >
+  1458→            <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+  1459→              <Sprout className="h-8 w-8 text-emerald-400/60" />
+  1460→            </div>
+  1461→            <h4 className="text-lg font-semibold text-foreground mb-1">No Producers Found</h4>
+  1462→            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+  1463→              Try adjusting your search or filter criteria to discover more producers
+  1464→            </p>
+  1465→            <Button
+  1466→              variant="outline"
+  1467→              size="sm"
+  1468→              className="mt-4 border-glass-border gap-1.5"
+  1469→              onClick={() => { setProducerSearch(''); setProducerStateFilter(''); setProducerCertFilter(''); setOrganicOnly(false) }}
+  1470→            >
+  1471→              Clear Filters
+  1472→            </Button>
+  1473→          </motion.div>
+  1474→        ) : (
+  1475→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  1476→            {sortedProducers.map((producer: any, i: number) => {
+  1477→              const isVerified = producer.verificationStatus === 'verified'
+  1478→              const isPending = producer.verificationStatus === 'pending'
+  1479→              const pCerts = producer.certifications
+  1480→                ? producer.certifications.split(',').map((c: string) => c.trim()).filter(Boolean)
+  1481→                : []
+  1482→              const productCount = producer._count?.products || 0
+  1483→              const displayName = producer.companyName || producer.farmName || producer.name || 'Unknown'
+  1484→              const displayInitial = (producer.name || 'P').charAt(0).toUpperCase()
+  1485→              const locationText = [producer.city, producer.state].filter(Boolean).join(', ') || 'India'
+  1486→
+  1487→              return (
+  1488→                <motion.div
+  1489→                  key={producer.id}
+  1490→                  initial={{ opacity: 0, y: 20, scale: 0.97 }}
+  1491→                  animate={{ opacity: 1, y: 0, scale: 1 }}
+  1492→                  transition={{ delay: i * 0.05, duration: 0.3 }}
+  1493→                  whileHover={{ y: -6, transition: { duration: 0.2 } }}
+  1494→                  className="glass-card overflow-hidden hover:border-emerald-500/30 transition-all duration-300 cursor-pointer group"
+  1495→                  onClick={() => { setSelectedProducerId(producer.id); setView('producer-profile') }}
+  1496→                >
+  1497→                  {/* Banner with gradient */}
+  1498→                  <div className="h-20 relative overflow-hidden">
+  1499→                    {producer.bannerUrl ? (
+  1500→                      <img src={producer.bannerUrl} alt="" className="w-full h-full object-cover" />
+  1501→                    ) : (
+  1502→                      <div className="w-full h-full bg-gradient-to-br from-emerald-900/60 via-emerald-800/30 to-amber-900/20" />
+  1503→                    )}
+  1504→                    {/* Overlay gradient */}
+  1505→                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+  1506→                    {/* Verification badge on banner */}
+  1507→                    <div className="absolute top-3 right-3">
+  1508→                      {isVerified ? (
+  1509→                        <motion.div
+  1510→                          initial={{ scale: 0 }}
+  1511→                          animate={{ scale: 1 }}
+  1512→                          className="flex items-center gap-1 bg-emerald-500/20 backdrop-blur-sm border border-emerald-500/30 rounded-full px-2 py-0.5"
+  1513→                        >
+  1514→                          <BadgeCheck className="w-3.5 h-3.5 text-emerald-400" />
+  1515→                          <span className="text-[10px] font-medium text-emerald-400">Verified</span>
+  1516→                        </motion.div>
+  1517→                      ) : isPending ? (
+  1518→                        <div className="flex items-center gap-1 bg-yellow-500/20 backdrop-blur-sm border border-yellow-500/30 rounded-full px-2 py-0.5">
+  1519→                          <Clock className="w-3 h-3 text-yellow-400" />
+  1520→                          <span className="text-[10px] font-medium text-yellow-400">Pending</span>
+  1521→                        </div>
+  1522→                      ) : null}
+  1523→                    </div>
+  1524→                  </div>
+  1525→
+  1526→                  {/* Content area */}
+  1527→                  <div className="p-5 pt-0 -mt-6 relative">
+  1528→                    {/* Avatar */}
+  1529→                    <div className="flex items-end gap-3 mb-4">
+  1530→                      <Avatar className="h-14 w-14 border-[3px] border-background shadow-xl ring-2 ring-emerald-500/20 shrink-0">
+  1531→                        {producer.avatarUrl ? (
+  1532→                          <AvatarImage src={producer.avatarUrl} alt={producer.name || ''} />
+  1533→                        ) : null}
+  1534→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500/25 to-emerald-600/15 text-emerald-400 font-bold text-lg">
+  1535→                          {displayInitial}
+  1536→                        </AvatarFallback>
+  1537→                      </Avatar>
+  1538→                      <div className="flex-1 min-w-0 pb-1">
+  1539→                        <h4 className="font-semibold text-foreground text-sm truncate leading-tight">
+  1540→                          {producer.name}
+  1541→                        </h4>
+  1542→                        <p className="text-xs text-emerald-400/80 truncate font-medium mt-0.5">
+  1543→                          {displayName !== producer.name ? displayName : ''}
+  1544→                        </p>
+  1545→                      </div>
+  1546→                    </div>
+  1547→
+  1548→                    {/* Location */}
+  1549→                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+  1550→                      <MapPin className="w-3.5 h-3.5 text-emerald-400/70 shrink-0" />
+  1551→                      <span>{locationText}</span>
+  1552→                    </div>
+  1553→
+  1554→                    {/* Star Rating */}
+  1555→                    {(producer.avgRating > 0 || producer.totalReviews > 0) ? (
+  1556→                      <div className="mb-3">
+  1557→                        <StarRating rating={producer.avgRating || 0} count={producer.totalReviews} />
+  1558→                      </div>
+  1559→                    ) : (
+  1560→                      <div className="mb-3">
+  1561→                        <span className="text-[10px] text-muted-foreground/60 italic">No reviews yet</span>
+  1562→                      </div>
+  1563→                    )}
+  1564→
+  1565→                    {/* Key Stats */}
+  1566→                    <div className="grid grid-cols-3 gap-2 mb-3">
+  1567→                      <div className="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+  1568→                        <p className="text-sm font-bold text-foreground">{producer.yearsExperience || 0}</p>
+  1569→                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Yrs Exp</p>
+  1570→                      </div>
+  1571→                      <div className="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+  1572→                        <p className="text-sm font-bold text-foreground">{producer.totalTransactions || 0}</p>
+  1573→                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Deals</p>
+  1574→                      </div>
+  1575→                      <div className="bg-white/[0.03] rounded-lg p-2 text-center border border-white/[0.04]">
+  1576→                        <p className="text-sm font-bold text-foreground">{productCount}</p>
+  1577→                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Products</p>
+  1578→                      </div>
+  1579→                    </div>
+  1580→
+  1581→                    {/* Certifications */}
+  1582→                    {pCerts.length > 0 && (
+  1583→                      <div className="flex flex-wrap gap-1 mb-4">
+  1584→                        {pCerts.slice(0, 3).map((cert: string, ci: number) => (
+  1585→                          <Badge
+  1586→                            key={ci}
+  1587→                            className={`border text-[9px] px-2 py-0 font-medium ${
+  1588→                              cert.toLowerCase().includes('organic')
+  1589→                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+  1590→                                : 'bg-amber-500/10 text-amber-400/80 border-amber-500/20'
+  1591→                            }`}
+  1592→                          >
+  1593→                            {cert.toLowerCase().includes('organic') && <Leaf className="w-2.5 h-2.5 mr-0.5" />}
+  1594→                            {cert}
+  1595→                          </Badge>
+  1596→                        ))}
+  1597→                        {pCerts.length > 3 && (
+  1598→                          <Badge className="bg-white/5 text-muted-foreground border-white/10 border text-[9px] px-2 py-0">
+  1599→                            +{pCerts.length - 3}
+  1600→                          </Badge>
+  1601→                        )}
+  1602→                      </div>
+  1603→                    )}
+  1604→
+  1605→                    {/* Action Buttons */}
+  1606→                    <div className="flex gap-2 pt-2 border-t border-white/[0.06]">
+  1607→                      <Button
+  1608→                        size="sm"
+  1609→                        variant="outline"
+  1610→                        className="flex-1 h-9 text-xs border-white/10 hover:bg-white/[0.04] hover:border-emerald-500/20 hover:text-emerald-400 transition-colors gap-1.5"
+  1611→                        onClick={(e) => {
+  1612→                          e.stopPropagation()
+  1613→                          setActiveChatUser(producer.id)
+  1614→                          setChatOpen(true)
+  1615→                        }}
+  1616→                      >
+  1617→                        <MessageSquare className="w-3.5 h-3.5" /> Message
+  1618→                      </Button>
+  1619→                      <Button
+  1620→                        size="sm"
+  1621→                        className="flex-1 h-9 text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all gap-1.5"
+  1622→                        onClick={(e) => {
+  1623→                          e.stopPropagation()
+  1624→                          setSelectedProducerId(producer.id)
+  1625→                          setView('producer-profile')
+  1626→                        }}
+  1627→                      >
+  1628→                        <Eye className="w-3.5 h-3.5" /> View Profile
+  1629→                      </Button>
+  1630→                    </div>
+  1631→                  </div>
+  1632→                </motion.div>
+  1633→              )
+  1634→            })}
+  1635→          </div>
+  1636→        )}
+  1637→      </div>
+  1638→    )
+  1639→  }
+  1640→
+  1641→  if (tab === 'messages') {
+  1642→    const conversations = orders.reduce((acc: any[], order) => {
+  1643→      const sellerId = order.seller?.id
+  1644→      if (sellerId && !acc.find(c => c.id === sellerId)) {
+  1645→        acc.push({ id: sellerId, name: order.seller?.name || order.seller?.companyName || 'Unknown', lastOrder: order.product?.name })
+  1646→      }
+  1647→      return acc
+  1648→    }, [])
+  1649→
+  1650→    return (
+  1651→      <div className="space-y-6">
+  1652→        <h3 className="text-xl font-semibold text-foreground">Messages</h3>
+  1653→        {conversations.length === 0 ? (
+  1654→          <div className="glass-card p-12 text-center">
+  1655→            <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+  1656→            <p className="text-muted-foreground">No conversations yet. Start trading to connect with suppliers!</p>
+  1657→          </div>
+  1658→        ) : (
+  1659→          <div className="space-y-2">
+  1660→            {conversations.map((conv: any, i: number) => (
+  1661→              <motion.button
+  1662→                key={conv.id}
+  1663→                initial={{ opacity: 0, x: -20 }}
+  1664→                animate={{ opacity: 1, x: 0 }}
+  1665→                transition={{ delay: i * 0.05 }}
+  1666→                className="w-full glass-card p-4 flex items-center gap-4 hover:border-amber-500/30 transition-colors text-left"
+  1667→                onClick={() => { setActiveChatUser(conv.id); setChatOpen(true) }}
+  1668→              >
+  1669→                <div className="h-10 w-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-semibold text-sm">
+  1670→                  {conv.name.slice(0, 2).toUpperCase()}
+  1671→                </div>
+  1672→                <div className="flex-1 min-w-0">
+  1673→                  <p className="font-medium text-foreground truncate">{conv.name}</p>
+  1674→                  <p className="text-xs text-muted-foreground">Last order: {conv.lastOrder}</p>
+  1675→                </div>
+  1676→                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+  1677→              </motion.button>
+  1678→            ))}
+  1679→          </div>
+  1680→        )}
+  1681→      </div>
+  1682→    )
+  1683→  }
+  1684→
+  1685→  // Default: profile tab
+  1686→  return (
+  1687→    <div className="glass-card p-6 text-center">
+  1688→      <User className="h-12 w-12 text-amber-400 mx-auto mb-4" />
+  1689→      <h3 className="text-xl font-semibold text-foreground mb-2">Profile Settings</h3>
+  1690→      <p className="text-muted-foreground mb-4">Manage your account details and verification status</p>
+  1691→      <Button className="bg-amber-600 hover:bg-amber-500 gap-2" onClick={() => useAppStore.getState().setView('profile')}>
+  1692→        <User className="h-4 w-4" /> Go to Profile
+  1693→      </Button>
+  1694→    </div>
+  1695→  )
+  1696→}
+  1697→
