@@ -19,7 +19,9 @@ export const metadata: Metadata = {
   keywords: ["AgriLink", "agriculture", "India", "trade", "marketplace", "farmers", "FPO", "exporters", "logistics"],
   authors: [{ name: "AgriLink" }],
   icons: {
-    icon: "/logo.svg",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   openGraph: {
     title: "AgriLink - India's Agricultural Trade Infrastructure",
