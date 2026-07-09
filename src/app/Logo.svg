@@ -1,0 +1,28 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="leafGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00FFC8"></stop>
+      <stop offset="100%" stop-color="#00D98B"></stop>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="#002E25" stroke="#004D3D" stroke-width="2"></rect>
+
+  <!-- Leaf -->
+  <path d="
+    M78 28
+    C60 40, 46 50, 40 66
+    C34 82, 42 96, 58 98
+    C78 100, 94 84, 94 62
+    C94 48, 88 36, 78 28 Z" fill="none" stroke="url(#leafGradient)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <!-- Stem -->
+  <path d="
+    M40 66
+    C52 72, 64 72, 76 62" fill="none" stroke="url(#leafGradient)" stroke-width="8" stroke-linecap="round"></path>
+
+  <path d="
+    M40 66
+    C34 74, 30 84, 30 94" fill="none" stroke="url(#leafGradient)" stroke-width="8" stroke-linecap="round"></path>
+</svg>
