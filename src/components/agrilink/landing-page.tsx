@@ -321,7 +321,7 @@ function Navbar() {
               </button>
               <button
                 onClick={() => {
-                  setView('role-select')
+                  setView('auth')
                   setMobileOpen(false)
                 }}
                 className="px-5 py-3 text-sm font-semibold rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all text-center"
