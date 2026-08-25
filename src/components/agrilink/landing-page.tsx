@@ -384,7 +384,7 @@ function HeroSection() {
 
             <motion.div variants={fadeUp} className="flex flex-wrap gap-4 pt-2">
               <button
-                onClick={() => setView('role-select')}
+                onClick={() => setView('auth')}
                 className="group px-7 py-3.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 flex items-center gap-2"
               >
                 Start Trading
