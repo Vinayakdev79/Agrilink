@@ -261,7 +261,7 @@ function Navbar() {
               Sign In
             </button>
             <button
-              onClick={() => setView('role-select')}
+              onClick={() => setView('auth')}
               className="px-5 py-2.5 text-sm font-semibold rounded-xl bg-emerald-500 text-white hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30"
             >
               Get Started
